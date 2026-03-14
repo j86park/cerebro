@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Firm {
+  id                  String    @id @default(cuid())
+  name                String
+  complianceOfficerId String
+  complianceOfficer   Advisor   @relation("ComplianceOfficer", fields: [complianceOfficerId], references: [id])
+  advisors            Advisor[] @relation("FirmAdvisors")
+  clients             Client[]
+  createdAt           DateTime  @default(now())
+}
+
+model Advisor {
+  id              String      @id @default(cuid())
+  firmId          String
+  firm            Firm        @relation("FirmAdvisors", fields: [firmId], references: [id])
+  name            String
+  email           String      @unique
+  role            AdvisorRole @default(ADVISOR)
+  clients         Client[]
+  complianceFirms Firm[]      @relation("ComplianceOfficer")
+  createdAt       DateTime    @default(now())
+}
+
+model Client {
+  id               String           @id @default(cuid())
+  advisorId        String
+  advisor          Advisor          @relation(fields: [advisorId], references: [id])
+  firmId           String
+  firm             Firm             @relation(fields: [firmId], references: [id])
+  name             String
+  email            String           @unique
+  accountType      AccountType
+  onboardingStatus OnboardingStatus @default(NOT_STARTED)
+  onboardingStage  Int              @default(0)
+  riskProfile      RiskProfile?
+  createdAt        DateTime         @default(now())
+  documents        Document[]
+  agentActions     AgentAction[]
+}
+
+model Document {
+  id                String           @id @default(cuid())
+  clientId          String
+  client            Client           @relation(fields: [clientId], references: [id])
+  type              DocumentType
+  category          DocumentCategory
+  status            DocumentStatus   @default(MISSING)
+  uploadedAt        DateTime?
+  expiryDate        DateTime?
+  notificationCount Int              @default(0)
+  lastNotifiedAt    DateTime?
+  fileRef           String?
+  notes             String?
+  agentActions      AgentAction[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+}
+
+model AgentAction {
+  id              String      @id @default(cuid())
+  clientId        String
+  client          Client      @relation(fields: [clientId], references: [id])
+  documentId      String?
+  document        Document?   @relation(fields: [documentId], references: [id])
+  agentType       AgentType
+  actionType      ActionType
+  trigger         TriggerType @default(SCHEDULED)
+  reasoning       String
+  outcome         String?
+  nextScheduledAt DateTime?
+  performedAt     DateTime    @default(now())
+
+  @@index([clientId, performedAt])
+  @@index([agentType, actionType])
+}
+
+model SimulationRun {
+  id                  String           @id @default(cuid())
+  clientCount         Int
+  simulatedDays       Int
+  clientResponseRate  Float
+  advisorResponseRate Float
+  randomSeed          String
+  status              SimulationStatus @default(PENDING)
+  batchesCompleted    Int              @default(0)
+  batchesTotal        Int              @default(0)
+  metrics             Json?
+  startedAt           DateTime         @default(now())
+  completedAt         DateTime?
+}
+
+model EvalRun {
+  id              String   @id @default(cuid())
+  gitCommit       String?
+  overallScore    Float
+  scenarioResults Json
+  scorerBreakdown Json
+  runAt           DateTime @default(now())
+}
+
+enum AccountType {
+  RRSP
+  TFSA
+  INVESTMENT
+  CORPORATE
+  JOINT
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  STALLED
+}
+
+enum DocumentStatus {
+  MISSING
+  REQUESTED
+  PENDING_REVIEW
+  VALID
+  EXPIRING_SOON
+  EXPIRED
+}
+
+enum DocumentCategory {
+  IDENTITY
+  COMPLIANCE
+  SUITABILITY
+  LEGAL
+  ESTATE
+  FUNDING
+}
+
+enum DocumentType {
+  GOVERNMENT_ID
+  PROOF_OF_ADDRESS
+  SIN_SSN_FORM
+  KYC_FORM
+  AML_VERIFICATION
+  NAAF
+  RISK_QUESTIONNAIRE
+  INVESTMENT_POLICY_STATEMENT
+  SUITABILITY_ASSESSMENT
+  CLIENT_AGREEMENT
+  FEE_DISCLOSURE
+  ACCREDITED_INVESTOR_FORM
+  BENEFICIARY_DESIGNATION
+  BANKING_INFORMATION
+  DEPOSIT_CONFIRMATION
+}
+
+enum AgentType {
+  COMPLIANCE
+  ONBOARDING
+}
+
+enum ActionType {
+  SCAN_VAULT
+  NOTIFY_ADVISOR
+  SEND_CLIENT_REMINDER
+  ESCALATE_COMPLIANCE
+  ESCALATE_MANAGEMENT
+  MARK_RESOLVED
+  REQUEST_DOCUMENT
+  VALIDATE_DOCUMENT
+  ADVANCE_STAGE
+  COMPLETE_ONBOARDING
+  ALERT_ADVISOR_STUCK
+}
+
+enum TriggerType {
+  SCHEDULED
+  EVENT_UPLOAD
+  MANUAL
+  SIMULATION
+}
+
+enum RiskProfile {
+  CONSERVATIVE
+  MODERATE
+  AGGRESSIVE
+}
+
+enum AdvisorRole {
+  ADVISOR
+  COMPLIANCE_OFFICER
+}
+
+enum SimulationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}

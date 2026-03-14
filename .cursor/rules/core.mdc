@@ -1,0 +1,80 @@
+---
+description: Core project rules for Cerebro — applied to every file in every session
+alwaysApply: true
+---
+
+# Cerebro — Core Rules
+
+## What This Project Is
+Cerebro is an autonomous AI agent system built for FutureVault. It contains two agents — a Compliance Agent and an Onboarding Agent — that monitor client document vaults and take autonomous action. Always refer to @docs/blueprint.md for the full project description before making architectural decisions.
+
+## Stack — Never Deviate From This
+- **Framework:** Next.js 15 App Router
+- **Language:** TypeScript — strict mode always on, no `any` types ever
+- **Agent Framework:** Mastra (`@mastra/core`, `@mastra/memory`, `@mastra/evals`)
+- **AI Model Gateway:** OpenRouter via `@openrouter/ai-sdk-provider`
+- **Database:** PostgreSQL via Prisma ORM on Supabase
+- **Queue:** BullMQ with Upstash Redis
+- **UI:** Tailwind CSS v4 + shadcn/ui components
+- **Charts:** Recharts
+- **Email:** Resend
+- **Validation:** Zod — everywhere, always
+- **Testing:** Vitest
+
+## Absolute Rules — Never Break These
+
+### Models
+- Never hardcode a model string like `"google/gemini-2.0-flash"` outside of `src/lib/config.ts`
+- Always use `getModel("dev" | "demo" | "evalJudge")` from `@/lib/config`
+- Default to `"dev"` tier during all development — it is the cheapest
+
+### Database Access
+- Raw Prisma queries are NEVER written inside `src/tools/` or `src/agents/`
+- ALL database access from tools goes through `VaultService` only
+- `VaultService` is always constructed with a `clientId` — it is never constructed without one
+- Never import `prisma` directly in any file under `src/tools/` or `src/agents/`
+
+### Validation
+- Every function that accepts external input must validate with Zod before doing anything
+- Every Mastra tool must have both `inputSchema` and `outputSchema` defined as Zod schemas
+- Never use `z.any()` — define the actual shape
+
+### Configuration
+- Never read `process.env` directly anywhere except `src/lib/config.ts`
+- Always import the validated `env` object from `@/lib/config`
+- All date logic uses `env.DEMO_DATE` — never `new Date()` directly
+
+### Agents
+- The single `Mastra` instance lives at `src/agents/mastra.ts` — nowhere else
+- Agents are never instantiated or run from Next.js route handlers
+- Route handlers enqueue BullMQ jobs — the BullMQ worker runs agents
+- Agent memory is always configured — never create an agent without memory
+
+### TypeScript
+- Enable `strict: true` in tsconfig — no exceptions
+- Prefer `type` imports over `import` for type-only usage
+- Name all Zod schemas with suffix `Schema` e.g. `clientProfileSchema`
+- Name all TypeScript types derived from Zod with `z.infer` e.g. `type ClientProfile = z.infer<typeof clientProfileSchema>`
+
+### File Naming
+- Agent files: `src/agents/[agentName]/agent.ts`
+- Tool files: `src/tools/[category]/[toolName].ts` — one tool per file
+- Use camelCase for all filenames except Next.js route segments
+
+### Error Handling
+- Never swallow errors silently — always log to the audit trail
+- Throw descriptive error messages that explain what failed and why
+- BullMQ handles retries — tools should throw on failure, not return error objects
+
+### Comments
+- Write comments that explain WHY, not WHAT
+- Every exported function must have a JSDoc comment
+- Mark every compliance-related rule with `// REGULATORY:` so it is easily searchable
+
+## Project Structure Reference
+Always follow the directory structure defined in @docs/architecture.md. Never create files outside the defined structure without a good reason and updating the architecture doc.
+
+## Dry Run Mode
+- Check `env.DRY_RUN` before sending any email, webhook, or external call
+- Database writes always happen regardless of dry run mode
+- Tests and evals always run in dry run mode — never send real emails during testing

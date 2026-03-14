@@ -1,0 +1,60 @@
+{
+  "name": "cerebro",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "seed": "tsx prisma/seed.ts",
+    "reset-demo": "tsx scripts/reset-demo.ts",
+    "bootstrap": "tsx scripts/bootstrap.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev --name init"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/j86park/cerebro.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/j86park/cerebro/issues"
+  },
+  "homepage": "https://github.com/j86park/cerebro#readme",
+  "dependencies": {
+    "@mastra/core": "^1.13.2",
+    "@mastra/evals": "^1.1.2",
+    "@mastra/memory": "^1.8.2",
+    "@openrouter/ai-sdk-provider": "^2.3.1",
+    "@prisma/client": "^5.22.0",
+    "@supabase/supabase-js": "^2.99.1",
+    "bullmq": "^5.71.0",
+    "ioredis": "^5.10.0",
+    "next": "^15.5.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.8.0",
+    "resend": "^6.9.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^10.0.3",
+    "prisma": "^5.22.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

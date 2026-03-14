@@ -1,0 +1,194 @@
+---
+description: Rules for all database, schema, VaultService, queue, and seed code in Cerebro
+globs: ["prisma/**/*", "src/lib/db/**/*.ts", "src/lib/queue/**/*.ts", "scripts/**/*.ts"]
+alwaysApply: false
+---
+
+# Cerebro — Database & Infrastructure Rules
+
+> Always reference @docs/data-schema.md for the full schema definition, all enums, mock data, and document registry before writing any database code.
+> Always reference @docs/architecture.md for the VaultService access control pattern.
+
+## Prisma Rules
+
+### Schema
+- The canonical schema lives in @docs/data-schema.md — always sync `prisma/schema.prisma` against it
+- Never add a column or table without updating `data-schema.md` first
+- All string IDs use `@default(cuid())` — never auto-increment integers for entity IDs
+- All tables have `createdAt DateTime @default(now())` 
+- Tables that are updated have `updatedAt DateTime @updatedAt`
+- The `AgentAction` table is append-only — never add an `updatedAt` to it
+- Index every foreign key column and every column used in WHERE clauses
+
+### Migrations
+- Always run `npx prisma migrate dev --name [descriptive-name]` — never edit migration files manually
+- Migration names describe what changed: `add-document-notification-count` not `update-schema`
+- Never run `prisma db push` in production — always use migrations
+
+### Prisma Client
+- The Prisma client singleton lives in `src/lib/db/client.ts` only
+- Import the prisma client as: `import { prisma } from "@/lib/db/client"`
+- Never instantiate `new PrismaClient()` anywhere except `src/lib/db/client.ts`
+- Use the standard Next.js singleton pattern to prevent hot-reload connection pool exhaustion
+
+```typescript
+// src/lib/db/client.ts — this is the only correct pattern
+import { PrismaClient } from "@prisma/client"
+
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  log: process.env.NODE_ENV === "development" ? ["query", "error"] : ["error"],
+})
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
+```
+
+## VaultService Rules
+
+### The Core Pattern
+VaultService is the ONLY way agents and tools access the database. This is non-negotiable.
+
+```typescript
+// CORRECT — always build VaultService first, pass it to tools
+const vault = new VaultService({ clientId: "CLT-001" })
+const tools = buildComplianceTools(vault)
+
+// WRONG — never do this
+const docs = await prisma.document.findMany({ where: { clientId } })
+```
+
+### VaultService Methods
+- Every method on VaultService is scoped to `this.clientId` — no exceptions
+- No VaultService method accepts a `clientId` parameter — it uses `this.clientId` exclusively
+- Read methods never write — write methods always call `logAction` as part of their operation
+- If a new data access pattern is needed, add a method to VaultService — never bypass it
+
+### Action Log Rules
+- `AgentAction` records are insert-only — never update or delete them
+- Every action log entry must have a non-empty `reasoning` string — enforce this at the VaultService level with a runtime check
+- `nextScheduledAt` must always be set on action records — use `addDays(new Date(env.DEMO_DATE), N)` 
+- The `trigger` field must always reflect how the agent run was initiated: `SCHEDULED`, `EVENT_UPLOAD`, `MANUAL`, or `SIMULATION`
+
+## Seed Script Rules
+
+### Idempotency
+- The seed script must be fully idempotent — running it twice produces identical results
+- Use `upsert` with the mock ID as the unique key for all seed records
+- Never use `create` in the seed script — always `upsert`
+- Print a summary at the end: how many records were created vs. already existed
+
+### DEMO_DATE
+- All document expiry dates in the seed script are computed as offsets from `env.DEMO_DATE`
+- Use `addDays(new Date(env.DEMO_DATE), offset)` where offset is the number from @docs/data-schema.md
+- Never hardcode a real calendar date in the seed script
+- Positive offset = future date, negative offset = past date
+
+### Seed Order
+Always seed in this order to satisfy foreign key constraints:
+1. Firms
+2. Advisors (compliance officers first, then advisors)
+3. Update firms with `complianceOfficerId`
+4. Clients
+5. Documents (all statuses per the table in data-schema.md)
+6. Pre-populated AgentAction records (CLT-003, CLT-011 history)
+
+### Demo Reset Script
+`scripts/reset-demo.ts` must:
+- Delete all `AgentAction` records except pre-populated history
+- Reset all `Document` statuses to their initial seed state
+- Reset all `Client.onboardingStage` to seed values
+- Re-run the seed upserts
+- Complete in under 30 seconds
+- Be safe to run at any time without data loss risk
+
+## Enum Rules
+
+- All enum values in application code come from `src/lib/db/enums.ts` — never use raw strings
+- Prisma enums and TypeScript enums must stay in sync — update both when adding values
+- Use `as const` objects in TypeScript, not `enum` keyword — avoids transpilation issues
+
+```typescript
+// CORRECT
+import { DocumentStatus } from "@/lib/db/enums"
+if (doc.status === DocumentStatus.EXPIRED) { ... }
+
+// WRONG
+if (doc.status === "EXPIRED") { ... }
+```
+
+## BullMQ / Queue Rules
+
+### Queue Separation
+Three queues — never mix their job types:
+- `cerebro-priority` — event-driven document uploads, manual dashboard triggers
+- `cerebro-scheduled` — cron-based full vault scans
+- `cerebro-simulation` — simulation batch jobs only
+
+Simulation jobs never go into priority or scheduled queues. Live agent jobs never go into the simulation queue.
+
+### Job Payload Types
+Every queue job has a strongly typed payload defined in `src/lib/queue/jobs.ts`:
+
+```typescript
+// src/lib/queue/jobs.ts
+export type AgentJobPayload = {
+  clientId:   string
+  agentType:  "COMPLIANCE" | "ONBOARDING"
+  trigger:    "SCHEDULED" | "EVENT_UPLOAD" | "MANUAL"
+  documentId?: string   // only present for EVENT_UPLOAD trigger
+}
+
+export type SimulationJobPayload = {
+  runId:     string
+  batchStart: number
+  batchEnd:   number
+}
+```
+
+Never enqueue a job without the correct typed payload — validate with Zod before enqueuing.
+
+### Worker Concurrency
+- `cerebro-priority` worker: concurrency 5
+- `cerebro-scheduled` worker: concurrency 3
+- `cerebro-simulation` worker: concurrency 10 (mock agent, no LLM calls)
+- Rate limiter: 20 agent jobs per second across all live queues — respects OpenRouter limits
+
+### Job Retry Configuration
+```typescript
+// Standard retry config — use for all live agent jobs
+defaultJobOptions: {
+  attempts: 3,
+  backoff: { type: "exponential", delay: 2000 },
+  removeOnComplete: { count: 1000 },
+  removeOnFail: { count: 500 },
+}
+```
+
+### Upstash Redis Connection
+```typescript
+// CORRECT — use this pattern for Vercel serverless compatibility
+const connection = new IORedis(env.UPSTASH_REDIS_URL, {
+  maxRetriesPerRequest: null,  // required for BullMQ
+  tls: { rejectUnauthorized: false },
+})
+
+// WRONG — standard Redis won't work on Vercel serverless
+const connection = new IORedis(env.REDIS_URL)
+```
+
+## Supabase Realtime Rules
+
+### Channel Naming
+- Agent actions channel: `"cerebro-agent-actions"`
+- Simulation progress channel: `"cerebro-simulation-[runId]"`
+- Never use generic names like `"changes"` or `"updates"`
+
+### Subscription Cleanup
+- Always store the subscription reference and call `.unsubscribe()` on component unmount
+- Use the `useEffect` cleanup function in React components — never leave dangling subscriptions
+
+### What Gets Published
+- Only `INSERT` events on `agent_actions` table go to the dashboard feed
+- Only `UPDATE` events on `simulation_runs` table go to simulation progress
+- Never subscribe to full table scans — always filter by specific event type and table

@@ -1,0 +1,218 @@
+---
+description: Rules for all Next.js, React, dashboard UI, and API route code in Cerebro
+globs: ["src/app/**/*.tsx", "src/app/**/*.ts", "src/components/**/*.tsx"]
+alwaysApply: false
+---
+
+# Cerebro — Frontend & API Rules
+
+> Always reference @docs/architecture.md for the full route map and real-time channel definitions before building any UI or API route.
+
+## Next.js App Router Rules
+
+### Route Structure
+Follow the route map in @docs/architecture.md exactly:
+```
+/app/dashboard          → Operations dashboard (main demo screen)
+/app/testing            → Eval results and agent quality dashboard
+/app/simulation         → Simulation configuration and visualization
+/app/api/vaults/        → Vault data API
+/app/api/agents/        → Agent trigger API
+/app/api/simulation/    → Simulation control API
+/app/api/webhooks/      → Document upload webhook
+```
+Never create routes outside this structure without updating architecture.md.
+
+### Server vs Client Components
+- Default to Server Components — only add `"use client"` when truly needed
+- `"use client"` is needed for: useState, useEffect, event handlers, Supabase realtime subscriptions, Recharts
+- Data fetching always happens in Server Components or route handlers — never in Client Components via useEffect
+- Pass fetched data down as props to Client Components that need interactivity
+
+### Route Handlers
+- Route handlers are thin — validate input, call a service, return response
+- Never put business logic in route handlers
+- Never run agents from route handlers — enqueue a BullMQ job instead
+- Always validate request body/params with Zod before doing anything
+
+```typescript
+// CORRECT — thin route handler pattern
+export async function POST(req: Request) {
+  const body = await req.json()
+  const parsed = triggerAgentSchema.safeParse(body)
+  if (!parsed.success) {
+    return Response.json({ error: parsed.error.flatten() }, { status: 400 })
+  }
+  await enqueueAgentJob(parsed.data)
+  return Response.json({ queued: true })
+}
+
+// WRONG — never put logic here
+export async function POST(req: Request) {
+  const vault = new VaultService({ clientId: body.clientId })
+  const result = await complianceAgent.generate(...)  // NO
+}
+```
+
+### API Response Shape
+All API routes return consistent shapes:
+```typescript
+// Success
+{ data: T }
+
+// Error
+{ error: string, details?: unknown }
+
+// Paginated
+{ data: T[], total: number, page: number }
+```
+
+## Component Rules
+
+### Component Location
+- Page-level components: `src/app/[route]/page.tsx`
+- Shared UI components: `src/components/ui/` (shadcn components live here)
+- Dashboard-specific components: `src/components/dashboard/`
+- Testing dashboard components: `src/components/testing/`
+- Simulation components: `src/components/simulation/`
+
+### shadcn/ui Usage
+- Always use shadcn components for: tables, cards, badges, buttons, dialogs, progress bars, alerts, tabs
+- Never build a custom button, table, or card from scratch when a shadcn component exists
+- Import shadcn components from `@/components/ui/[component]`
+- Extend shadcn components with `className` props — never modify the source files in `components/ui/`
+
+### Tailwind
+- Use Tailwind utility classes — never write custom CSS except for animation keyframes
+- Use the `cn()` utility from `@/lib/utils` for conditional class merging — never string concatenation
+- Responsive design uses mobile-first breakpoints: `sm:`, `md:`, `lg:`, `xl:`
+- The dashboard is designed for desktop (1280px+) — mobile responsiveness is secondary
+
+## Dashboard UI Rules
+
+### Operations Dashboard (`/dashboard`)
+Required panels — all must be present:
+1. **Firm Overview Panel** — compliance score, active agents, open escalations count
+2. **Client Vault Grid** — filterable table, health indicator per row, click-through to detail
+3. **Individual Vault View** — document status table, agent action timeline, escalation stage
+4. **Live Agent Activity Feed** — realtime stream, ⚡ badge for event-triggered actions
+5. **Escalation Queue** — all escalated clients with stage and days unresolved
+
+Health indicator color coding — use these exact colors, no variation:
+- 🟢 Green `bg-green-500`: all documents valid, no issues
+- 🟡 Yellow `bg-yellow-500`: documents expiring within 30 days
+- 🔴 Red `bg-red-500`: expired documents or active escalation
+
+### Testing Dashboard (`/testing`)
+Required panels:
+1. **Eval Overview** — overall score with trend line, last run timestamp
+2. **Scorer Breakdown** — per-scorer scores as progress bars
+3. **Scenario Matrix** — heat map of all scenarios × all scorers
+4. **Failure Inspector** — filterable list of failed cases with full agent trace
+5. **Regression Tracker** — score history line chart across last 30 runs
+
+### Simulation Dashboard (`/simulation`)
+Required panels:
+1. **Run Configuration** — client count, days, response rates, random seed inputs
+2. **Real-time Progress Feed** — batch completion updates as simulation runs
+3. **Outcome Summary Cards** — 4 headline metric cards (large format)
+4. **A/B Comparison Chart** — most prominent chart, shown first
+5. **Timeline Chart** — issues detected vs resolved over simulated time
+6. **Escalation Funnel** — stage distribution funnel chart
+7. **Run Comparison Table** — last 5 runs side by side
+
+## Recharts Rules
+
+### Chart Setup
+- All charts are wrapped in a `ResponsiveContainer width="100%" height={N}`
+- Always define `height` explicitly — never let it be 0 or undefined
+- Use `className="text-sm"` on axis tick elements for consistent typography
+
+### Color Palette
+Use these exact colors across all charts for consistency:
+```typescript
+// src/lib/chart-colors.ts — import from here, never hardcode hex values
+export const CHART_COLORS = {
+  green:    "#22c55e",   // resolved, compliant, success
+  yellow:   "#eab308",   // expiring soon, warning
+  red:      "#ef4444",   // expired, escalated, critical
+  blue:     "#3b82f6",   // agent actions, primary data
+  purple:   "#a855f7",   // onboarding agent specific
+  gray:     "#6b7280",   // secondary data, manual baseline
+  orange:   "#f97316",   // simulation data
+}
+```
+
+### A/B Comparison Chart
+The most important chart in the simulation dashboard:
+- Agent results always use `CHART_COLORS.blue`
+- Manual/baseline results always use `CHART_COLORS.gray`
+- Label agent bars with the improvement percentage automatically calculated
+- This chart must be the first thing visible when the simulation tab loads
+
+## Real-Time Feed Rules
+
+### Activity Feed Component
+The live agent activity feed must:
+- Display the most recent 50 actions, newest at top
+- Show: agent type badge, action type, client name, time ago, trigger badge
+- Event-triggered actions show a ⚡ yellow badge
+- Escalation actions show a 🚨 red badge
+- Successful resolutions show a ✅ green badge
+- Auto-scroll to new entries unless the user has manually scrolled up
+- Never re-fetch on an interval — only update via Supabase realtime subscription
+
+### Supabase Realtime in Components
+```typescript
+// CORRECT — standard realtime subscription pattern for this project
+"use client"
+
+import { useEffect, useState } from "react"
+import { createClient } from "@/lib/supabase/client"
+
+export function ActivityFeed() {
+  const [actions, setActions] = useState<AgentAction[]>(initialActions)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("cerebro-agent-actions")
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "agent_actions",
+      }, (payload) => {
+        setActions(prev => [payload.new as AgentAction, ...prev].slice(0, 50))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }  // always clean up
+  }, [])
+
+  return ( /* render actions */ )
+}
+```
+
+## API Route Rules
+
+### Webhook Security
+The document upload webhook at `/api/webhooks/document-upload` must:
+- Validate the request has a `x-cerebro-webhook-secret` header matching `env.WEBHOOK_SECRET`
+- Return 401 immediately if the secret is missing or wrong
+- Validate the body with Zod before enqueuing
+- Return 202 Accepted immediately — never await the agent job completion
+
+### Agent Trigger Endpoint
+`POST /api/agents/trigger` must:
+- Accept `{ clientId, agentType, trigger: "MANUAL" }`
+- Enqueue to `cerebro-priority` queue
+- Return the BullMQ job ID so the dashboard can track it
+- Respond within 100ms — never wait for the agent to finish
+
+### Error Responses
+Always return appropriate HTTP status codes:
+- `400` — validation error (malformed input)
+- `401` — missing or invalid auth/webhook secret
+- `404` — client or resource not found
+- `409` — conflict (e.g. agent already running for this client)
+- `500` — unexpected server error (always log these)

@@ -1,0 +1,123 @@
+---
+description: Rules for all agent, tool, eval, and memory code in Cerebro
+globs: ["src/agents/**/*.ts", "src/tools/**/*.ts", "src/evals/**/*.ts"]
+alwaysApply: false
+---
+
+# Cerebro — Agent & Tool Rules
+
+> Always reference @docs/mastra-patterns.md for canonical code patterns before writing any agent or tool code.
+
+## Agent Rules
+
+### Agent Definition
+- Agents are defined using `new Agent({})` from `@mastra/core`
+- Every agent must have: `name`, `instructions`, `model`, `tools`, `memory`
+- `model` always comes from `getModel()` — never a hardcoded string
+- `instructions` always imports from a separate `prompts.ts` file in the same directory — never inline a long prompt
+- Tools are always passed as a named object — never as an array
+
+### Agent Memory
+- Memory is always `createMemory({ lastMessages: 20 })` minimum
+- Memory threads are scoped per client using `resourceId: clientId` and `threadId: clientId`
+- Working memory schema is always defined as a Zod schema in a `memory-schema.ts` file alongside the agent
+- Never read working memory as a raw string — always parse against the schema
+
+### Agent System Prompts
+- Prompts live in `prompts.ts` next to `agent.ts` — never inline in the agent definition
+- Every prompt must include: agent role, responsibilities, critical rules numbered list, and what to always do first
+- Compliance agent prompt must include the full 5-stage escalation ladder
+- Onboarding agent prompt must include all 4 stage definitions with required documents
+- Prompts are exported as `const` strings — not functions unless they need dynamic content
+
+### Running Agents
+- Agents are only run from `src/lib/queue/workers.ts` — never from route handlers
+- Always pass `resourceId` and `threadId` to scope memory correctly
+- Always build a scoped `VaultService` before running — pass it to tool builders
+- Always build the initial context prompt using `buildInitialPrompt()` — never write raw prompt strings in the worker
+- Wrap every agent run in try/catch and log failures to the audit trail
+
+### Mastra Instance
+- One instance only: `src/agents/mastra.ts` exports `cerebro`
+- Import `cerebro` only in the BullMQ worker and in eval runners
+- Never import `cerebro` in any file under `src/app/`
+
+## Tool Rules
+
+### Tool Structure
+- Every tool is a factory function: `export function buildToolName(vault: VaultService) { return createTool({...}) }`
+- Never export a tool directly without a factory wrapper — tools must receive VaultService
+- Factory functions are grouped and re-exported from a `src/tools/[category]/index.ts` barrel file
+- One tool per file — never put two tools in the same file
+
+### Tool Schemas
+- `inputSchema` and `outputSchema` are always defined — both, always, no exceptions
+- Never use `z.any()` — if the shape is unknown, define the closest possible shape and comment why
+- `description` field must explain: when to use this tool, what it does, and what it returns — minimum 2 sentences
+- Tool `id` matches the filename in camelCase e.g. file `getDocumentComplianceStatus.ts` → `id: "getDocumentComplianceStatus"`
+
+### Observation Tools (read-only)
+- The `execute` function only calls `vault.*` read methods
+- Never call `vault.logAction()` in an observation tool
+- Never call Resend or any external service in an observation tool
+- Return rich, structured objects — not flat strings
+
+### Action Tools (writes + side effects)
+- ALWAYS call `vault.logAction()` before returning — even if the main action fails
+- ALWAYS check `env.DRY_RUN` before any external call (email, webhook)
+- Reasoning passed in via `context` must be stored in the action log — never discard it
+- `outcome` field in logAction must be specific: `"EMAIL_SENT"`, `"DRY_RUN_EMAIL"`, `"ESCALATION_CREATED"` etc.
+- `nextScheduledAt` must always be set — tells the agent when to check this client again
+
+### Escalation Tools
+- Escalation tools self-enforce prerequisites — check action history at the start of execute
+- If prerequisite stage not completed, throw a descriptive error explaining what stage is missing
+- Never rely on the agent prompt alone to enforce escalation order — the tool enforces it in code
+- Escalation to management (stage 5) requires confirmed stage 4 completion in action history
+
+### Shared Tools
+- `getClientProfile`, `getActionHistory`, `logAction`, `sendAdvisorAlert` are shared between both agents
+- Shared tools live in `src/tools/shared/` — never duplicate them in compliance or onboarding folders
+- Both agents import shared tools from the same source
+
+## Eval Rules
+
+### Eval Structure
+- Each eval scenario has: `input` (prompt + resourceId + threadId), `expected` (ground truth decision)
+- Ground truth values come from `src/evals/ground-truth.ts` — never hardcode expected values inline
+- Test cases cover all 15 mock client scenarios at minimum
+- Eval threads use isolated IDs (`"EVAL-001"` etc.) — never use real mock client IDs in evals
+
+### Scorers
+- Every scorer returns `{ score: number (0-1), reason: string }`
+- Rule-based scorers (escalationStage, duplicateAction, onboardingStage) never call an LLM
+- LLM-judge scorers (reasoningQuality) always use `getModel("evalJudge")` — the cheapest tier
+- Score threshold for pass: 0.85 per scorer, 0.80 overall
+- Scorer names match their filename exactly
+
+### Eval Runs
+- Always persist eval results to `EvalRun` table via Prisma after running
+- Always attach `process.env.GITHUB_SHA` as `gitCommit` when available
+- Throw and fail CI if overall score drops below 0.80
+- Always run evals in dry run mode — `env.DRY_RUN` must be true during evals
+
+## Agent Decision Patterns
+
+### First Action Rule
+Both agents must always call a history/observation tool first:
+- Compliance Agent: always calls `getActionHistory` then `getDocumentComplianceStatus`
+- Onboarding Agent: always calls `getActionHistory` then `getOnboardingStatus`
+This is enforced in the system prompt AND should be tested in evals
+
+### Duplicate Action Prevention
+Before any action tool, the agent checks:
+- Was this exact action type taken within the cooldown window?
+- Compliance cooldown: 5 days between same action type on same document
+- Onboarding cooldown: 3 days between same document request
+- If within cooldown: log observation only, do not repeat action
+
+### Event-Triggered Runs
+When `trigger === "EVENT_UPLOAD"` and `documentId` is present:
+- Onboarding agent: call `validateDocumentReceived` for that documentId first
+- Compliance agent: call `updateDocumentStatus` for that documentId first
+- Then proceed with normal observation and decision flow
