@@ -12,8 +12,19 @@ const connection = new Redis(env.UPSTASH_REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 
+const queueOptions = {
+  connection: connection as any,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 1000,
+    },
+  },
+};
+
 export const queues = {
-  compliance: new Queue<ComplianceJobPayload>("compliance-queue", { connection: connection as any }),
-  onboarding: new Queue<OnboardingJobPayload>("onboarding-queue", { connection: connection as any }),
-  default: new Queue<DefaultJobPayload>("default-queue", { connection: connection as any }),
+  compliance: new Queue<ComplianceJobPayload>("compliance-queue", queueOptions),
+  onboarding: new Queue<OnboardingJobPayload>("onboarding-queue", queueOptions),
+  default: new Queue<DefaultJobPayload>("default-queue", queueOptions),
 };
