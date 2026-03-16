@@ -39,7 +39,7 @@
 ## Phase 5 — Operations Dashboard (PENDING)
 - Goal: Implement real-time dashboard UI, vault grid, and agent activity feed via Supabase.
 
-## Phase 6 — Testing System and Eval Suite (CURRENT — PLANNED)
+## Phase 6 — Testing System and Eval Suite (COMPLETE)
 - Goal: Setup `runEvals()`, ground-truth scenarios, and custom scorers (rule and LLM-based) and deploy CI gates.
 **Task Sequence:**
 1. Generate `src/evals/ground-truth.ts` encapsulating all 15 scenarios.
