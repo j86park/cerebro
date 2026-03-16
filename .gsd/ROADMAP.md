@@ -47,8 +47,12 @@
 3. Connect `complianceEvals` and `onboardingEvals` isolated suites to scenarios.
 4. Build `src/evals/run.ts` integration script and persist scores to the Prisma `EvalRun` database model.
 
-## Phase 7 — Testing Dashboard (PENDING)
+## Phase 7 — Testing Dashboard (COMPLETE)
 - Goal: Build testing UI for eval results, scorer matrices, and regression tracking.
+  - ✅ API routes for eval result history
+  - ✅ Score trend visualization
+  - ✅ Scenario result matrix (Scenarios x Scorers)
+  - ✅ Failure inspector for deep-dive analysis
 
 ## Phase 8 — Simulation Engine (PENDING)
 - Goal: Build time-compression engine and synthetic client generator for scale testing.
