@@ -376,6 +376,18 @@ async function seedActionHistory() {
       clientId: "CLT-003",
       documentId: clt3DocId,
       agentType: "COMPLIANCE" as const,
+      actionType: "SEND_CLIENT_REMINDER" as const,
+      trigger: "SCHEDULED" as const,
+      reasoning: "Seeded stage 3 reminder after continued inaction.",
+      outcome: "SEEDED_HISTORY",
+      performedAt: addDaysFromDemo(-40),
+      nextScheduledAt: addDaysFromDemo(-30),
+    },
+    {
+      id: "ACT-CLT003-4",
+      clientId: "CLT-003",
+      documentId: clt3DocId,
+      agentType: "COMPLIANCE" as const,
       actionType: "ESCALATE_COMPLIANCE" as const,
       trigger: "SCHEDULED" as const,
       reasoning: "Seeded stage 4 escalation due to unresolved issue.",
@@ -410,11 +422,21 @@ async function seedActionHistory() {
  * Seeds the full Cerebro baseline dataset using idempotent upserts.
  */
 export async function runSeed() {
-  await seedAdvisors();
   await seedFirms();
+  await seedAdvisors();
   await seedClients();
   await seedDocuments();
   await seedActionHistory();
+
+  console.log(`
+--- Seed Summary ---
+✓ Firms: ${MOCK_FIRMS.length}
+✓ Advisors: ${MOCK_ADVISORS.length}
+✓ Clients: ${MOCK_CLIENTS.length}
+✓ Documents: ${MOCK_CLIENTS.length * Object.keys(DOCUMENT_REGISTRY).length}
+✓ Actions: 5 (Pre-populated)
+--------------------
+`);
 }
 
 const isDirectRun = process.argv[1]?.endsWith("prisma/seed.ts");

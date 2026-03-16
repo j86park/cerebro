@@ -65,7 +65,7 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ clients: enrichedClients });
+    return NextResponse.json({ data: enrichedClients });
   } catch (error) {
     console.error("GET /api/vaults error:", error);
     return NextResponse.json(

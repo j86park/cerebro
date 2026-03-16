@@ -23,14 +23,14 @@ export function useAgentActions(clientId: string, initialActions: ActionData[]) 
     setActions(initialActions);
 
     const channel = supabase
-      .channel(`cerebro-agent-actions-${clientId}`)
+      .channel(clientId ? `cerebro-agent-actions-${clientId}` : "cerebro-agent-actions")
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "agent_actions",
-          filter: `clientId=eq.${clientId}`,
+          filter: clientId ? `clientId=eq.${clientId}` : undefined,
         },
         (payload) => {
           console.log("Realtime event received", payload.new);

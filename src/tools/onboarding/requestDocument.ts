@@ -34,6 +34,9 @@ export function buildRequestDocument(vault: VaultService) {
       const { documentType, message, reasoning } = inputData;
       const { DRY_RUN } = env;
 
+      // Enforce 3-day duplicate action cooldown
+      await vault.checkActionCooldown("REQUEST_DOCUMENT", 3);
+
       if (!DRY_RUN) {
         // TODO: Send document request email via Resend
         void message;

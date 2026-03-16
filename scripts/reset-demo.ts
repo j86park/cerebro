@@ -13,6 +13,15 @@ export async function resetDemo() {
     },
   });
 
+  // Explicitly reset runtime state for documents and clients before re-seeding
+  await prisma.document.updateMany({
+    data: { status: "MISSING", notes: null },
+  });
+
+  await prisma.client.updateMany({
+    data: { onboardingStage: 1, onboardingStatus: "NOT_STARTED" },
+  });
+
   await runSeed();
 }
 

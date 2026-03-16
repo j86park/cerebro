@@ -39,8 +39,13 @@
 ## Phase 5 — Operations Dashboard (PENDING)
 - Goal: Implement real-time dashboard UI, vault grid, and agent activity feed via Supabase.
 
-## Phase 6 — Testing System and Eval Suite (PENDING)
-- Goal: Setup `runEvals()`, ground-truth scenarios, and custom scorers (rule and LLM-based).
+## Phase 6 — Testing System and Eval Suite (CURRENT — PLANNED)
+- Goal: Setup `runEvals()`, ground-truth scenarios, and custom scorers (rule and LLM-based) and deploy CI gates.
+**Task Sequence:**
+1. Generate `src/evals/ground-truth.ts` encapsulating all 15 scenarios.
+2. Build custom Mastra scorers (`escalationStage`, `duplicateAction`, `reasoningQuality`, etc).
+3. Connect `complianceEvals` and `onboardingEvals` isolated suites to scenarios.
+4. Build `src/evals/run.ts` integration script and persist scores to the Prisma `EvalRun` database model.
 
 ## Phase 7 — Testing Dashboard (PENDING)
 - Goal: Build testing UI for eval results, scorer matrices, and regression tracking.

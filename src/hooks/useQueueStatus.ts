@@ -11,9 +11,9 @@ type QueueStatus = {
 };
 
 type GlobalStatus = {
-  complianceQueue: QueueStatus;
-  onboardingQueue: QueueStatus;
-  defaultQueue: QueueStatus;
+  priorityQueue: QueueStatus;
+  scheduledQueue: QueueStatus;
+  simulationQueue: QueueStatus;
 };
 
 export function useQueueStatus(intervalMs = 3000) {
@@ -27,10 +27,10 @@ export function useQueueStatus(intervalMs = 3000) {
       try {
         const res = await fetch("/api/agents/status");
         if (!res.ok) throw new Error("Failed to fetch queue status");
-        const data = await res.json();
+        const json = await res.json();
         
         if (mounted) {
-          setStatus(data);
+          setStatus(json.data);
           setIsLoading(false);
         }
       } catch (error) {

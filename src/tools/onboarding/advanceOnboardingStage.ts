@@ -33,6 +33,10 @@ export function buildAdvanceOnboardingStage(vault: VaultService) {
         unknown
       >;
       const currentStage = client.onboardingStage as number;
+
+      // Enforce 3-day duplicate action cooldown (prevent double-advancing too quickly)
+      await vault.checkActionCooldown("ADVANCE_STAGE", 3);
+
       const stageConfig = ONBOARDING_STAGES[currentStage];
 
       if (!stageConfig) {

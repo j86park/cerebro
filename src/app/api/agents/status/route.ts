@@ -1,37 +1,45 @@
 import { NextResponse } from "next/server";
 import { queues } from "@/lib/queue/client";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+/**
+ * GET /api/agents/status — returns job counts for all three queues.
+ */
 export async function GET() {
   try {
-    const complianceStatus = await queues.compliance.getJobCounts();
-    const onboardingStatus = await queues.onboarding.getJobCounts();
-    const defaultStatus = await queues.default.getJobCounts();
+    const [priorityStatus, scheduledStatus, simulationStatus] =
+      await Promise.all([
+        queues.priority.getJobCounts(),
+        queues.scheduled.getJobCounts(),
+        queues.simulation.getJobCounts(),
+      ]);
 
     return NextResponse.json({
-      complianceQueue: {
-        waiting: complianceStatus.waiting,
-        active: complianceStatus.active,
-        completed: complianceStatus.completed,
-        failed: complianceStatus.failed,
-        delayed: complianceStatus.delayed,
+      data: {
+        priorityQueue: {
+          waiting: priorityStatus.waiting,
+          active: priorityStatus.active,
+          completed: priorityStatus.completed,
+          failed: priorityStatus.failed,
+          delayed: priorityStatus.delayed,
+        },
+        scheduledQueue: {
+          waiting: scheduledStatus.waiting,
+          active: scheduledStatus.active,
+          completed: scheduledStatus.completed,
+          failed: scheduledStatus.failed,
+          delayed: scheduledStatus.delayed,
+        },
+        simulationQueue: {
+          waiting: simulationStatus.waiting,
+          active: simulationStatus.active,
+          completed: simulationStatus.completed,
+          failed: simulationStatus.failed,
+          delayed: simulationStatus.delayed,
+        },
       },
-      onboardingQueue: {
-        waiting: onboardingStatus.waiting,
-        active: onboardingStatus.active,
-        completed: onboardingStatus.completed,
-        failed: onboardingStatus.failed,
-        delayed: onboardingStatus.delayed,
-      },
-      defaultQueue: {
-        waiting: defaultStatus.waiting,
-        active: defaultStatus.active,
-        completed: defaultStatus.completed,
-        failed: defaultStatus.failed,
-        delayed: defaultStatus.delayed,
-      }
     });
   } catch (error) {
     console.error("GET /api/agents/status error:", error);

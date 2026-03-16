@@ -1,27 +1,25 @@
 import { z } from "zod";
 
-export const complianceJobSchema = z.object({
-  clientId: z.string(),
-  reason: z.string().optional(),
-  trigger: z.enum(["SCHEDULED", "EVENT_UPLOAD", "MANUAL", "SIMULATION"]).optional(),
+/**
+ * Payload for all live agent jobs (priority + scheduled queues).
+ * Validated with Zod before every enqueue.
+ */
+export const agentJobSchema = z.object({
+  clientId: z.string().min(1),
+  agentType: z.enum(["COMPLIANCE", "ONBOARDING"]),
+  trigger: z.enum(["SCHEDULED", "EVENT_UPLOAD", "MANUAL"]),
   documentId: z.string().optional(),
 });
 
-export type ComplianceJobPayload = z.infer<typeof complianceJobSchema>;
+export type AgentJobPayload = z.infer<typeof agentJobSchema>;
 
-export const onboardingJobSchema = z.object({
-  clientId: z.string(),
-  documentId: z.string().optional(),
-  reason: z.string().optional(),
-  trigger: z.enum(["SCHEDULED", "EVENT_UPLOAD", "MANUAL", "SIMULATION"]).optional(),
+/**
+ * Payload for simulation batch jobs (simulation queue only).
+ */
+export const simulationJobSchema = z.object({
+  runId: z.string().min(1),
+  batchStart: z.number().int().nonnegative(),
+  batchEnd: z.number().int().nonnegative(),
 });
 
-export type OnboardingJobPayload = z.infer<typeof onboardingJobSchema>;
-
-export const defaultJobSchema = z.object({
-  clientId: z.string(),
-  action: z.string(),
-  metadata: z.record(z.unknown()).optional(),
-});
-
-export type DefaultJobPayload = z.infer<typeof defaultJobSchema>;
+export type SimulationJobPayload = z.infer<typeof simulationJobSchema>;

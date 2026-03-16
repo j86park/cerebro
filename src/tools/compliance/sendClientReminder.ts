@@ -30,6 +30,9 @@ export function buildSendClientReminder(vault: VaultService) {
       const { documentId, subject, body, reasoning } = inputData;
       const { DRY_RUN } = env;
 
+      // Enforce 5-day duplicate action cooldown
+      await vault.checkActionCooldown("SEND_CLIENT_REMINDER", 5, documentId);
+
       if (!DRY_RUN) {
         // TODO: Send email via Resend
         void subject;

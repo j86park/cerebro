@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
+import { env } from "@/lib/config";
 
 const vaultContextSchema = z.object({
   clientId: z.string().min(1),
@@ -92,9 +93,45 @@ export class VaultService {
   }
 
   /**
+   * Checks if a duplicate action is being attempted within the cooldown period.
+   * Throws an error if the cooldown has not expired.
+   */
+  async checkActionCooldown(actionType: string, cooldownDays: number, documentId?: string) {
+    const history = await this.getActionHistory() as Array<{
+      actionType: string;
+      documentId: string | null;
+      performedAt: Date;
+    }>;
+
+    const latest = history.find(
+      (h) => h.actionType === actionType && (!documentId || h.documentId === documentId)
+    );
+
+    if (latest) {
+      const demoDate = new Date(env.DEMO_DATE);
+      const daysSince = (demoDate.getTime() - latest.performedAt.getTime()) / (1000 * 60 * 60 * 24);
+      
+      if (daysSince < cooldownDays) {
+        throw new Error(
+          `Action ${actionType} was already performed ${Math.floor(daysSince)} days ago. ` +
+          `A cooldown of ${cooldownDays} days is required before repeating this action.`
+        );
+      }
+    }
+  }
+
+  /**
    * Updates a document status scoped to this vault.
    */
   async updateDocumentStatus(documentId: string, status: string, notes?: string) {
+    const docs = await this.db.document.findMany({
+      where: { id: documentId, clientId: this.clientId },
+    });
+    
+    if (docs.length === 0) {
+      throw new Error(`Document ${documentId} not found in client vault ${this.clientId}`);
+    }
+
     return this.db.document.update({
       where: {
         id: documentId,

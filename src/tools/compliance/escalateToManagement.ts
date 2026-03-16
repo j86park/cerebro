@@ -28,6 +28,9 @@ export function buildEscalateToManagement(vault: VaultService) {
       const { reasoning } = inputData;
       const { DRY_RUN } = env;
 
+      // Enforce 5-day duplicate action cooldown
+      await vault.checkActionCooldown("ESCALATE_MANAGEMENT", 5);
+
       // Self-enforce prerequisite: Stage 4 (ESCALATE_COMPLIANCE) must be complete
       const history = (await vault.getActionHistory()) as Array<
         Record<string, unknown>

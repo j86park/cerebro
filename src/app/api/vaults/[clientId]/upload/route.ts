@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { VaultService } from "@/lib/db/vault-service";
 import { queues } from "@/lib/queue/client";
 import { DOCUMENT_REGISTRY } from "@/lib/documents/registry";
+import { env } from "@/lib/config";
 import { z } from "zod";
 
 const uploadSchema = z.object({
-  documentType: z.string(),
+  documentType: z.string().min(1),
   fileRef: z.string().optional(),
 });
 
+/**
+ * POST /api/vaults/[clientId]/upload — mock document upload.
+ * Upserts the document to PENDING_REVIEW and enqueues an event-driven agent job.
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
@@ -21,7 +26,7 @@ export async function POST(
 
     if (!result.success) {
       return NextResponse.json(
-        { error: "Invalid request payload", details: result.error },
+        { error: "Invalid request payload", details: result.error.flatten() },
         { status: 400 }
       );
     }
@@ -29,7 +34,8 @@ export async function POST(
     const { documentType, fileRef } = result.data;
 
     // Validate document type exists in registry
-    const docMeta = DOCUMENT_REGISTRY[documentType as keyof typeof DOCUMENT_REGISTRY];
+    const docMeta =
+      DOCUMENT_REGISTRY[documentType as keyof typeof DOCUMENT_REGISTRY];
     if (!docMeta) {
       return NextResponse.json(
         { error: "Unknown document type" },
@@ -46,48 +52,35 @@ export async function POST(
       type: documentType,
       category: docMeta.category,
       status: "PENDING_REVIEW",
-      uploadedAt: new Date(),
-      fileRef: fileRef || `mock-file-${Date.now()}.pdf`,
+      uploadedAt: new Date(env.DEMO_DATE),
+      fileRef: fileRef || `mock-file-${docId}.pdf`,
     });
 
-    // 2. Enqueue an agent job.
-    // Determine which agent owns this document's review (Compliance or Onboarding)
-    // For simplicity, we'll route to Compliance unless it's in the middle of onboarding
+    // 2. Determine which agent should handle this
     const profile = await vault.getClientProfile();
-    const isOnboarding = (profile as any).onboardingStatus === "IN_PROGRESS";
-    
-    let jobId;
-    if (isOnboarding) {
-      const job = await queues.onboarding.add(
-        "onboarding-run",
-        {
-          clientId,
-          trigger: "EVENT_UPLOAD",
-          documentId: docId,
-        },
-        { priority: 1 } // High priority for manual/event triggers
-      );
-      jobId = job.id;
-    } else {
-      const job = await queues.compliance.add(
-        "compliance-run",
-        {
-          clientId,
-          trigger: "EVENT_UPLOAD",
-          documentId: docId,
-        },
-        { priority: 1 }
-      );
-      jobId = job.id;
-    }
+    const isOnboarding =
+      (profile as Record<string, unknown>).onboardingStatus === "IN_PROGRESS";
+    const agentType = isOnboarding ? "ONBOARDING" : "COMPLIANCE";
+
+    // Event-driven uploads always go to the priority queue
+    const job = await queues.priority.add(
+      `upload-${agentType}-${clientId}`,
+      {
+        clientId,
+        agentType: agentType as "COMPLIANCE" | "ONBOARDING",
+        trigger: "EVENT_UPLOAD" as const,
+        documentId: docId,
+      },
+      { priority: 1 }
+    );
 
     return NextResponse.json(
-      { 
-        success: true, 
-        message: "Document uploaded and agent triggered",
-        documentId: docId,
-        jobId,
-        enqueued: true
+      {
+        data: {
+          documentId: docId,
+          jobId: job.id,
+          agentType,
+        },
       },
       { status: 202 }
     );

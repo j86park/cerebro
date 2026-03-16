@@ -1,6 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
+import { env } from "@/lib/config";
 
 const inputSchema = z.object({
   documentId: z
@@ -42,6 +43,16 @@ export function buildValidateDocumentReceived(vault: VaultService) {
       const status = doc.status as string;
       const isValid =
         status === "VALID" || status === "PENDING_REVIEW";
+
+      // Always log the action
+      await vault.logAction({
+        agentType: "ONBOARDING",
+        actionType: "VALIDATE_DOCUMENT",
+        trigger: "EVENT_UPLOAD",
+        reasoning: `Validated document ${doc.type}. Status is ${status}.`,
+        outcome: isValid ? "DOCUMENT_VALID" : "DOCUMENT_INVALID",
+        nextScheduledAt: new Date(new Date(env.DEMO_DATE).getTime() + 1 * 24 * 60 * 60 * 1000), // check again tomorrow if needed
+      });
 
       return {
         valid: isValid,

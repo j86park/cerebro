@@ -1,5 +1,8 @@
 import { FirmSummaryBar } from "@/components/dashboard/FirmSummaryBar";
 import { VaultGrid } from "@/components/dashboard/VaultGrid";
+import { LiveAgentActivityFeed } from "@/components/dashboard/LiveAgentActivityFeed";
+import { EscalationQueuePanel } from "@/components/dashboard/EscalationQueuePanel";
+import { AgentControls } from "@/components/dashboard/AgentControls";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
 
@@ -19,15 +22,52 @@ async function getDashboardData() {
     },
   });
 
+  const latestActions = await prisma.agentAction.findMany({
+    orderBy: { performedAt: "desc" },
+    take: 50,
+    include: { client: { select: { name: true } } },
+  });
+
+  const rawEscalations = await prisma.agentAction.findMany({
+    where: {
+      actionType: { in: ["ESCALATE_COMPLIANCE", "ESCALATE_MANAGEMENT", "ALERT_ADVISOR_STUCK"] },
+    },
+    orderBy: { performedAt: "desc" },
+    take: 15,
+    include: { client: { select: { name: true } } },
+  });
+
+  // Basic deduplication to get unique current escalations
+  const seenClients = new Set();
+  const escalations = rawEscalations.filter((action: any) => {
+    if (seenClients.has(action.clientId)) return false;
+    seenClients.add(action.clientId);
+    return true;
+  }).map((e: any) => ({
+    id: e.id,
+    clientId: e.clientId,
+    client: { name: e.client.name },
+    reasoning: e.reasoning,
+    stage: e.actionType,
+    performedAt: e.performedAt.toISOString(),
+  }));
+
+  // Ensure JSON serialization of dates
+  const initialActions = latestActions.map((a: any) => ({
+    ...a,
+    performedAt: a.performedAt.toISOString(),
+    nextScheduledAt: a.nextScheduledAt?.toISOString() || null,
+  }));
+
   const demoDate = new Date(env.DEMO_DATE);
   
   // Transform and aggregate data
-  const vaults = clients.map((client) => {
+  const vaults = clients.map((client: any) => {
     let expiredCount = 0;
     let expiringSoonCount = 0;
     let missingCount = 0;
 
-    client.documents.forEach((doc) => {
+    client.documents.forEach((doc: any) => {
       if (doc.status === "EXPIRED") expiredCount++;
       if (doc.status === "EXPIRING_SOON") expiringSoonCount++;
       if (doc.status === "MISSING") missingCount++;
@@ -65,26 +105,26 @@ async function getDashboardData() {
 
   // Sort by urgency: CRITICAL > HIGH > MEDIUM > LOW > NONE
   const rank = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, NONE: 0 } as const;
-  vaults.sort((a, b) => {
+  vaults.sort((a: any, b: any) => {
     return (rank[b.urgency.highest as keyof typeof rank] || 0) - (rank[a.urgency.highest as keyof typeof rank] || 0);
   });
 
   // Calculate summary metrics
   const summary = {
     totalClients: vaults.length,
-    criticalClients: vaults.filter((v) => v.urgency.highest === "CRITICAL").length,
-    issueClients: vaults.filter((v) => v.urgency.highest !== "NONE").length,
-    secureClients: vaults.filter((v) => v.urgency.highest === "NONE").length,
+    criticalClients: vaults.filter((v: any) => v.urgency.highest === "CRITICAL").length,
+    issueClients: vaults.filter((v: any) => v.urgency.highest !== "NONE").length,
+    secureClients: vaults.filter((v: any) => v.urgency.highest === "NONE").length,
   };
 
-  return { vaults, summary };
+  return { vaults, summary, initialActions, escalations, clients };
 }
 
 export default async function DashboardPage() {
-  const { vaults, summary } = await getDashboardData();
+  const { vaults, summary, initialActions, escalations, clients } = await getDashboardData();
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-[1600px] mx-auto pb-10">
       <div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">Operations Dashboard</h1>
         <p className="text-muted-foreground">Monitor and manage all client vaults with autonomous agents.</p>
@@ -92,9 +132,17 @@ export default async function DashboardPage() {
 
       <FirmSummaryBar {...summary} />
       
-      <div className="pt-2">
-        <h2 className="text-xl font-semibold mb-4 text-foreground">Active Vaults</h2>
-        <VaultGrid vaults={vaults} />
+      <div className="flex flex-col lg:flex-row gap-6 pt-2">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl font-semibold mb-4 text-foreground">Active Vaults</h2>
+          <VaultGrid vaults={vaults} />
+        </div>
+        
+        <div className="w-full lg:w-96 shrink-0 flex flex-col gap-6">
+          <AgentControls clients={clients} />
+          <EscalationQueuePanel escalations={escalations} />
+          <LiveAgentActivityFeed initialActions={initialActions} />
+        </div>
       </div>
     </div>
   );

@@ -31,6 +31,9 @@ export function buildAlertAdvisorStuck(vault: VaultService) {
       const { reasoning, daysSinceLastResponse } = inputData;
       const { DRY_RUN } = env;
 
+      // Enforce 3-day duplicate action cooldown
+      await vault.checkActionCooldown("ALERT_ADVISOR_STUCK", 3);
+
       if (!DRY_RUN) {
         // TODO: Send advisor alert email via Resend
         void daysSinceLastResponse;

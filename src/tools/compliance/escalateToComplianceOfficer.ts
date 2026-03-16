@@ -28,6 +28,9 @@ export function buildEscalateToComplianceOfficer(vault: VaultService) {
       const { reasoning } = inputData;
       const { DRY_RUN } = env;
 
+      // Enforce 5-day duplicate action cooldown
+      await vault.checkActionCooldown("ESCALATE_COMPLIANCE", 5);
+
       // Self-enforce prerequisite: at least 2 client reminders sent
       const history = (await vault.getActionHistory()) as Array<
         Record<string, unknown>

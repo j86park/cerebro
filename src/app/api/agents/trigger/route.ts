@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queues } from "@/lib/queue/client";
+import { agentJobSchema } from "@/lib/queue/jobs";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 
 const triggerSchema = z.object({
-  clientId: z.string(),
+  clientId: z.string().min(1),
   agentType: z.enum(["COMPLIANCE", "ONBOARDING"]),
+  trigger: z.literal("MANUAL").default("MANUAL"),
   documentId: z.string().optional(),
 });
 
+/**
+ * POST /api/agents/trigger — enqueues a manual agent run to the priority queue.
+ * Returns the BullMQ job ID so the dashboard can track it.
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -16,16 +22,19 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json(
-        { error: "Invalid request payload", details: result.error },
+        { error: "Invalid request payload", details: result.error.flatten() },
         { status: 400 }
       );
     }
 
-    const { clientId, agentType, documentId } = result.data;
+    const payload = agentJobSchema.parse({
+      ...result.data,
+      trigger: "MANUAL",
+    });
 
     // Verify client exists
     const client = await prisma.client.findUnique({
-      where: { id: clientId },
+      where: { id: payload.clientId },
       select: { id: true },
     });
 
@@ -36,37 +45,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let jobId;
-    if (agentType === "COMPLIANCE") {
-      const job = await queues.compliance.add(
-        "compliance-run",
-        {
-          clientId,
-          trigger: "MANUAL",
-          documentId,
-        },
-        { priority: 1 } // Manual triggers get high priority
-      );
-      jobId = job.id;
-    } else {
-      const job = await queues.onboarding.add(
-        "onboarding-run",
-        {
-          clientId,
-          trigger: "MANUAL",
-          documentId,
-        },
-        { priority: 1 }
-      );
-      jobId = job.id;
-    }
+    // Manual triggers go to the priority queue
+    const job = await queues.priority.add(
+      `manual-${payload.agentType}-${payload.clientId}`,
+      payload,
+      { priority: 1 }
+    );
 
     return NextResponse.json(
-      { 
-        success: true, 
-        message: `${agentType} agent triggered for client ${clientId}`,
-        jobId,
-        enqueued: true
+      {
+        data: {
+          jobId: job.id,
+          agentType: payload.agentType,
+          clientId: payload.clientId,
+        },
       },
       { status: 202 }
     );

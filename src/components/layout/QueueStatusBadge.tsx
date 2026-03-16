@@ -16,14 +16,14 @@ export function QueueStatusBadge() {
   }
 
   const activeTotal = 
-    status.complianceQueue.active + 
-    status.onboardingQueue.active + 
-    status.defaultQueue.active;
+    status.priorityQueue.active + 
+    status.scheduledQueue.active + 
+    status.simulationQueue.active;
 
   const waitingTotal = 
-    status.complianceQueue.waiting + 
-    status.onboardingQueue.waiting + 
-    status.defaultQueue.waiting;
+    status.priorityQueue.waiting + 
+    status.scheduledQueue.waiting + 
+    status.simulationQueue.waiting;
 
   const isIdle = activeTotal === 0 && waitingTotal === 0;
 

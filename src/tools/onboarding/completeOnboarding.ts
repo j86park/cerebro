@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { ONBOARDING_STAGES } from "@/lib/documents/onboarding-stages";
+import { env } from "@/lib/config";
 
 const inputSchema = z.object({
   reasoning: z
@@ -64,7 +65,7 @@ export function buildCompleteOnboarding(vault: VaultService) {
 
       await vault.resetOnboarding(totalStages, "COMPLETED");
 
-      const completedAt = new Date().toISOString();
+      const completedAt = new Date(env.DEMO_DATE).toISOString();
 
       // Always log the action
       await vault.logAction({
@@ -73,7 +74,7 @@ export function buildCompleteOnboarding(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: "ONBOARDING_COMPLETED",
-        nextScheduledAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        nextScheduledAt: new Date(new Date(env.DEMO_DATE).getTime() + 30 * 24 * 60 * 60 * 1000),
       });
 
       return { success: true, completedAt };

@@ -7,6 +7,8 @@ const envSchema = z.object({
   UPSTASH_REDIS_TOKEN: z.string().default("dev-token"),
   SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
   SUPABASE_ANON_KEY: z.string().default("dev-anon-key"),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().default("dev-anon-key"),
   OPENROUTER_API_KEY: z.string().default("dev-openrouter-key"),
   RESEND_API_KEY: z.string().default("dev-resend-key"),
   DEMO_DATE: z.string().datetime().default("2026-03-14T00:00:00.000Z"),
