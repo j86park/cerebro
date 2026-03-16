@@ -48,16 +48,16 @@ export function RegressionTracker({ runs }: RegressionTrackerProps) {
                 bottom: 5,
               }}
             >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
               <XAxis
                 dataKey="name"
-                stroke="hsl(var(--muted-foreground))"
+                stroke="var(--muted-foreground)"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
               />
               <YAxis
-                stroke="hsl(var(--muted-foreground))"
+                stroke="var(--muted-foreground)"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
@@ -66,8 +66,8 @@ export function RegressionTracker({ runs }: RegressionTrackerProps) {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "hsl(var(--background))",
-                  borderColor: "hsl(var(--border))",
+                  backgroundColor: "var(--background)",
+                  borderColor: "var(--border)",
                   borderRadius: "8px",
                   fontSize: "12px",
                 }}

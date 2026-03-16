@@ -1,5 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { PostgresStore } from "@mastra/pg";
+import { env } from "@/lib/config";
 import { COMPLIANCE_SYSTEM_PROMPT } from "./prompts";
 import { COMPLIANCE_WORKING_MEMORY_SCHEMA } from "./memory-schema";
 import { getModel } from "@/lib/config";
@@ -10,6 +12,7 @@ export const complianceAgent = new Agent({
   instructions: COMPLIANCE_SYSTEM_PROMPT,
   model: getModel("dev"),
   memory: new Memory({
+    storage: new PostgresStore({ id: "compliance-storage", connectionString: env.DATABASE_URL }),
     options: {
       lastMessages: 20,
       workingMemory: {

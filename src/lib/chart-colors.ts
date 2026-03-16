@@ -17,8 +17,8 @@ export const CHART_COLORS = {
   none: "#94a3b8",
 
   // Theme support
-  background: "hsl(var(--background))",
-  foreground: "hsl(var(--foreground))",
-  muted: "hsl(var(--muted))",
-  border: "hsl(var(--border))",
+  background: "var(--background)",
+  foreground: "var(--foreground)",
+  muted: "var(--muted)",
+  border: "var(--border)",
 };

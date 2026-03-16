@@ -43,10 +43,10 @@ export function ScorerBreakdown({ breakdown }: ScorerBreakdownProps) {
                 bottom: 5,
               }}
             >
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
               <XAxis
                 type="number"
-                stroke="hsl(var(--muted-foreground))"
+                stroke="var(--muted-foreground)"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
@@ -56,7 +56,7 @@ export function ScorerBreakdown({ breakdown }: ScorerBreakdownProps) {
               <YAxis
                 dataKey="name"
                 type="category"
-                stroke="hsl(var(--muted-foreground))"
+                stroke="var(--muted-foreground)"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
@@ -65,8 +65,8 @@ export function ScorerBreakdown({ breakdown }: ScorerBreakdownProps) {
               <Tooltip
                 cursor={{ fill: "transparent" }}
                 contentStyle={{
-                  backgroundColor: "hsl(var(--background))",
-                  borderColor: "hsl(var(--border))",
+                  backgroundColor: "var(--background)",
+                  borderColor: "var(--border)",
                   borderRadius: "8px",
                   fontSize: "12px",
                 }}

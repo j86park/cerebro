@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { TopBar } from "@/components/layout/TopBar";
 import { EvalOverview } from "@/components/testing/EvalOverview";
 import { RegressionTracker } from "@/components/testing/RegressionTracker";
 import { ScorerBreakdown } from "@/components/testing/ScorerBreakdown";
@@ -46,59 +44,60 @@ export default function TestingPage({
   };
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
-      <Sidebar className="w-64" />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar title="Testing Suite" />
-        <main className="flex-1 overflow-y-auto p-6 space-y-8">
-          {latestRun ? (
-            <>
-              <EvalOverview 
-                latestRun={{
-                  overallScore: latestRun.overallScore,
-                  runAt: latestRun.runAt,
-                  scorerBreakdown: latestRun.scorerBreakdown,
-                  scenarioResults: latestRun.scenarioResults,
-                }} 
+    <div className="space-y-8 animate-in fade-in duration-500">
+      {latestRun ? (
+        <>
+          <EvalOverview 
+            latestRun={{
+              overallScore: latestRun.overallScore,
+              runAt: latestRun.runAt,
+              scorerBreakdown: latestRun.scorerBreakdown,
+              scenarioResults: latestRun.scenarioResults,
+            }} 
+          />
+          <div className="grid gap-8 grid-cols-1 lg:grid-cols-4">
+            <div className="lg:col-span-4">
+              <RegressionTracker 
+                runs={runs.map((r: any) => ({
+                  id: r.id,
+                  overallScore: r.overallScore,
+                  runAt: r.runAt,
+                }))} 
               />
-              <div className="grid gap-8 grid-cols-4">
-                <RegressionTracker 
-                  runs={runs.map((r: any) => ({
-                    id: r.id,
-                    overallScore: r.overallScore,
-                    runAt: r.runAt,
-                  }))} 
-                />
-              </div>
-
-              <div className="grid gap-8 grid-cols-4">
-                <ScorerBreakdown 
-                  breakdown={latestRun.scorerBreakdown as Record<string, { total: number; passed: number }>} 
-                />
-                <ScenarioMatrix 
-                  results={latestRun.scenarioResults as Record<string, { agent: string; output: string; scores: Record<string, any> }>} 
-                  onCellClick={handleCellClick}
-                />
-              </div>
-
-              <FailureInspector 
-                isOpen={!!selectedCell}
-                onClose={() => setSelectedCell(null)}
-                data={getInspectorData()}
-              />
-            </>
-          ) : (
-            <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
-              <div className="flex flex-col items-center gap-2 text-center">
-                <h3 className="text-lg font-semibold">No evaluation runs found</h3>
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Run npm run test:eval to generate evaluation data.
-                </p>
-              </div>
             </div>
-          )}
-        </main>
-      </div>
+          </div>
+
+          <div className="grid gap-8 grid-cols-1 lg:grid-cols-4">
+            <div className="lg:col-span-1">
+              <ScorerBreakdown 
+                breakdown={latestRun.scorerBreakdown as Record<string, { total: number; passed: number }>} 
+              />
+            </div>
+            <div className="lg:col-span-3">
+              <ScenarioMatrix 
+                results={latestRun.scenarioResults as Record<string, { agent: string; output: string; scores: Record<string, any> }>} 
+                onCellClick={handleCellClick}
+              />
+            </div>
+          </div>
+
+          <FailureInspector 
+            isOpen={!!selectedCell}
+            onClose={() => setSelectedCell(null)}
+            data={getInspectorData()}
+          />
+        </>
+      ) : (
+        <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed border-cerebro-border bg-cerebro-surface/50 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <h3 className="text-xl font-bold text-foreground">No evaluation runs found</h3>
+            <p className="max-w-sm text-muted-foreground">
+              Run <code className="bg-muted px-1.5 py-0.5 rounded text-primary">npm run test:eval</code> to generate evaluation data.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

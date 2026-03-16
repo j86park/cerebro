@@ -1,6 +1,10 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@source "../**/*.{ts,tsx}";
+
+body {
+  background-color: #09090b !important;
+  color: #fafafa !important;
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -9,6 +13,11 @@
   --color-cerebro-surface: #18181b; /* Zinc 900 */
   --color-cerebro-border: #27272a; /* Zinc 800 */
   --color-cerebro-accent: #3b82f6; /* Blue 500 */
+  
+  --color-pass: #10b981; /* Emerald 500 */
+  --color-fail: #ef4444; /* Red 500 */
+  --color-info: #3b82f6; /* Blue 500 */
+  --color-warning: #f59e0b; /* Amber 500 */
 }
 
 @layer base {

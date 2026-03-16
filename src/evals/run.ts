@@ -9,7 +9,7 @@ import { buildOnboardingTools } from "@/tools/onboarding";
 import { prisma } from "@/lib/db/client";
 
 export async function runAllEvals() {
-  console.log("Starting Evaluation Suite...");
+  console.log("Starting Evaluation Suite - PERSISTENCE CHECK...");
   const scenarios = [...complianceScenarios, ...onboardingScenarios];
   const scenarioResults: Record<string, any> = {};
   const scorerBreakdown: Record<string, { total: number; passed: number }> = {};
@@ -108,7 +108,8 @@ export async function runAllEvals() {
 }
 
 // Allow running directly if executed via vitest or runner
-if (typeof require !== 'undefined' && require.main === module) {
+const isMain = process.argv[1]?.endsWith('run.ts');
+if (isMain) {
   runAllEvals().then(() => process.exit(0)).catch(err => {
     console.error(err);
     process.exit(1);

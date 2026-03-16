@@ -3,8 +3,8 @@ import { z } from "zod";
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url().default("https://example.com/db"),
-  UPSTASH_REDIS_URL: z.string().url().default("https://example.com/redis"),
-  UPSTASH_REDIS_TOKEN: z.string().default("dev-token"),
+  UPSTASH_REDIS_URL: z.string().url().default("redis://localhost:6379"),
+  UPSTASH_REDIS_TOKEN: z.string().optional(),
   SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
   SUPABASE_ANON_KEY: z.string().default("dev-anon-key"),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
