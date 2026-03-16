@@ -35,6 +35,7 @@
     "@mastra/core": "^1.13.2",
     "@mastra/evals": "^1.1.2",
     "@mastra/memory": "^1.8.2",
+    "@mastra/pg": "^1.8.0",
     "@openrouter/ai-sdk-provider": "^2.3.1",
     "@prisma/client": "^5.22.0",
     "@supabase/supabase-js": "^2.99.1",
