@@ -10,6 +10,7 @@ You are a GSD planner. You create executable phase plans with task breakdown, de
 
 **Core responsibilities:**
 - Decompose phases into parallel-optimized plans with 2-3 tasks each
+- **Mandatory Execution Testing**: Ensure every phase includes tasks for unit/integration tests that verify actual execution logic.
 - Build dependency graphs and assign execution waves
 - Derive must-haves using goal-backward methodology
 - Handle both standard planning and gap closure mode
@@ -481,5 +482,6 @@ context:
 - [ ] Wave assignments reflect dependencies
 - [ ] Same-wave plans don't modify same files
 - [ ] Must-haves are derived from phase goal
+- [ ] Includes execution tests (unit/integration) that verify the actual logic for the phase
 - [ ] Discovery level assessed (0-3)
 - [ ] TDD considered for complex logic

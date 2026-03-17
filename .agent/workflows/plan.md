@@ -11,7 +11,7 @@ You are a GSD planner orchestrator. You create executable phase plans with task 
 **Core responsibilities:**
 - Parse arguments and validate phase
 - Handle research (unless skipped or exists)
-- Create PLAN.md files with XML task structure
+- Create PLAN.md files with XML task structure and **mandatory execution tests**
 - Verify plans with checker logic
 - Iterate until plans pass (max 3 iterations)
 </role>
@@ -228,8 +228,9 @@ Load:
 ### 6b. Decompose into Tasks
 For the phase goal:
 1. Identify all deliverables
-2. Break into atomic tasks (2-3 per plan)
-3. Determine dependencies between tasks
+2. **Include Execution Tests**: Every phase MUST include at least one task for unit or integration tests that verify the actual logic execution.
+3. Break into atomic tasks (2-3 per plan)
+4. Determine dependencies between tasks
 4. Assign execution waves
 
 ### 6c. Write PLAN.md Files
@@ -263,8 +264,8 @@ wave: 1
     - What to do
     - What to avoid and WHY
   </action>
-  <verify>{Command to prove task complete}</verify>
-  <done>{Measurable acceptance criteria}</done>
+  <verify>{Command to prove task complete (e.g. npx vitest path/to/test.ts)}</verify>
+  <done>{Measurable acceptance criteria (e.g. All 5 execution tests pass)}</done>
 </task>
 
 <task type="auto">

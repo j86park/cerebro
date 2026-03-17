@@ -20,6 +20,8 @@ export const simulationJobSchema = z.object({
   runId: z.string().min(1),
   batchStart: z.number().int().nonnegative(),
   batchEnd: z.number().int().nonnegative(),
+  clientStart: z.number().int().nonnegative().optional(),
+  clientEnd: z.number().int().nonnegative().optional(),
 });
 
 export type SimulationJobPayload = z.infer<typeof simulationJobSchema>;

@@ -115,14 +115,41 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
   }
 }
 
+import { SimulationOrchestrator } from "@/lib/simulation/orchestrator";
+
 /**
- * Processes a simulation batch job using a deterministic mock agent.
+ * Processes a simulation batch job.
+ * Each batch represents a set of days to process for all clients in the simulation.
  */
-async function processSimulationJob(job: Job<SimulationJobPayload>) {
+export async function processSimulationJob(job: Job<SimulationJobPayload>) {
+  const { runId, batchStart, batchEnd, clientStart, clientEnd } = job.data;
   console.log(
-    `[Worker] Processing simulation batch ${job.data.batchStart}-${job.data.batchEnd} for run ${job.data.runId}`
+    `[Worker] Processing simulation batch days ${batchStart}-${batchEnd} for run ${runId}` +
+    (clientStart !== undefined ? ` (clients ${clientStart}-${clientEnd})` : "")
   );
-  // TODO: Implement mock agent simulation logic (Milestone 7)
+
+  const orchestrator = new SimulationOrchestrator();
+  const clientRange = (clientStart !== undefined && clientEnd !== undefined) 
+    ? { start: clientStart, end: clientEnd } 
+    : undefined;
+
+  try {
+    for (let day = batchStart; day <= batchEnd; day++) {
+      await orchestrator.tick(runId, day, clientRange);
+      
+      // Update progress after each day in the batch
+      await orchestrator.updateProgress(runId, {
+        batchesCompleted: day + 1,
+        batchesTotal: (await orchestrator.getRun(runId))?.simulatedDays || day + 1,
+      });
+    }
+
+    console.log(`[Worker] Simulation batch ${batchStart}-${batchEnd} completed for run ${runId}`);
+    return { success: true };
+  } catch (error) {
+    console.error(`[Worker] Simulation job ${job.id} failed:`, error);
+    throw error;
+  }
 }
 
 // Workers with concurrency limits per database.mdc §Worker Concurrency

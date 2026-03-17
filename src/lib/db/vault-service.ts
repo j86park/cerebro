@@ -4,6 +4,7 @@ import { env } from "@/lib/config";
 
 const vaultContextSchema = z.object({
   clientId: z.string().min(1),
+  now: z.date().optional(),
 });
 
 const logActionInputSchema = z.object({
@@ -13,7 +14,7 @@ const logActionInputSchema = z.object({
   trigger: z.string().min(1),
   reasoning: z.string().min(1),
   outcome: z.string().optional(),
-  nextScheduledAt: z.date(),
+  nextScheduledAt: z.date().optional(),
 });
 
 export type VaultContext = z.infer<typeof vaultContextSchema>;
@@ -42,11 +43,17 @@ type PrismaLike = {
 export class VaultService {
   private clientId: string;
   private db: PrismaLike;
+  private now: Date;
 
   constructor(ctx: VaultContext, db: PrismaLike = prisma as unknown as PrismaLike) {
     const parsed = vaultContextSchema.parse(ctx);
     this.clientId = parsed.clientId;
     this.db = db;
+    this.now = parsed.now ?? new Date(env.DEMO_DATE);
+  }
+
+  getNow(): Date {
+    return this.now;
   }
 
   /**
@@ -108,8 +115,8 @@ export class VaultService {
     );
 
     if (latest) {
-      const demoDate = new Date(env.DEMO_DATE);
-      const daysSince = (demoDate.getTime() - latest.performedAt.getTime()) / (1000 * 60 * 60 * 24);
+      const now = this.getNow();
+      const daysSince = (now.getTime() - latest.performedAt.getTime()) / (1000 * 60 * 60 * 24);
       
       if (daysSince < cooldownDays) {
         throw new Error(

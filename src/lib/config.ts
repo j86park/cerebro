@@ -18,6 +18,7 @@ const envSchema = z.object({
   DRY_RUN: z.preprocess((value) => value === "true" || value === true, z.boolean()).default(true),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   WEBHOOK_SECRET: z.string().default("dev-webhook-secret"),
+  SIM_TIME_SCALE: z.coerce.number().default(1),
 });
 
 export const env = envSchema.parse(process.env);
