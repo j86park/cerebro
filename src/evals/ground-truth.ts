@@ -188,4 +188,179 @@ export const GROUND_TRUTH: EvalScenario[] = [
       highestPriority: "NONE",
     },
   },
+  // CLT-016: Corporate HNW client, Articles of Incorporation missing.
+  {
+    clientId: "CLT-016",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "NOTIFY_ADVISOR",
+      escalationStage: 1,
+      duplicateAction: false,
+      highestPriority: "MEDIUM",
+    },
+  },
+  // CLT-017: Joint account, both identities missing.
+  {
+    clientId: "CLT-017",
+    agentType: "ONBOARDING",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "REQUEST_DOCUMENT",
+      onboardingStage: 1,
+      duplicateAction: false,
+    },
+  },
+  // CLT-018: Trust account, missing trust deed (high priority).
+  {
+    clientId: "CLT-018",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "ESCALATE_COMPLIANCE",
+      escalationStage: 3,
+      duplicateAction: false,
+      highestPriority: "HIGH",
+    },
+  },
+  // CLT-019: Corporate account, Signatory List expired.
+  {
+    clientId: "CLT-019",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "NOTIFY_ADVISOR",
+      escalationStage: 1,
+      duplicateAction: false,
+      highestPriority: "CRITICAL",
+    },
+  },
+  // CLT-020: Investment account, missing IPS (Investment Policy Statement).
+  {
+    clientId: "CLT-020",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "NOTIFY_ADVISOR",
+      escalationStage: 1,
+      duplicateAction: false,
+      highestPriority: "MEDIUM",
+    },
+  },
+  // CLT-021: Lapsed client, all documents expired (> 5 years).
+  {
+    clientId: "CLT-021",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "ESCALATE_MANAGEMENT",
+      escalationStage: 5,
+      duplicateAction: false,
+      highestPriority: "CRITICAL",
+    },
+  },
+  // CLT-022: New Individual account, NAAF document upload failed/invalid.
+  {
+    clientId: "CLT-022",
+    agentType: "ONBOARDING",
+    trigger: "EVENT_UPLOAD",
+    expected: {
+      actionTaken: "REQUEST_DOCUMENT", // Re-request after validation failure
+      onboardingStage: 2,
+      duplicateAction: false,
+    },
+  },
+  // CLT-023: Corporate account, missing multiple critical docs.
+  {
+    clientId: "CLT-023",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "NOTIFY_ADVISOR",
+      escalationStage: 1,
+      duplicateAction: false,
+      highestPriority: "CRITICAL",
+    },
+  },
+  // CLT-024: Client in early onboarding stalled, no docs uploaded after 3 reminders.
+  {
+    clientId: "CLT-024",
+    agentType: "ONBOARDING",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "ALERT_ADVISOR_STUCK",
+      onboardingStage: 1,
+      duplicateAction: false,
+    },
+  },
+  // CLT-025: Corporate account, just uploaded Articles. Moving to next stage.
+  {
+    clientId: "CLT-025",
+    agentType: "ONBOARDING",
+    trigger: "EVENT_UPLOAD",
+    expected: {
+      actionTaken: "VALIDATE_DOCUMENT",
+      onboardingStage: 2,
+      duplicateAction: false,
+    },
+  },
+  // CLT-026: Individual account, high-risk flag triggered by KYC answers.
+  {
+    clientId: "CLT-026",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "ESCALATE_COMPLIANCE",
+      escalationStage: 3,
+      duplicateAction: false,
+      highestPriority: "HIGH",
+    },
+  },
+  // CLT-027: Corporate account, missing UBO (Ultimate Beneficial Owner) info.
+  {
+    clientId: "CLT-027",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "NOTIFY_ADVISOR",
+      escalationStage: 1,
+      duplicateAction: false,
+      highestPriority: "HIGH",
+    },
+  },
+  // CLT-028: Joint account, onboarding completed but beneficiary missing.
+  {
+    clientId: "CLT-028",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "NOTIFY_ADVISOR",
+      escalationStage: 1,
+      duplicateAction: false,
+      highestPriority: "LOW",
+    },
+  },
+  // CLT-029: Individual account, proof of address expiring in 2 days.
+  {
+    clientId: "CLT-029",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "NOTIFY_ADVISOR", // Stage 1 Notify
+      escalationStage: 1,
+      duplicateAction: false,
+      highestPriority: "HIGH",
+    },
+  },
+  // CLT-030: Corporate account, all docs valid, annual review passed.
+  {
+    clientId: "CLT-030",
+    agentType: "COMPLIANCE",
+    trigger: "SCHEDULED",
+    expected: {
+      actionTaken: "SCAN_VAULT",
+      duplicateAction: false,
+      highestPriority: "NONE",
+    },
+  },
 ];

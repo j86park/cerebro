@@ -128,6 +128,72 @@ export const DOCUMENT_REGISTRY = {
     onboardingStage: 4,
     regulatoryNote: "Confirms account activation",
   },
+  ARTICLES_OF_INCORPORATION: {
+    category: "LEGAL",
+    label: "Articles of Incorporation",
+    expiryRuleYears: null,
+    requiredForAll: false,
+    accountTypes: ["CORPORATE"],
+    onboardingStage: 2,
+    regulatoryNote: "Required for corporate entities to prove legal existence",
+  },
+  AUTHORIZED_SIGNATORY_LIST: {
+    category: "LEGAL",
+    label: "Authorized Signatory List",
+    expiryRuleYears: 1,
+    requiredForAll: false,
+    accountTypes: ["CORPORATE"],
+    onboardingStage: 2,
+    regulatoryNote: "Must be updated annually for corporate accounts",
+  },
 } as const;
 
 export type DocumentType = keyof typeof DOCUMENT_REGISTRY;
+
+export const REQUIRED_DOCUMENTS_BY_ACCOUNT_TYPE: Record<string, DocumentType[]> =
+  {
+    INDIVIDUAL: [
+      "GOVERNMENT_ID",
+      "PROOF_OF_ADDRESS",
+      "SIN_SSN_FORM",
+      "KYC_FORM",
+      "AML_VERIFICATION",
+      "NAAF",
+      "RISK_QUESTIONNAIRE",
+      "SUITABILITY_ASSESSMENT",
+      "CLIENT_AGREEMENT",
+      "FEE_DISCLOSURE",
+      "BENEFICIARY_DESIGNATION",
+      "BANKING_INFORMATION",
+      "DEPOSIT_CONFIRMATION",
+    ],
+    CORPORATE: [
+      "GOVERNMENT_ID",
+      "PROOF_OF_ADDRESS",
+      "SIN_SSN_FORM",
+      "KYC_FORM",
+      "AML_VERIFICATION",
+      "NAAF",
+      "RISK_QUESTIONNAIRE",
+      "SUITABILITY_ASSESSMENT",
+      "CLIENT_AGREEMENT",
+      "FEE_DISCLOSURE",
+      "BENEFICIARY_DESIGNATION",
+      "BANKING_INFORMATION",
+      "DEPOSIT_CONFIRMATION",
+      "ARTICLES_OF_INCORPORATION",
+      "AUTHORIZED_SIGNATORY_LIST",
+      "INVESTMENT_POLICY_STATEMENT",
+    ],
+  };
+
+export function getRequiredDocs(accountType: string): DocumentType[] {
+  // Map RRSP/TFSA/JOINT to INDIVIDUAL for rule simplicity
+  if (["RRSP", "TFSA", "JOINT", "INVESTMENT"].includes(accountType)) {
+    return REQUIRED_DOCUMENTS_BY_ACCOUNT_TYPE.INDIVIDUAL;
+  }
+  if (accountType === "CORPORATE") {
+    return REQUIRED_DOCUMENTS_BY_ACCOUNT_TYPE.CORPORATE;
+  }
+  return REQUIRED_DOCUMENTS_BY_ACCOUNT_TYPE.INDIVIDUAL;
+}

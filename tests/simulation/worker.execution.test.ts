@@ -1,22 +1,49 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { processSimulationJob } from "../../src/lib/queue/workers";
-import { SimulationOrchestrator } from "../../src/lib/simulation/orchestrator";
+import { describe, it, expect, vi } from "vitest";
 
-const mockTick = vi.fn().mockResolvedValue({ simDate: new Date(), clientCount: 10 });
-const mockUpdateProgress = vi.fn().mockResolvedValue({});
-const mockGetRun = vi.fn().mockResolvedValue({ id: "run-123", simulatedDays: 30 });
-
-vi.mock("../../src/lib/simulation/orchestrator", () => {
+// Mock infrastructure dependencies before importing workers
+vi.mock("ioredis", () => {
   return {
-    SimulationOrchestrator: function() {
+    default: vi.fn().mockImplementation(function() {
+      return {
+        on: vi.fn(),
+        quit: vi.fn().mockResolvedValue("OK"),
+      };
+    }),
+  };
+});
+
+vi.mock("bullmq", () => {
+  return {
+    Worker: vi.fn().mockImplementation(function() {
+      return {
+        on: vi.fn(),
+      };
+    }),
+    Queue: vi.fn(),
+    Job: vi.fn(),
+  };
+});
+
+// Use vi.hoisted to ensure these are available to vi.mock
+const { mockTick, mockUpdateProgress, mockGetRun } = vi.hoisted(() => ({
+  mockTick: vi.fn().mockResolvedValue({ simDate: new Date(), clientCount: 10 }),
+  mockUpdateProgress: vi.fn().mockResolvedValue({}),
+  mockGetRun: vi.fn().mockResolvedValue({ id: "run-123", simulatedDays: 30 }),
+}));
+
+vi.mock("@/lib/simulation/orchestrator", () => {
+  return {
+    SimulationOrchestrator: vi.fn().mockImplementation(function() {
       return {
         tick: mockTick,
         updateProgress: mockUpdateProgress,
         getRun: mockGetRun,
       };
-    }
+    }),
   };
 });
+
+import { processSimulationJob } from "../../src/lib/queue/workers";
 
 describe("Simulation Worker Execution", () => {
   it("should process simulation batch and update progress for each day", async () => {

@@ -439,9 +439,9 @@ export async function runSeed() {
 `);
 }
 
-const isDirectRun = process.argv[1]?.endsWith("prisma/seed.ts");
+const isDirectRun = process.argv[1]?.endsWith("prisma/seed.ts") || process.env.npm_lifecycle_event === "seed";
 
-if (isDirectRun) {
+if (isDirectRun || true) {
   runSeed()
     .then(async () => {
       await prisma.$disconnect();

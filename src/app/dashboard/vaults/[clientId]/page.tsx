@@ -1,3 +1,10 @@
+import { 
+  Tabs, 
+  TabsContent, 
+  TabsList, 
+  TabsTrigger 
+} from "@/components/ui/tabs";
+import { ComplianceScorecard } from "@/components/dashboard/ComplianceScorecard";
 import { ClientProfileCard } from "@/components/vault/ClientProfileCard";
 import { DocumentsTable } from "@/components/vault/DocumentsTable";
 import { ActionHistoryFeed } from "@/components/vault/ActionHistoryFeed";
@@ -70,19 +77,36 @@ export default async function VaultDetailPage({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-          <div className="lg:col-span-2 space-y-6 overflow-y-auto pr-2 pb-6">
-            <ClientProfileCard profile={profileData} />
-            
-            <div className="pt-2">
-              <h2 className="text-xl font-semibold mb-4 text-foreground">Document Registry</h2>
-              <DocumentsTable documents={safeDocuments as any} />
-            </div>
-          </div>
-          
-          <div className="lg:col-span-1 h-[600px] lg:h-full pb-6">
-            <ActionHistoryFeed clientId={profileData.clientId} initialActions={safeActions as any} />
-          </div>
+        <div className="flex-1 min-h-0">
+          <Tabs defaultValue="overview" className="h-full flex flex-col space-y-4">
+            <TabsList className="shrink-0 w-fit">
+              <TabsTrigger value="overview">Client Overview</TabsTrigger>
+              <TabsTrigger value="compliance">Compliance Scorecard & Audit</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="flex-1 min-h-0 focus-visible:ring-0">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+                <div className="lg:col-span-2 space-y-6 overflow-y-auto pr-2 pb-6">
+                  <ClientProfileCard profile={profileData} />
+                  
+                  <div className="pt-2">
+                    <h2 className="text-xl font-semibold mb-4 text-foreground">Document Registry</h2>
+                    <DocumentsTable documents={safeDocuments as any} />
+                  </div>
+                </div>
+                
+                <div className="lg:col-span-1 h-full pb-6">
+                  <ActionHistoryFeed clientId={profileData.clientId} initialActions={safeActions as any} />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="compliance" className="flex-1 min-h-0 overflow-y-auto pb-6 focus-visible:ring-0">
+              <div className="max-w-5xl">
+                <ComplianceScorecard clientId={clientId} />
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     );

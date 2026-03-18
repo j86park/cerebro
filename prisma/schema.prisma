@@ -10,8 +10,8 @@ datasource db {
 model Firm {
   id                  String    @id @default(cuid())
   name                String
-  complianceOfficerId String
-  complianceOfficer   Advisor   @relation("ComplianceOfficer", fields: [complianceOfficerId], references: [id])
+  complianceOfficerId String?
+  complianceOfficer   Advisor?  @relation("ComplianceOfficer", fields: [complianceOfficerId], references: [id])
   advisors            Advisor[] @relation("FirmAdvisors")
   clients             Client[]
   createdAt           DateTime  @default(now())
@@ -155,6 +155,8 @@ enum DocumentType {
   BENEFICIARY_DESIGNATION
   BANKING_INFORMATION
   DEPOSIT_CONFIRMATION
+  ARTICLES_OF_INCORPORATION
+  AUTHORIZED_SIGNATORY_LIST
 }
 
 enum AgentType {
