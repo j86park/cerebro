@@ -44,9 +44,10 @@ export class EntityFactory {
   generateClients(count: number) {
     const clients = [];
     for (let i = 0; i < count; i++) {
+      const name = this.generateName();
       clients.push({
-        name: this.generateName(),
-        email: this.generateEmail(),
+        name,
+        email: this.generateEmail(name, i),
         accountType: this.rng.pick(Object.values(AccountType)),
         onboardingStatus: OnboardingStatus.IN_PROGRESS,
         onboardingStage: Math.floor(this.rng.next() * 3),
@@ -79,8 +80,8 @@ export class EntityFactory {
     return `${this.rng.pick(firsts)} ${this.rng.pick(lasts)}`;
   }
 
-  private generateEmail() {
-    return `${this.generateName().toLowerCase().replace(" ", ".")}@example.com`;
+  private generateEmail(name: string, index: number) {
+    return `${name.toLowerCase().replace(" ", ".")}.${index}@example.com`;
   }
 
   private getCategoryForType(type: string): string {

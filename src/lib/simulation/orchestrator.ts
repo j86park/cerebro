@@ -73,34 +73,36 @@ export class SimulationOrchestrator {
     console.log(`[Orchestrator] Ticking Day ${currentDay} for ${clients.length} clients`);
 
     const rng = new SeededRandom(`${run.randomSeed}-day-${currentDay}`);
-    let eventsTriggered = 0;
+    const factory = new EntityFactory(run.randomSeed, simDate);
+    const newDocs: any[] = [];
     
     for (const client of clients) {
+      // 5% chance of a document upload event (Compliance or Onboarding)
       if (rng.next() < 0.05) {
-        eventsTriggered++;
-        // Create a simulated document upload event
-        const factory = new EntityFactory(run.randomSeed, simDate);
-        const docs = factory.generateDocuments(client.id, "MESSY").slice(0, 1);
+        const profile = (client as any).profile || "MESSY";
+        const docs = factory.generateDocuments(client.id, profile as any).slice(0, 1);
         
         if (docs.length > 0) {
-          await prisma.document.upsert({
-            where: { id: `${client.id}-SIM-${currentDay}` },
-            create: {
-              ...docs[0],
-              id: `${client.id}-SIM-${currentDay}`,
-              status: "PENDING_REVIEW",
-              uploadedAt: simDate,
-            },
-            update: {
-              status: "PENDING_REVIEW",
-              uploadedAt: simDate,
-            }
+          newDocs.push({
+            ...docs[0],
+            id: `${client.id}-SIM-${currentDay}`,
+            status: "PENDING_REVIEW",
+            uploadedAt: simDate,
           });
         }
       }
     }
     
-    return { simDate, clientCount: clients.length, eventsTriggered };
+    if (newDocs.length > 0) {
+      // Use createMany for high-speed insertion
+      // We use skipDuplicates: true to handle cases where a tick might be re-run
+      await prisma.document.createMany({
+        data: newDocs,
+        skipDuplicates: true,
+      });
+    }
+    
+    return { simDate, clientCount: clients.length, eventsTriggered: newDocs.length };
   }
 
   async aggregateMetrics(runId: string) {
@@ -129,6 +131,37 @@ export class SimulationOrchestrator {
     });
 
     return metrics;
+  }
+
+  /**
+   * Seeds a large number of simulation clients.
+   * Safety: Only creates clients with @example.com email.
+   */
+  async seedSimulationClients(count: number, randomSeed?: string) {
+    console.log(`[Orchestrator] Seeding ${count} simulation clients...`);
+    const seed = randomSeed || Math.random().toString(36).substring(7);
+    const factory = new EntityFactory(seed);
+    
+    // Process in batches of 1000 for safety
+    const batchSize = 1000;
+    const totalBatches = Math.ceil(count / batchSize);
+    
+    for (let i = 0; i < totalBatches; i++) {
+        const take = Math.min(batchSize, count - i * batchSize);
+        const clients = factory.generateClients(take).map(c => ({
+            ...c,
+            advisorId: "ADV-001", // Default to seeded advisor
+            firmId: "FIRM-001",
+        }));
+        
+        await prisma.client.createMany({
+            data: clients
+        });
+        
+        console.log(`[Orchestrator] Seeded batch ${i+1}/${totalBatches} (${take} clients)`);
+    }
+    
+    return { count };
   }
 
   /**

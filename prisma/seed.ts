@@ -263,9 +263,11 @@ async function seedFirms() {
       where: { id: firm.id },
       update: {
         name: firm.name,
-        complianceOfficerId: firm.complianceOfficerId,
       },
-      create: firm,
+      create: {
+        id: firm.id,
+        name: firm.name,
+      },
     });
   }
 }
@@ -282,6 +284,17 @@ async function seedAdvisors() {
       },
       create: advisor,
     });
+  }
+}
+
+async function finalizeFirms() {
+  for (const firm of MOCK_FIRMS) {
+    if (firm.complianceOfficerId) {
+        await prisma.firm.update({
+            where: { id: firm.id },
+            data: { complianceOfficerId: firm.complianceOfficerId }
+        });
+    }
   }
 }
 
@@ -424,6 +437,7 @@ async function seedActionHistory() {
 export async function runSeed() {
   await seedFirms();
   await seedAdvisors();
+  await finalizeFirms();
   await seedClients();
   await seedDocuments();
   await seedActionHistory();
