@@ -10,14 +10,16 @@ async function triggerLoadTest() {
   const orchestrator = new SimulationOrchestrator();
   
   const args = process.argv.slice(2);
-  const clientCount = parseInt(args[0]) || 1000;
+  const clientCount = parseInt(args[0]) || 10000;
   const simulatedDays = parseInt(args[1]) || 30;
-  const batchSize = 5; // Days per job batch
+  const useMockAgents = args[2] === "true" || true; // Default to true for speed
+  const batchSize = 10; // More aggressive batching for 10k clients
 
   console.log(`\n--- Cerebro Load Test Trigger ---`);
   console.log(`Target: ${clientCount} clients`);
   console.log(`Simulated Duration: ${simulatedDays} days`);
   console.log(`Batching: ${batchSize} days per job`);
+  console.log(`Mock Agents: ${useMockAgents}`);
   
   const startTime = Date.now();
 
@@ -28,6 +30,7 @@ async function triggerLoadTest() {
     clientResponseRate: 0.8,
     advisorResponseRate: 0.9,
     randomSeed: "load-test-" + Date.now(),
+    useMockAgents,
   });
   
   console.log(`\nCreated Simulation Run: ${run.id}`);
@@ -36,20 +39,31 @@ async function triggerLoadTest() {
   // 2. Fragment the simulation into job batches and enqueue
   console.log(`Enqueuing batches...`);
   
-  const totalBatches = Math.ceil(simulatedDays / batchSize);
+  const totalDayBatches = Math.ceil(simulatedDays / batchSize);
+  const clientBatchSize = 1000;
+  const totalClientBatches = Math.ceil(clientCount / clientBatchSize);
   
-  for (let i = 0; i < totalBatches; i++) {
-    const batchStart = i * batchSize;
+  let jobsEnqueued = 0;
+  for (let d = 0; d < totalDayBatches; d++) {
+    const batchStart = d * batchSize;
     const batchEnd = Math.min(batchStart + batchSize - 1, simulatedDays - 1);
     
-    await queues.simulation.add(`load-test-batch-${i}`, {
-      runId: run.id,
-      batchStart,
-      batchEnd,
-    });
+    for (let c = 0; c < totalClientBatches; c++) {
+      const clientStart = c * clientBatchSize;
+      const clientEnd = Math.min(clientStart + clientBatchSize, clientCount);
+      
+      await queues.simulation.add(`load-test-day-${batchStart}-client-${clientStart}`, {
+        runId: run.id,
+        batchStart,
+        batchEnd,
+        clientStart,
+        clientEnd,
+      });
+      jobsEnqueued++;
+    }
   }
 
-  console.log(`Successfully enqueued ${totalBatches} batches to 'cerebro-simulation' queue.`);
+  console.log(`Successfully enqueued ${jobsEnqueued} fragmented jobs to 'cerebro-simulation' queue.`);
   console.log(`Workers will now process the run. Check worker logs for real-time throughput metrics.`);
 
   // 3. Monitor for completion

@@ -41,17 +41,18 @@ export class EntityFactory {
     this.baseDate = baseDate;
   }
 
-  generateClients(count: number) {
+  generateClients(count: number, startIndex: number = 0) {
     const clients = [];
     for (let i = 0; i < count; i++) {
-      const name = this.generateName();
-      clients.push({
-        name,
-        email: this.generateEmail(name, i),
-        accountType: this.rng.pick(Object.values(AccountType)),
-        onboardingStatus: OnboardingStatus.IN_PROGRESS,
-        onboardingStage: Math.floor(this.rng.next() * 3),
-      });
+        const index = startIndex + i;
+        const name = this.generateName();
+        clients.push({
+            name,
+            email: this.generateEmail(name, index),
+            accountType: this.rng.pick(Object.values(AccountType)),
+            onboardingStatus: OnboardingStatus.IN_PROGRESS,
+            onboardingStage: Math.floor(this.rng.next() * 3),
+        });
     }
     return clients;
   }

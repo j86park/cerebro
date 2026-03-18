@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db/client";
+import { VaultService } from "@/lib/db/vault-service";
+import { DocumentStatus } from "@/lib/db/enums";
 import { SeededRandom, EntityFactory } from "./factory";
+import { MockAgent } from "./mock-agent";
+import { DOCUMENT_REGISTRY } from "@/lib/documents/registry";
 
 export interface SimulationParams {
   clientCount: number;
@@ -7,9 +11,12 @@ export interface SimulationParams {
   clientResponseRate: number;
   advisorResponseRate: number;
   randomSeed?: string;
+  useMockAgents?: boolean;
 }
 
 export class SimulationOrchestrator {
+  private mockAgent = new MockAgent();
+
   async createSimulationRun(params: SimulationParams) {
     const run = await prisma.simulationRun.create({
       data: {
@@ -19,6 +26,7 @@ export class SimulationOrchestrator {
         advisorResponseRate: params.advisorResponseRate,
         randomSeed: params.randomSeed || Math.random().toString(36).substring(7),
         status: "PENDING",
+        metrics: { useMockAgents: params.useMockAgents || false } as any
       },
     });
     return run;
@@ -51,6 +59,7 @@ export class SimulationOrchestrator {
       where: { id: runId },
     });
   }
+
   /**
    * Advances the simulation for a specific batch of clients.
    * Calculates simulated date and triggers deterministic document events.
@@ -77,8 +86,10 @@ export class SimulationOrchestrator {
     const newDocs: any[] = [];
     
     for (const client of clients) {
-      // 5% chance of a document upload event (Compliance or Onboarding)
-      if (rng.next() < 0.05) {
+      const trigger: any = rng.next() < 0.05 ? "EVENT_UPLOAD" : "SCHEDULED";
+      
+      // 1. Document Events
+      if (trigger === "EVENT_UPLOAD") {
         const profile = (client as any).profile || "MESSY";
         const docs = factory.generateDocuments(client.id, profile as any).slice(0, 1);
         
@@ -91,11 +102,40 @@ export class SimulationOrchestrator {
           });
         }
       }
+
+      // 2. Mock Agent Integration (if enabled)
+      if (run.metrics && (run.metrics as any).useMockAgents) {
+        const vault = new VaultService({ clientId: client.id });
+        
+        // Compliance
+        const compDec = await this.mockAgent.decide(vault, "COMPLIANCE", trigger);
+        if (compDec.actionTaken !== "SCAN_VAULT") {
+            await vault.logAction({
+                agentType: "COMPLIANCE",
+                actionType: compDec.actionTaken,
+                trigger,
+                reasoning: compDec.reasoning,
+                escalationStage: compDec.escalationStage,
+                performedAt: simDate,
+            } as any);
+        }
+
+        // Onboarding
+        const onbDec = await this.mockAgent.decide(vault, "ONBOARDING", trigger);
+        if (onbDec.actionTaken !== "SCAN_VAULT" && onbDec.actionTaken !== "ADVANCE_STAGE") {
+            await vault.logAction({
+                agentType: "ONBOARDING",
+                actionType: onbDec.actionTaken,
+                trigger,
+                reasoning: onbDec.reasoning,
+                onboardingStage: onbDec.onboardingStage,
+                performedAt: simDate,
+            } as any);
+        }
+      }
     }
     
     if (newDocs.length > 0) {
-      // Use createMany for high-speed insertion
-      // We use skipDuplicates: true to handle cases where a tick might be re-run
       await prisma.document.createMany({
         data: newDocs,
         skipDuplicates: true,
@@ -116,13 +156,14 @@ export class SimulationOrchestrator {
     });
 
     const actionHistory = await prisma.agentAction.count({
-      where: { trigger: 'SIMULATION' }
+      where: { trigger: { in: ['SCHEDULED', 'EVENT_UPLOAD'] }, client: { email: { endsWith: "@example.com" } } }
     });
 
     const metrics = {
+      ... (run.metrics as any || {}),
       documentStatusDistribution: documentStats,
       totalActionsTriggered: actionHistory,
-      simulatedDaysProcessed: run.batchesCompleted, // In our day-based batching
+      simulatedDaysProcessed: run.batchesCompleted,
     };
 
     await prisma.simulationRun.update({
@@ -133,24 +174,19 @@ export class SimulationOrchestrator {
     return metrics;
   }
 
-  /**
-   * Seeds a large number of simulation clients.
-   * Safety: Only creates clients with @example.com email.
-   */
   async seedSimulationClients(count: number, randomSeed?: string) {
     console.log(`[Orchestrator] Seeding ${count} simulation clients...`);
     const seed = randomSeed || Math.random().toString(36).substring(7);
     const factory = new EntityFactory(seed);
     
-    // Process in batches of 1000 for safety
     const batchSize = 1000;
     const totalBatches = Math.ceil(count / batchSize);
     
     for (let i = 0; i < totalBatches; i++) {
         const take = Math.min(batchSize, count - i * batchSize);
-        const clients = factory.generateClients(take).map(c => ({
+        const clients = factory.generateClients(take, i * batchSize).map(c => ({
             ...c,
-            advisorId: "ADV-001", // Default to seeded advisor
+            advisorId: "ADV-001",
             firmId: "FIRM-001",
         }));
         
@@ -164,14 +200,9 @@ export class SimulationOrchestrator {
     return { count };
   }
 
-  /**
-   * Purges all simulation data (clients and documents) to prevent DB bloat.
-   * Safety: Only deletes clients with @example.com email.
-   */
   async purgeSimulationData() {
     console.log("[Orchestrator] Purging simulation data...");
     
-    // 1. Delete simulation documents first (foreign key)
     const docs = await prisma.document.deleteMany({
       where: {
         OR: [
@@ -181,11 +212,14 @@ export class SimulationOrchestrator {
       }
     });
 
-    // 2. Delete simulation clients
+    const actions = await prisma.agentAction.deleteMany({
+        where: { client: { email: { endsWith: "@example.com" } } }
+    });
+
     const clients = await prisma.client.deleteMany({
       where: { email: { endsWith: "@example.com" } }
     });
 
-    return { purgedDocuments: docs.count, purgedClients: clients.count };
+    return { purgedDocuments: docs.count, purgedClients: clients.count, purgedActions: actions.count };
   }
 }
