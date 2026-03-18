@@ -123,6 +123,8 @@ import { SimulationOrchestrator } from "@/lib/simulation/orchestrator";
  */
 export async function processSimulationJob(job: Job<SimulationJobPayload>) {
   const { runId, batchStart, batchEnd, clientStart, clientEnd } = job.data;
+  const startTime = Date.now();
+  
   console.log(
     `[Worker] Processing simulation batch days ${batchStart}-${batchEnd} for run ${runId}` +
     (clientStart !== undefined ? ` (clients ${clientStart}-${clientEnd})` : "")
@@ -134,6 +136,8 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
     : undefined;
 
   try {
+    const totalDays = batchEnd - batchStart + 1;
+    
     for (let day = batchStart; day <= batchEnd; day++) {
       await orchestrator.tick(runId, day, clientRange);
       
@@ -142,10 +146,21 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
         batchesCompleted: day + 1,
         batchesTotal: (await orchestrator.getRun(runId))?.simulatedDays || day + 1,
       });
+
+      // Log memory and throughput at intervals
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      const daysProcessed = day - batchStart + 1;
+      const throughput = (daysProcessed / elapsedSec).toFixed(2);
+      
+      if (daysProcessed % Math.max(1, Math.floor(totalDays / 10)) === 0) {
+        const memUsage = process.memoryUsage().heapUsed / 1024 / 1024;
+        console.log(`[Worker] Run ${runId} Progress: ${daysProcessed}/${totalDays} days | Throughput: ${throughput} days/sec | Memory: ${memUsage.toFixed(2)} MB`);
+      }
     }
 
-    console.log(`[Worker] Simulation batch ${batchStart}-${batchEnd} completed for run ${runId}`);
-    return { success: true };
+    const totalElapsed = (Date.now() - startTime) / 1000;
+    console.log(`[Worker] Simulation batch ${batchStart}-${batchEnd} completed for run ${runId} in ${totalElapsed.toFixed(2)}s`);
+    return { success: true, duration: totalElapsed };
   } catch (error) {
     console.error(`[Worker] Simulation job ${job.id} failed:`, error);
     throw error;
@@ -175,7 +190,11 @@ export const workers = {
     processSimulationJob,
     {
       connection: connection as never,
-      concurrency: 10,
+      concurrency: 20,
+      limiter: {
+        max: 50,
+        duration: 1000,
+      },
     }
   ),
 };
