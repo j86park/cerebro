@@ -4,10 +4,15 @@ import { env } from "@/lib/config";
 import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
 
 // BullMQ requires maxRetriesPerRequest to be null
-const connection = new Redis(env.UPSTASH_REDIS_URL, {
+const isTls = env.UPSTASH_REDIS_URL.startsWith("rediss://");
+export const connection = new Redis(env.UPSTASH_REDIS_URL, {
   maxRetriesPerRequest: null,
-  tls: { rejectUnauthorized: false },
+  ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
 });
+
+connection.on("connect", () => console.log("[Redis] Connection: CONNECTED"));
+connection.on("ready", () => console.log("[Redis] Connection: READY"));
+connection.on("error", (err) => console.error("[Redis] Connection: ERROR", err));
 
 /** Standard retry config per database.mdc §Job Retry Configuration */
 const defaultJobOptions = {

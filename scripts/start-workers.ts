@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { workers } from "../src/lib/queue/workers";
 
 console.log("--- Cerebro Workers Started ---");

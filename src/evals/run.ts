@@ -70,10 +70,14 @@ export async function runAllEvals(batchSize: number = 3) {
         };
       } catch (e) {
         console.error(`  - FAILED scenario for ${sc.clientId}:`, e);
+        const failScores: Record<string, any> = {};
+        sc.scorers?.forEach(scorer => {
+          failScores[scorer.id] = { score: 0, reason: "Agent Execution Failed: " + String(e) };
+        });
         scenarioResults[sc.clientId] = {
           agent: sc.agentType,
           error: String(e),
-          scores: {}
+          scores: failScores
         };
       }
     }));
@@ -98,6 +102,8 @@ export async function runAllEvals(batchSize: number = 3) {
   });
 
   const overallScore = maxScore > 0 ? (totalScore / maxScore) : 0;
+  console.log(`[Eval] Final Stats: totalScore=${totalScore}, maxScore=${maxScore}, overallScore=${overallScore}`);
+  
   console.log(`\n========================================`);
   console.log(`Eval Suite Completed. Overall Score: ${(overallScore * 100).toFixed(1)}%`);
   console.log(`========================================`);

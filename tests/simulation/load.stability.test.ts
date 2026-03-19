@@ -43,10 +43,7 @@ describe("Simulation Load & Stability (1,000 Clients)", () => {
         const result = await orchestrator.tick(run.id, day);
         expect(result.clientCount).toBe(clientCount);
         
-        await orchestrator.updateProgress(run.id, {
-            batchesCompleted: day + 1,
-            batchesTotal: simulatedDays,
-        });
+        await orchestrator.incrementProgress(run.id);
     }
 
     // 4. Verify Final State

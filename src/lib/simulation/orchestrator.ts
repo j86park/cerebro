@@ -4,6 +4,11 @@ import { DocumentStatus } from "@/lib/db/enums";
 import { SeededRandom, EntityFactory } from "./factory";
 import { MockAgent } from "./mock-agent";
 import { DOCUMENT_REGISTRY } from "@/lib/documents/registry";
+import { complianceAgent } from "@/agents/compliance/agent";
+import { onboardingAgent } from "@/agents/onboarding/agent";
+import { buildSharedTools } from "@/tools/shared";
+import { buildComplianceTools } from "@/tools/compliance";
+import { buildOnboardingTools } from "@/tools/onboarding";
 
 export interface SimulationParams {
   clientCount: number;
@@ -26,26 +31,28 @@ export class SimulationOrchestrator {
         advisorResponseRate: params.advisorResponseRate,
         randomSeed: params.randomSeed || Math.random().toString(36).substring(7),
         status: "PENDING",
-        metrics: { useMockAgents: params.useMockAgents || false } as any
+        metrics: { useMockAgents: params.useMockAgents ?? true } as any
       },
     });
     return run;
   }
 
-  async updateProgress(
-    runId: string,
-    { batchesCompleted, batchesTotal }: { batchesCompleted: number; batchesTotal: number }
-  ) {
-    const isCompleted = batchesCompleted >= batchesTotal;
+  async incrementProgress(runId: string) {
+    const run = await this.getRun(runId);
+    if (!run) return;
+
+    const batchesCompleted = run.batchesCompleted + 1;
+    const isCompleted = batchesCompleted >= run.batchesTotal;
     
     const data: any = {
       batchesCompleted,
-      batchesTotal,
       status: isCompleted ? "COMPLETED" : "RUNNING",
     };
 
     if (isCompleted) {
       data.completedAt = new Date();
+      // Final aggregation on completion
+      await this.aggregateMetrics(runId);
     }
 
     return await prisma.simulationRun.update({
@@ -57,6 +64,13 @@ export class SimulationOrchestrator {
   async getRun(runId: string) {
     return await prisma.simulationRun.findUnique({
       where: { id: runId },
+    });
+  }
+
+  async getRecentRuns(limit: number = 10) {
+    return await prisma.simulationRun.findMany({
+      take: limit,
+      orderBy: { startedAt: 'desc' },
     });
   }
 
@@ -79,7 +93,12 @@ export class SimulationOrchestrator {
       orderBy: { id: 'asc' },
     });
 
-    console.log(`[Orchestrator] Ticking Day ${currentDay} for ${clients.length} clients`);
+    console.log(`[Orchestrator] Run ${runId} | Day ${currentDay} | Clients found: ${clients.length} (range: ${clientRange?.start}-${clientRange?.end})`);
+
+    if (clients.length === 0) {
+      console.warn(`[Orchestrator] No clients found for run ${runId} on day ${currentDay}`);
+      return { simDate, clientCount: 0, eventsTriggered: 0 };
+    }
 
     const rng = new SeededRandom(`${run.randomSeed}-day-${currentDay}`);
     const factory = new EntityFactory(run.randomSeed, simDate);
@@ -103,35 +122,48 @@ export class SimulationOrchestrator {
         }
       }
 
-      // 2. Mock Agent Integration (if enabled)
-      if (run.metrics && (run.metrics as any).useMockAgents) {
-        const vault = new VaultService({ clientId: client.id });
+      // 2. Real/Mock Agent Integration
+      const useMock = !!(run.metrics && (run.metrics as any).useMockAgents);
+      const vault = new VaultService({ clientId: client.id });
+      
+      if (useMock) {
+        // Compliance (Mock)
+        const compDec = await this.mockAgent.decide(vault, "COMPLIANCE", trigger);
+        await vault.logAction({
+            agentType: "COMPLIANCE",
+            actionType: compDec.actionTaken,
+            trigger,
+            reasoning: compDec.reasoning,
+            escalationStage: compDec.escalationStage,
+            performedAt: simDate,
+        } as any);
+
+        // Onboarding (Mock)
+        const onbDec = await this.mockAgent.decide(vault, "ONBOARDING", trigger);
+        await vault.logAction({
+            agentType: "ONBOARDING",
+            actionType: onbDec.actionTaken,
+            trigger,
+            reasoning: onbDec.reasoning,
+            onboardingStage: onbDec.onboardingStage,
+            performedAt: simDate,
+        } as any);
+      } else {
+        // Real Mastra Agents (High Fidelity)
+        console.log(`[Orchestrator] Executing REAL agents for client ${client.id} (Day ${currentDay})...`);
+        const sharedTools = buildSharedTools(vault);
         
         // Compliance
-        const compDec = await this.mockAgent.decide(vault, "COMPLIANCE", trigger);
-        if (compDec.actionTaken !== "SCAN_VAULT") {
-            await vault.logAction({
-                agentType: "COMPLIANCE",
-                actionType: compDec.actionTaken,
-                trigger,
-                reasoning: compDec.reasoning,
-                escalationStage: compDec.escalationStage,
-                performedAt: simDate,
-            } as any);
-        }
+        await complianceAgent.generate(`Process current vault state for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
+          memory: { thread: client.id, resource: client.id },
+          toolsets: { shared: sharedTools, compliance: buildComplianceTools(vault) }
+        });
 
         // Onboarding
-        const onbDec = await this.mockAgent.decide(vault, "ONBOARDING", trigger);
-        if (onbDec.actionTaken !== "SCAN_VAULT" && onbDec.actionTaken !== "ADVANCE_STAGE") {
-            await vault.logAction({
-                agentType: "ONBOARDING",
-                actionType: onbDec.actionTaken,
-                trigger,
-                reasoning: onbDec.reasoning,
-                onboardingStage: onbDec.onboardingStage,
-                performedAt: simDate,
-            } as any);
-        }
+        await onboardingAgent.generate(`Determine onboarding progress for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
+          memory: { thread: client.id, resource: client.id },
+          toolsets: { shared: sharedTools, onboarding: buildOnboardingTools(vault) }
+        });
       }
     }
     
@@ -156,7 +188,11 @@ export class SimulationOrchestrator {
     });
 
     const actionHistory = await prisma.agentAction.count({
-      where: { trigger: { in: ['SCHEDULED', 'EVENT_UPLOAD'] }, client: { email: { endsWith: "@example.com" } } }
+      where: { 
+        trigger: { in: ['SCHEDULED', 'EVENT_UPLOAD', 'SIMULATION'] }, 
+        client: { email: { endsWith: "@example.com" } },
+        performedAt: { gte: new Date(run.startedAt) }
+      }
     });
 
     const metrics = {
@@ -184,17 +220,32 @@ export class SimulationOrchestrator {
     
     for (let i = 0; i < totalBatches; i++) {
         const take = Math.min(batchSize, count - i * batchSize);
-        const clients = factory.generateClients(take, i * batchSize).map(c => ({
-            ...c,
-            advisorId: "ADV-001",
-            firmId: "FIRM-001",
-        }));
+        const candidates = factory.generateClients(take, i * batchSize);
         
-        await prisma.client.createMany({
-            data: clients
+        // Filter out existing clients to prevent unique constraint violations
+        const candidateEmails = candidates.map(c => c.email);
+        const existing = await prisma.client.findMany({
+            where: { email: { in: candidateEmails } },
+            select: { email: true }
         });
+        const existingEmails = new Set(existing.map(e => e.email));
         
-        console.log(`[Orchestrator] Seeded batch ${i+1}/${totalBatches} (${take} clients)`);
+        const toCreate = candidates
+            .filter(c => !existingEmails.has(c.email))
+            .map(c => ({
+                ...c,
+                advisorId: "ADV-001",
+                firmId: "FIRM-001",
+            }));
+        
+        if (toCreate.length > 0) {
+            await prisma.client.createMany({
+                data: toCreate
+            });
+            console.log(`[Orchestrator] Seeded ${toCreate.length} new clients in batch ${i+1}/${totalBatches}`);
+        } else {
+            console.log(`[Orchestrator] Batch ${i+1}/${totalBatches} already exists. Skipping.`);
+        }
     }
     
     return { count };

@@ -1,93 +1,83 @@
 import { NextRequest, NextResponse } from "next/server";
-import { VaultService } from "@/lib/db/vault-service";
+import { promises as fs } from "fs";
+import path from "path";
+import { prisma } from "@/lib/db/client";
+import { extractDocumentText } from "@/lib/documents/parser";
 import { queues } from "@/lib/queue/client";
-import { DOCUMENT_REGISTRY } from "@/lib/documents/registry";
-import { env } from "@/lib/config";
-import { z } from "zod";
-
-const uploadSchema = z.object({
-  documentType: z.string().min(1),
-  fileRef: z.string().optional(),
-});
+import type { DocumentCategory, DocumentType } from "@prisma/client";
 
 /**
- * POST /api/vaults/[clientId]/upload — mock document upload.
- * Upserts the document to PENDING_REVIEW and enqueues an event-driven agent job.
+ * POST /api/vaults/[clientId]/upload
+ * Handles real file uploads, stores them locally, and triggers agent processing.
  */
 export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ clientId: string }> }
+  req: NextRequest,
+  { params }: { params: { clientId: string } }
 ) {
-  const { clientId } = await params;
+  const { clientId } = params;
 
   try {
-    const body = await request.json();
-    const result = uploadSchema.safeParse(body);
+    const formData = await req.formData();
+    const file = formData.get("file") as File;
+    // Cast to any then to enum type to satisfy prisma types from string input
+    const type = (formData.get("type") as string) as any as DocumentType || "GOVERNMENT_ID";
+    const category = (formData.get("category") as string) as any as DocumentCategory || "IDENTITY";
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: "Invalid request payload", details: result.error.flatten() },
-        { status: 400 }
-      );
+    if (!file) {
+      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    const { documentType, fileRef } = result.data;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+    const clientDir = path.join(process.cwd(), "storage", clientId);
+    const filePath = path.join(clientDir, fileName);
 
-    // Validate document type exists in registry
-    const docMeta =
-      DOCUMENT_REGISTRY[documentType as keyof typeof DOCUMENT_REGISTRY];
-    if (!docMeta) {
-      return NextResponse.json(
-        { error: "Unknown document type" },
-        { status: 400 }
-      );
-    }
+    // 1. Ensure directory exists and save file
+    await fs.mkdir(clientDir, { recursive: true });
+    await fs.writeFile(filePath, buffer);
 
-    const vault = new VaultService({ clientId });
+    // 2. Extract Text
+    const extractedText = await extractDocumentText(filePath);
 
-    // 1. Upsert document with PENDING_REVIEW status
-    const docId = `${clientId}-${documentType}`;
-    await vault.upsertDocument({
-      id: docId,
-      type: documentType,
-      category: docMeta.category,
-      status: "PENDING_REVIEW",
-      uploadedAt: new Date(env.DEMO_DATE),
-      fileRef: fileRef || `mock-file-${docId}.pdf`,
+    // 3. Create or Sync Document Record
+    const document = await prisma.document.create({
+      data: {
+        clientId,
+        type,
+        category,
+        status: "PENDING_REVIEW",
+        uploadedAt: new Date(),
+        fileRef: filePath,
+        notes: extractedText, 
+      },
     });
 
-    // 2. Determine which agent should handle this
-    const profile = await vault.getClientProfile();
-    const isOnboarding =
-      (profile as Record<string, unknown>).onboardingStatus === "IN_PROGRESS";
-    const agentType = isOnboarding ? "ONBOARDING" : "COMPLIANCE";
+    // 4. Trigger Priority Agent Run
+    await queues.priority.add(`upload-${document.id}`, {
+      clientId,
+      agentType: "COMPLIANCE",
+      trigger: "EVENT_UPLOAD",
+      documentId: document.id,
+    });
 
-    // Event-driven uploads always go to the priority queue
-    const job = await queues.priority.add(
-      `upload-${agentType}-${clientId}`,
-      {
-        clientId,
-        agentType: agentType as "COMPLIANCE" | "ONBOARDING",
-        trigger: "EVENT_UPLOAD" as const,
-        documentId: docId,
-      },
-      { priority: 1 }
-    );
+    await queues.priority.add(`onboarding-upload-${document.id}`, {
+      clientId,
+      agentType: "ONBOARDING",
+      trigger: "EVENT_UPLOAD",
+      documentId: document.id,
+    });
 
-    return NextResponse.json(
-      {
-        data: {
-          documentId: docId,
-          jobId: job.id,
-          agentType,
-        },
-      },
-      { status: 202 }
-    );
+    return NextResponse.json({ 
+      success: true, 
+      documentId: document.id,
+      fileName,
+      extractedPreview: extractedText.substring(0, 100) + "..."
+    });
+
   } catch (error) {
-    console.error(`POST /api/vaults/${clientId}/upload error:`, error);
+    console.error("[Upload API] Error:", error);
     return NextResponse.json(
-      { error: "Failed to process upload" },
+      { error: "Internal Server Error", details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

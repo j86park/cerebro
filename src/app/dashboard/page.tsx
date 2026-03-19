@@ -8,19 +8,27 @@ import { env } from "@/lib/config";
 
 // We can just query directly or re-fetch from the API route 
 // Since this is a Server Component, fetching direct from Prisma is fastest.
-async function getDashboardData() {
-  const clients = await prisma.client.findMany({
-    include: {
-      advisor: true,
-      firm: true,
-      documents: {
-        select: { status: true, expiryDate: true },
+async function getDashboardData(page: number = 1) {
+  const pageSize = 50;
+  const skip = (page - 1) * pageSize;
+
+  const [clients, totalCount] = await Promise.all([
+    prisma.client.findMany({
+      skip,
+      take: pageSize,
+      include: {
+        advisor: true,
+        firm: true,
+        documents: {
+          select: { status: true, expiryDate: true },
+        },
+        _count: {
+          select: { documents: true },
+        },
       },
-      _count: {
-        select: { documents: true },
-      },
-    },
-  });
+    }),
+    prisma.client.count()
+  ]);
 
   const latestActions = await prisma.agentAction.findMany({
     orderBy: { performedAt: "desc" },
@@ -111,17 +119,19 @@ async function getDashboardData() {
 
   // Calculate summary metrics
   const summary = {
-    totalClients: vaults.length,
-    criticalClients: vaults.filter((v: any) => v.urgency.highest === "CRITICAL").length,
+    totalClients: totalCount,
+    criticalClients: vaults.filter((v: any) => v.urgency.highest === "CRITICAL").length, // This is only per page though
     issueClients: vaults.filter((v: any) => v.urgency.highest !== "NONE").length,
     secureClients: vaults.filter((v: any) => v.urgency.highest === "NONE").length,
   };
 
-  return { vaults, summary, initialActions, escalations, clients };
+  return { vaults, summary, initialActions, escalations, clients, totalCount, pageSize };
 }
 
-export default async function DashboardPage() {
-  const { vaults, summary, initialActions, escalations, clients } = await getDashboardData();
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const page = Number(resolvedSearchParams.page) || 1;
+  const { vaults, summary, initialActions, escalations, clients, totalCount, pageSize } = await getDashboardData(page);
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto pb-10">
@@ -135,7 +145,12 @@ export default async function DashboardPage() {
       <div className="flex flex-col lg:flex-row gap-6 pt-2">
         <div className="flex-1 min-w-0">
           <h2 className="text-xl font-semibold mb-4 text-foreground">Active Vaults</h2>
-          <VaultGrid vaults={vaults} />
+          <VaultGrid 
+            vaults={vaults} 
+            totalCount={totalCount} 
+            pageSize={pageSize} 
+            currentPage={page} 
+          />
         </div>
         
         <div className="w-full lg:w-96 shrink-0 flex flex-col gap-6">

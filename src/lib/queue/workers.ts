@@ -9,11 +9,7 @@ import { buildSharedTools } from "@/tools/shared";
 import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
 import { agentJobSchema } from "./jobs";
 
-// BullMQ requires maxRetriesPerRequest to be null
-const connection = new Redis(env.UPSTASH_REDIS_URL, {
-  maxRetriesPerRequest: null,
-  tls: { rejectUnauthorized: false },
-});
+import { connection, queues } from "./client";
 
 /**
  * Builds the initial context prompt for an agent run, describing what
@@ -141,12 +137,6 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
     for (let day = batchStart; day <= batchEnd; day++) {
       await orchestrator.tick(runId, day, clientRange);
       
-      // Update progress after each day in the batch
-      await orchestrator.updateProgress(runId, {
-        batchesCompleted: day + 1,
-        batchesTotal: (await orchestrator.getRun(runId))?.simulatedDays || day + 1,
-      });
-
       // Log memory and throughput at intervals
       const elapsedSec = (Date.now() - startTime) / 1000;
       const daysProcessed = day - batchStart + 1;
@@ -157,9 +147,16 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
         console.log(`[Worker] Run ${runId} Progress: ${daysProcessed}/${totalDays} days | Throughput: ${throughput} days/sec | Memory: ${memUsage.toFixed(2)} MB`);
       }
     }
+    
+    // Update progress ONLY after the entire batch is finished
+    await orchestrator.incrementProgress(runId);
 
     const totalElapsed = (Date.now() - startTime) / 1000;
     console.log(`[Worker] Simulation batch ${batchStart}-${batchEnd} completed for run ${runId} in ${totalElapsed.toFixed(2)}s`);
+    
+    // Aggregating metrics after batch completion ensures the dashboard shows fresh action counts
+    await orchestrator.aggregateMetrics(runId);
+    
     return { success: true, duration: totalElapsed };
   } catch (error) {
     console.error(`[Worker] Simulation job ${job.id} failed:`, error);
@@ -201,6 +198,7 @@ export const workers = {
 
 // Generic error/completion logging for all workers
 Object.values(workers).forEach((worker) => {
+  console.log(`[Worker] Initialized queue: ${worker.name}`);
   worker.on("completed", (job) => {
     console.log(`[Worker - ${worker.name}] Job ${job.id} completed successfully`);
   });

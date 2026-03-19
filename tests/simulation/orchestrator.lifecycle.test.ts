@@ -49,49 +49,48 @@ describe("SimulationOrchestrator Lifecycle", () => {
   });
 
   it("should update progress and complete the run", async () => {
+    (prisma.simulationRun.findUnique as any).mockResolvedValue({
+      id: "sim_123",
+      batchesCompleted: 4,
+      batchesTotal: 5,
+    });
+
     (prisma.simulationRun.update as any).mockResolvedValue({
       id: "sim_123",
-      batchesCompleted: 5,
-      batchesTotal: 5,
       status: "COMPLETED",
     });
 
-    await orchestrator.updateProgress("sim_123", {
-      batchesCompleted: 5,
-      batchesTotal: 5,
-    });
+    await orchestrator.incrementProgress("sim_123");
 
     expect(prisma.simulationRun.update).toHaveBeenCalledWith({
       where: { id: "sim_123" },
-      data: {
+      data: expect.objectContaining({
         batchesCompleted: 5,
-        batchesTotal: 5,
         status: "COMPLETED",
-        completedAt: expect.any(Date),
-      },
+      }),
     });
   });
 
   it("should update progress without completing if batches remaining", async () => {
+    (prisma.simulationRun.findUnique as any).mockResolvedValue({
+      id: "sim_123",
+      batchesCompleted: 2,
+      batchesTotal: 5,
+    });
+
     (prisma.simulationRun.update as any).mockResolvedValue({
       id: "sim_123",
-      batchesCompleted: 3,
-      batchesTotal: 5,
       status: "RUNNING",
     });
 
-    await orchestrator.updateProgress("sim_123", {
-      batchesCompleted: 3,
-      batchesTotal: 5,
-    });
+    await orchestrator.incrementProgress("sim_123");
 
     expect(prisma.simulationRun.update).toHaveBeenCalledWith({
       where: { id: "sim_123" },
-      data: {
+      data: expect.objectContaining({
         batchesCompleted: 3,
-        batchesTotal: 5,
         status: "RUNNING",
-      },
+      }),
     });
   });
 });

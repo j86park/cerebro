@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui-extensions/StatusBadge";
-import { MockUploadDialog } from "@/components/vault/MockUploadDialog";
+import { RealUploadDialog } from "@/components/vault/RealUploadDialog";
 import { Play, User, Building, Briefcase, FileText } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -109,7 +109,7 @@ export function ClientProfileCard({ profile }: { profile: ProfileProps }) {
               Compliance
             </Button>
           </div>
-          <MockUploadDialog clientId={profile.clientId} />
+          <RealUploadDialog clientId={profile.clientId} />
         </div>
       </CardContent>
     </Card>
