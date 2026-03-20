@@ -22,7 +22,7 @@ interface FailureInspectorProps {
     score: number;
     reason: string;
     output: string;
-    expected: any;
+    expected: unknown;
   } | null;
 }
 

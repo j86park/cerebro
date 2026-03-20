@@ -16,7 +16,7 @@ export async function GET(
       return NextResponse.json({ error: "Evaluation run not found" }, { status: 404 });
     }
 
-    return NextResponse.json(run);
+    return NextResponse.json({ data: run });
   } catch (error) {
     const { runId } = await params;
     console.error(`Failed to fetch eval run ${runId}:`, error);

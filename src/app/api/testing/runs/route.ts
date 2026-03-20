@@ -10,7 +10,7 @@ export async function GET() {
       take: 50,
     });
 
-    return NextResponse.json(runs);
+    return NextResponse.json({ data: runs });
   } catch (error) {
     console.error("Failed to fetch eval runs:", error);
     return NextResponse.json(

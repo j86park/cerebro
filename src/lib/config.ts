@@ -1,8 +1,27 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
+/**
+ * Postgres connection strings often fail `z.string().url()` (special characters in passwords,
+ * `?sslmode=require`, etc.). Prisma validates the connection at runtime.
+ */
+const databaseUrlSchema = z
+  .preprocess((val) => {
+    if (val === undefined || val === null) return "";
+    return String(val).trim();
+  }, z.string())
+  .transform((s) => (s === "" ? "https://example.com/db" : s))
+  .pipe(
+    z
+      .string()
+      .refine(
+        (s) => /^postgres(ql)?:\/\/.+/i.test(s) || /^https?:\/\/.+/i.test(s),
+        { message: "DATABASE_URL must be postgres://, postgresql://, or http(s)://" }
+      )
+  );
+
 const envSchema = z.object({
-  DATABASE_URL: z.string().url().default("https://example.com/db"),
+  DATABASE_URL: databaseUrlSchema,
   UPSTASH_REDIS_URL: z.string().url().default("redis://localhost:6379"),
   UPSTASH_REDIS_TOKEN: z.string().optional(),
   SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
@@ -12,13 +31,25 @@ const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().default("dev-openrouter-key"),
   RESEND_API_KEY: z.string().default("dev-resend-key"),
   DEMO_DATE: z.string().datetime().default(() => new Date().toISOString()),
-  MODEL_DEV: z.string().default("google/gemini-flash-1.5"),
-  MODEL_DEMO: z.string().default("anthropic/claude-3-haiku"),
-  MODEL_EVAL_JUDGE: z.string().default("google/gemini-flash-1.5"),
+  /** OpenRouter model ids — see https://openrouter.ai/models */
+  MODEL_DEV: z.string().default("moonshotai/kimi-k2"),
+  MODEL_DEMO: z.string().default("moonshotai/kimi-k2"),
+  MODEL_EVAL_JUDGE: z.string().default("moonshotai/kimi-k2"),
   DRY_RUN: z.preprocess((value) => value === "true" || value === true, z.boolean()).default(true),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   WEBHOOK_SECRET: z.string().default("dev-webhook-secret"),
   SIM_TIME_SCALE: z.coerce.number().default(1),
+  /** Optional CI commit for eval persistence */
+  GITHUB_SHA: z.string().optional(),
+  /** Supabase service role — required only for server-side Realtime broadcast */
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  /** Shared secret for `/api/cron/scheduled-scans` */
+  CRON_SECRET: z.string().optional(),
+  /**
+   * Max connections for the shared `pg.Pool` used by all Mastra `@mastra/pg` stores.
+   * Keep low on Supabase (pooler has a small per-user cap; Prisma uses a separate pool).
+   */
+  MASTRA_PG_POOL_MAX: z.coerce.number().int().min(1).max(30).default(5),
 });
 
 export const env = envSchema.parse(process.env);

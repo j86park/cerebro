@@ -4,11 +4,11 @@ import { runAllEvals } from "@/evals/run";
 export async function POST(req: Request) {
   try {
     const { batchSize = 3 } = await req.json().catch(() => ({}));
-    
+
     console.log("[API] Triggering evaluation run...");
-    const results = await runAllEvals(batchSize);
-    
-    return NextResponse.json(results);
+    const results = await runAllEvals(batchSize, { enforceThreshold: false });
+
+    return NextResponse.json({ data: results });
   } catch (error) {
     console.error("[API] Failed to run evaluations:", error);
     return NextResponse.json(

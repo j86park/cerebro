@@ -22,10 +22,7 @@ async function runStandaloneSimulation() {
     const result = await orchestrator.tick(run.id, day);
     console.log(`[Day ${day}] Processed ${result.clientCount} clients, events triggered: ${result.eventsTriggered}`);
     
-    await orchestrator.updateProgress(run.id, {
-      batchesCompleted: day + 1,
-      batchesTotal: run.simulatedDays,
-    });
+    await orchestrator.incrementProgress(run.id);
   }
   
   // 3. Aggregate metrics

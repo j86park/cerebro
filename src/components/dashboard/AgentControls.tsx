@@ -6,7 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Bot, Play, RefreshCw, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-export function AgentControls({ clients }: { clients: any[] }) {
+export type VaultSummaryForControls = {
+  id: string;
+  name: string;
+  onboardingStatus: string;
+  urgency: { highest: string };
+};
+
+export function AgentControls({
+  vaultSummaries,
+}: {
+  vaultSummaries: VaultSummaryForControls[];
+}) {
   const [isTriggering, setIsTriggering] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -16,7 +27,12 @@ export function AgentControls({ clients }: { clients: any[] }) {
     try {
       // Find a client to test with, or ideally trigger a full sweep
       // Since manual endpoints take clientId, we'll pick the first critical one or just random
-      const target = clients.find(c => c.urgency.highest === "CRITICAL" || c.onboardingStatus === "STALLED") || clients[0];
+      const target =
+        vaultSummaries.find(
+          (c) =>
+            c.urgency.highest === "CRITICAL" ||
+            c.onboardingStatus === "STALLED"
+        ) || vaultSummaries[0];
       
       if (!target) throw new Error("No clients available to target.");
 
@@ -35,8 +51,10 @@ export function AgentControls({ clients }: { clients: any[] }) {
       }
 
       setStatusMsg({ type: "success", text: `Enqueued ${agentType.toLowerCase()} agent for ${target.name}.` });
-    } catch (err: any) {
-      setStatusMsg({ type: "error", text: err.message || "Failed to trigger agent." });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to trigger agent.";
+      setStatusMsg({ type: "error", text: message });
     } finally {
       setIsTriggering(false);
     }

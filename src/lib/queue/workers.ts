@@ -10,6 +10,12 @@ import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
 import { agentJobSchema } from "./jobs";
 
 import { connection, queues } from "./client";
+import { emitAgentRunComplete } from "@/lib/events/emit";
+import {
+  recordJobCompleted,
+  recordJobFailed,
+  type QueueName,
+} from "@/lib/queue/metrics";
 
 /**
  * Builds the initial context prompt for an agent run, describing what
@@ -85,6 +91,18 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
     console.log(
       `[Worker] ${agentType} job ${job.id} completed for client ${clientId}`
     );
+
+    try {
+      await emitAgentRunComplete({
+        clientId,
+        agentType,
+        jobId: String(job.id ?? "unknown"),
+        success: true,
+      });
+    } catch (emitErr) {
+      console.error("[Worker] emitAgentRunComplete failed:", emitErr);
+    }
+
     return { success: true, text: result.text };
   } catch (error) {
     // Always log failure to audit trail so the dashboard can see it
@@ -164,45 +182,63 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
   }
 }
 
-// Workers with concurrency limits per database.mdc §Worker Concurrency
-export const workers = {
-  priority: new Worker<AgentJobPayload>(
-    "cerebro-priority",
-    processAgentJob,
-    {
-      connection: connection as never,
-      concurrency: 5,
-    }
-  ),
-  scheduled: new Worker<AgentJobPayload>(
-    "cerebro-scheduled",
-    processAgentJob,
-    {
-      connection: connection as never,
-      concurrency: 3,
-    }
-  ),
-  simulation: new Worker<SimulationJobPayload>(
-    "cerebro-simulation",
-    processSimulationJob,
-    {
-      connection: connection as never,
-      concurrency: 20,
-      limiter: {
-        max: 50,
-        duration: 1000,
-      },
-    }
-  ),
+type WorkerBundle = {
+  priority: Worker<AgentJobPayload>;
+  scheduled: Worker<AgentJobPayload>;
+  simulation: Worker<SimulationJobPayload>;
 };
 
-// Generic error/completion logging for all workers
-Object.values(workers).forEach((worker) => {
-  console.log(`[Worker] Initialized queue: ${worker.name}`);
-  worker.on("completed", (job) => {
-    console.log(`[Worker - ${worker.name}] Job ${job.id} completed successfully`);
+const isVitest = process.env.VITEST === "true";
+
+// Workers with concurrency limits per database.mdc §Worker Concurrency.
+// Skip construction under Vitest so importing `processSimulationJob` does not open Redis connections.
+export const workers: WorkerBundle = isVitest
+  ? ({} as WorkerBundle)
+  : {
+      priority: new Worker<AgentJobPayload>(
+        "cerebro-priority",
+        processAgentJob,
+        {
+          connection: connection as never,
+          concurrency: 5,
+        }
+      ),
+      scheduled: new Worker<AgentJobPayload>(
+        "cerebro-scheduled",
+        processAgentJob,
+        {
+          connection: connection as never,
+          concurrency: 3,
+        }
+      ),
+      simulation: new Worker<SimulationJobPayload>(
+        "cerebro-simulation",
+        processSimulationJob,
+        {
+          connection: connection as never,
+          concurrency: 20,
+          limiter: {
+            max: 50,
+            duration: 1000,
+          },
+        }
+      ),
+    };
+
+// Generic error/completion logging + metrics for all workers
+if (!isVitest) {
+  Object.values(workers).forEach((worker) => {
+    const queueName = worker.name as QueueName;
+    console.log(`[Worker] Initialized queue: ${worker.name}`);
+    worker.on("completed", (job) => {
+      recordJobCompleted(queueName);
+      console.log(
+        `[Worker - ${worker.name}] Job ${job.id} completed successfully`
+      );
+    });
+    worker.on("failed", (job, err) => {
+      recordJobFailed(queueName);
+      console.error(`[Worker - ${worker.name}] Job ${job?.id} failed:`, err);
+    });
   });
-  worker.on("failed", (job, err) => {
-    console.error(`[Worker - ${worker.name}] Job ${job?.id} failed:`, err);
-  });
-});
+}

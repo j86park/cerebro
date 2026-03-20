@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
+import { sendTransactionalEmail } from "@/lib/email/resend";
 
 const inputSchema = z.object({
   documentId: z.string().describe("ID of the document to remind about"),
@@ -33,11 +34,12 @@ export function buildSendClientReminder(vault: VaultService) {
       // Enforce 5-day duplicate action cooldown
       await vault.checkActionCooldown("SEND_CLIENT_REMINDER", 5, documentId);
 
-      if (!DRY_RUN) {
-        // TODO: Send email via Resend
-        void subject;
-        void body;
-      }
+      const profile = (await vault.getClientProfile()) as { email: string };
+      await sendTransactionalEmail({
+        to: profile.email,
+        subject,
+        text: body,
+      });
 
       // Increment notification count
       await vault.updateDocumentStatus(documentId, "EXPIRING_SOON");

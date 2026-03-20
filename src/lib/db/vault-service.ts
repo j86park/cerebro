@@ -22,6 +22,7 @@ export type LogActionInput = z.infer<typeof logActionInputSchema>;
 
 type PrismaLike = {
   client: {
+    findUnique: (args: unknown) => Promise<{ id: string } | null>;
     findUniqueOrThrow: (args: unknown) => Promise<unknown>;
     update: (args: unknown) => Promise<unknown>;
   };
@@ -54,6 +55,17 @@ export class VaultService {
 
   getNow(): Date {
     return this.now;
+  }
+
+  /**
+   * Returns whether a client row exists for this vault id (lightweight existence check for APIs).
+   */
+  async vaultExists(): Promise<boolean> {
+    const row = await this.db.client.findUnique({
+      where: { id: this.clientId },
+      select: { id: true },
+    });
+    return row !== null;
   }
 
   /**

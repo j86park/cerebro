@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  REALTIME_CHANNEL_AGENT_ACTIONS,
+  REALTIME_TABLE_AGENT_ACTION,
+  realtimeChannelAgentActionsForClient,
+} from "@/lib/realtime/constants";
 
 type ActionData = {
   id: string;
@@ -19,35 +24,37 @@ export function useAgentActions(clientId: string, initialActions: ActionData[]) 
   const supabase = createClient();
 
   useEffect(() => {
-    // Reset state if clientId changes and we were already initialized
     setActions(initialActions);
+  }, [initialActions]);
+
+  useEffect(() => {
+    const channelName = clientId
+      ? realtimeChannelAgentActionsForClient(clientId)
+      : REALTIME_CHANNEL_AGENT_ACTIONS;
 
     const channel = supabase
-      .channel(clientId ? `cerebro-agent-actions-${clientId}` : "cerebro-agent-actions")
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
-          table: "agent_actions",
+          table: REALTIME_TABLE_AGENT_ACTION,
           filter: clientId ? `clientId=eq.${clientId}` : undefined,
         },
         (payload) => {
-          console.log("Realtime event received", payload.new);
-          // Transform db casing if needed, but Prisma matches DB here mostly
-          // Map to match ActionData schema expected by the UI
+          const row = payload.new as Record<string, unknown>;
           const newAction = {
-            id: payload.new.id,
-            agentType: payload.new.agentType,
-            actionType: payload.new.actionType,
-            trigger: payload.new.trigger,
-            reasoning: payload.new.reasoning,
-            outcome: payload.new.outcome,
-            // Convert to ISO string to match the serialized state
-            performedAt: new Date(payload.new.performedAt).toISOString(),
-          } as ActionData;
+            id: String(row.id),
+            agentType: String(row.agentType),
+            actionType: String(row.actionType),
+            trigger: String(row.trigger),
+            reasoning: String(row.reasoning),
+            outcome: row.outcome != null ? String(row.outcome) : null,
+            performedAt: new Date(String(row.performedAt)).toISOString(),
+          } satisfies ActionData;
 
-          setActions((prev) => [newAction, ...prev]);
+          setActions((prev) => [newAction, ...prev].slice(0, 50));
         }
       )
       .subscribe((status) => {
@@ -57,7 +64,7 @@ export function useAgentActions(clientId: string, initialActions: ActionData[]) 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [clientId, supabase, initialActions]);
+  }, [clientId, supabase]);
 
   return { actions, isConnected };
 }

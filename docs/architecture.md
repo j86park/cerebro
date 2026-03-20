@@ -426,17 +426,20 @@ All Next.js API routes live in `src/app/api/`. Route handlers never contain busi
 
 ```
 GET  /api/vaults                          → list all vaults with summary
-GET  /api/vaults/[clientId]               → full vault detail
+GET  /api/vaults/[clientId]               → full vault detail `{ data: { profile, documents, actions } }`
 GET  /api/vaults/[clientId]/documents     → document list
 GET  /api/vaults/[clientId]/actions       → action log
+GET  /api/vaults/[clientId]/actions/export→ CSV or JSON (`?format=csv|json`) audit export
 POST /api/vaults/[clientId]/upload        → mock document upload (triggers event)
 
-POST /api/agents/trigger                  → manually trigger agent run from dashboard
+POST /api/agents/trigger                  → manually trigger agent run from dashboard (canonical trigger)
 GET  /api/agents/status                   → current queue depth and active runs
 
-POST /api/simulation/start                → start a simulation run
+GET  /api/cron/scheduled-scans            → enqueue scheduled scans (secured with `CRON_SECRET`)
+
+POST /api/simulation/start                → start a simulation run (legacy alias if present)
 GET  /api/simulation/[runId]              → simulation run status and results
-GET  /api/simulation/runs                 → list all past simulation runs
+GET  /api/simulation/runs                 → list past simulation runs; POST starts a new run
 
 POST /api/webhooks/document-upload        → receives upload events
 ```

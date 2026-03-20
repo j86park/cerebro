@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const orchestrator = new SimulationOrchestrator();
     const runs = await orchestrator.getRecentRuns(20);
-    return NextResponse.json({ runs });
+    return NextResponse.json({ data: { runs } });
   } catch (error) {
     console.error("[API] Failed to fetch simulation runs:", error);
     return NextResponse.json({ error: "Failed to fetch simulation runs" }, { status: 500 });
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     });
 
     console.log(`[API] Simulation ${run.id} successfully queued.`);
-    return NextResponse.json({ run, jobsEnqueued });
+    return NextResponse.json({ data: { run, jobsEnqueued } });
   } catch (error) {
     console.error("[API] Failed to trigger simulation:", error);
     return NextResponse.json({ 

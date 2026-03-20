@@ -10,6 +10,12 @@ vi.mock("@/lib/db/client", () => ({
       update: vi.fn(),
       findUnique: vi.fn(),
     },
+    document: {
+      groupBy: vi.fn().mockResolvedValue([]),
+    },
+    agentAction: {
+      count: vi.fn().mockResolvedValue(0),
+    },
   },
 }));
 

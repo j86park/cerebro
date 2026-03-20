@@ -12,7 +12,7 @@ interface SimulationRunCardProps {
     simulatedDays: number;
     status: string;
     startedAt: string;
-    completedAt?: string;
+    completedAt?: string | null;
     metrics?: any;
   };
 }

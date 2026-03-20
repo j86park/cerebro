@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { processSimulationJob, workers } from "../../src/lib/queue/workers";
+import { processSimulationJob } from "../../src/lib/queue/workers";
 import { SimulationOrchestrator } from "../../src/lib/simulation/orchestrator";
 
 // Mock the orchestrator
@@ -8,12 +8,16 @@ vi.mock("../../src/lib/simulation/orchestrator");
 describe("Worker Performance Benchmark", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
-    // Default mocks for orchestrator
-    const mockOrchestrator = (SimulationOrchestrator as any).prototype;
-    mockOrchestrator.getRun.mockResolvedValue({ id: "run-perf", simulatedDays: 10 });
-    mockOrchestrator.tick.mockResolvedValue({ simDate: new Date(), eventsTriggered: 1 });
-    mockOrchestrator.updateProgress.mockResolvedValue({});
+
+    const mockOrchestrator = (SimulationOrchestrator as unknown as { prototype: Record<string, ReturnType<typeof vi.fn>> }).prototype;
+    mockOrchestrator.getRun = vi
+      .fn()
+      .mockResolvedValue({ id: "run-perf", simulatedDays: 10 });
+    mockOrchestrator.tick = vi
+      .fn()
+      .mockResolvedValue({ simDate: new Date(), eventsTriggered: 1 });
+    mockOrchestrator.incrementProgress = vi.fn().mockResolvedValue({});
+    mockOrchestrator.aggregateMetrics = vi.fn().mockResolvedValue(undefined);
   });
 
   it("should process simulation jobs with high throughput (> 10 jobs/sec equivalent)", async () => {

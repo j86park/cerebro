@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 
-describe("Phase 9.3: Compliance Scorecard API Verification", () => {
+describe.skipIf(process.env.RUN_SCORECARD_E2E !== "true")(
+  "Phase 9.3: Compliance Scorecard API Verification",
+  () => {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const testClientId = "CLT-002"; // Corporate client from previous tests
 

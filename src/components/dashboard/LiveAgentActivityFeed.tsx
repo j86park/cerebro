@@ -2,6 +2,10 @@
 
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  REALTIME_CHANNEL_AGENT_ACTIONS,
+  REALTIME_TABLE_AGENT_ACTION,
+} from "@/lib/realtime/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,17 +30,22 @@ export function LiveAgentActivityFeed({ initialActions }: { initialActions: Agen
   const supabase = createClient();
 
   useEffect(() => {
+    setActions(initialActions.slice(0, 50));
+  }, [initialActions]);
+
+  useEffect(() => {
     const channel = supabase
-      .channel("cerebro-agent-actions")
+      .channel(REALTIME_CHANNEL_AGENT_ACTIONS)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
-          table: "agent_actions",
+          table: REALTIME_TABLE_AGENT_ACTION,
         },
         (payload) => {
-          setActions((prev) => [payload.new as AgentAction, ...prev].slice(0, 50));
+          const row = payload.new as AgentAction;
+          setActions((prev) => [row, ...prev].slice(0, 50));
         }
       )
       .subscribe();

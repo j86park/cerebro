@@ -6,11 +6,14 @@ import { CheckCircle2, XCircle, Minus } from "lucide-react";
 import { CHART_COLORS } from "@/lib/chart-colors";
 
 interface ScenarioMatrixProps {
-  results: Record<string, {
-    agent: string;
-    output: string;
-    scores: Record<string, any>;
-  }>;
+  results: Record<
+    string,
+    {
+      agent: string;
+      output?: string;
+      scores: Record<string, { score?: number; reason?: string }>;
+    }
+  >;
   onCellClick: (clientId: string, scorerId: string) => void;
 }
 

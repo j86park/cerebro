@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db/client";
-import TestingPage from "@/app/testing/TestingPage";
+import TestingPage, {
+  type SerializableEvalRun,
+} from "@/app/testing/TestingPage";
 
 export default async function Page() {
   const runs = await prisma.evalRun.findMany({
@@ -7,6 +9,6 @@ export default async function Page() {
     take: 50,
   });
 
-  // Ensure JSON values from Prisma are serializable or handled
-  return <TestingPage runsInitial={JSON.parse(JSON.stringify(runs))} />;
+  const serializable = JSON.parse(JSON.stringify(runs)) as SerializableEvalRun[];
+  return <TestingPage runsInitial={serializable} />;
 }

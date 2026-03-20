@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { UrgencyBadge } from "@/components/ui-extensions/UrgencyBadge";
 import { StatusBadge } from "@/components/ui-extensions/StatusBadge";
 import { Play } from "lucide-react";
+import { vaultRowHealthBgClass } from "@/lib/dashboard/vault-health";
 
 type VaultData = {
   id: string;
@@ -103,7 +104,16 @@ export function VaultGrid({
                 className="cursor-pointer hover:bg-muted/50"
                 onClick={() => handleRowClick(vault.id)}
               >
-                <TableCell className="font-medium">{vault.name}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${vaultRowHealthBgClass(vault.urgency.highest)}`}
+                      title="Vault health indicator"
+                      aria-hidden
+                    />
+                    {vault.name}
+                  </div>
+                </TableCell>
                 <TableCell>{vault.accountType}</TableCell>
                 <TableCell className="hidden md:table-cell text-muted-foreground">{vault.advisorName}</TableCell>
                 <TableCell>

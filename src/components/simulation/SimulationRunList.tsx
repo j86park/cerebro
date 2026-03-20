@@ -7,7 +7,19 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info } from "lucide-react";
 
 export function SimulationRunList() {
-  const [runs, setRuns] = useState<any[]>([]);
+  const [runs, setRuns] = useState<
+    Array<{
+      id: string;
+      status: string;
+      clientCount: number;
+      simulatedDays: number;
+      batchesCompleted: number;
+      batchesTotal: number;
+      metrics?: unknown;
+      startedAt: string;
+      completedAt?: string | null;
+    }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +29,8 @@ export function SimulationRunList() {
         const res = await fetch("/api/simulation/runs");
         if (!res.ok) throw new Error("Failed to fetch simulation runs");
         const data = await res.json();
-        setRuns(data.runs || []);
+        const list = data.data?.runs ?? data.runs ?? [];
+        setRuns(list);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Possible API error");
       } finally {

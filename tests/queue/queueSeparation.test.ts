@@ -10,11 +10,11 @@ vi.mock("bullmq", () => {
     },
   };
 });
-vi.mock("ioredis", () => {
-  return {
-    default: vi.fn(),
-  };
-});
+vi.mock("ioredis", () => ({
+  default: class RedisMock {
+    on = vi.fn();
+  },
+}));
 
 describe("Queue Separation", () => {
   it("defines the exact three canonical queues per architecture.md", async () => {

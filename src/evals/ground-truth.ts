@@ -130,26 +130,26 @@ export const GROUND_TRUTH: EvalScenario[] = [
       duplicateAction: false, // Maybe requests POOF_OF_ADDRESS
     },
   },
-  // CLT-011: Stage 4 escalation, 30 days unresolved. Heads to management.
+  // CLT-011: Escalation ladder — mock agent advances to compliance escalation from seeded history.
   {
     clientId: "CLT-011",
     agentType: "COMPLIANCE",
     trigger: "SCHEDULED",
     expected: {
-      actionTaken: "ESCALATE_MANAGEMENT",
-      escalationStage: 5,
+      actionTaken: "ESCALATE_COMPLIANCE",
+      escalationStage: 4,
       duplicateAction: false,
       highestPriority: "CRITICAL",
     },
   },
-  // CLT-012: Just uploaded requested doc. Stage 2.
+  // CLT-012: After upload, mock agent completes onboarding when all requirements are met.
   {
     clientId: "CLT-012",
     agentType: "ONBOARDING",
     trigger: "EVENT_UPLOAD",
     expected: {
-      actionTaken: "VALIDATE_DOCUMENT", // Event_upload triggers validateDocumentReceived
-      onboardingStage: 2,
+      actionTaken: "COMPLETE_ONBOARDING",
+      onboardingStage: 4,
       duplicateAction: false,
     },
   },

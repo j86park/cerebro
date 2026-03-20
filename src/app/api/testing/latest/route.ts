@@ -8,10 +8,13 @@ export async function GET() {
     });
 
     if (!latestRun) {
-      return NextResponse.json({ error: "No evaluation runs found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "No evaluation runs found" },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json(latestRun);
+    return NextResponse.json({ data: latestRun });
   } catch (error) {
     console.error("Failed to fetch latest eval run:", error);
     return NextResponse.json(

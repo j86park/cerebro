@@ -453,9 +453,13 @@ export async function runSeed() {
 `);
 }
 
-const isDirectRun = process.argv[1]?.endsWith("prisma/seed.ts") || process.env.npm_lifecycle_event === "seed";
+// Windows uses backslashes in argv[1]; normalize so `tsx prisma/seed.ts` actually runs.
+const seedScriptArg = process.argv[1]?.replace(/\\/g, "/") ?? "";
+const isDirectRun =
+  seedScriptArg.endsWith("prisma/seed.ts") ||
+  process.env.npm_lifecycle_event === "seed";
 
-if (isDirectRun || true) {
+if (isDirectRun) {
   runSeed()
     .then(async () => {
       await prisma.$disconnect();

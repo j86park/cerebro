@@ -3,7 +3,9 @@ import { SimulationOrchestrator } from "../../src/lib/simulation/orchestrator";
 import { prisma } from "../../src/lib/db/client";
 import { runSeed } from "../../prisma/seed";
 
-describe("Simulation Load & Stability (1,000 Clients)", () => {
+describe.skipIf(!process.env.DATABASE_URL)(
+  "Simulation Load & Stability (1,000 Clients)",
+  () => {
   const orchestrator = new SimulationOrchestrator();
 
   beforeEach(async () => {

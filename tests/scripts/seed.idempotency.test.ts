@@ -3,12 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 // Mock the prisma client and runSeed function
 vi.mock("@/lib/db/client", () => ({
   prisma: {
-    firm: { upsert: vi.fn().mockResolvedValue({}) },
+    firm: {
+      upsert: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+    },
     advisor: { upsert: vi.fn().mockResolvedValue({}) },
     client: { upsert: vi.fn().mockResolvedValue({}) },
     document: { upsert: vi.fn().mockResolvedValue({}) },
     agentAction: { upsert: vi.fn().mockResolvedValue({}) },
-  }
+  },
 }));
 
 describe("Seed idempotency", () => {
