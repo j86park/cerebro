@@ -6,6 +6,7 @@ describe("VaultService logAction", () => {
     const createAction = vi.fn(async () => ({}));
     const db = {
       client: {
+        findUnique: vi.fn(async () => null),
         findUniqueOrThrow: vi.fn(async () => ({})),
         update: vi.fn(async () => ({})),
       },
@@ -45,6 +46,7 @@ describe("VaultService logAction", () => {
   it("rejects empty reasoning", async () => {
     const db = {
       client: {
+        findUnique: vi.fn(async () => null),
         findUniqueOrThrow: vi.fn(async () => ({})),
         update: vi.fn(async () => ({})),
       },

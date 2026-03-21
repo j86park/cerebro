@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
+import { env } from "@/lib/config";
 
 const vaultContextSchema = z.object({
   clientId: z.string().min(1),
+  now: z.date().optional(),
 });
 
 const logActionInputSchema = z.object({
@@ -12,7 +14,7 @@ const logActionInputSchema = z.object({
   trigger: z.string().min(1),
   reasoning: z.string().min(1),
   outcome: z.string().optional(),
-  nextScheduledAt: z.date(),
+  nextScheduledAt: z.date().optional(),
 });
 
 export type VaultContext = z.infer<typeof vaultContextSchema>;
@@ -20,6 +22,7 @@ export type LogActionInput = z.infer<typeof logActionInputSchema>;
 
 type PrismaLike = {
   client: {
+    findUnique: (args: unknown) => Promise<{ id: string } | null>;
     findUniqueOrThrow: (args: unknown) => Promise<unknown>;
     update: (args: unknown) => Promise<unknown>;
   };
@@ -41,11 +44,28 @@ type PrismaLike = {
 export class VaultService {
   private clientId: string;
   private db: PrismaLike;
+  private now: Date;
 
   constructor(ctx: VaultContext, db: PrismaLike = prisma as unknown as PrismaLike) {
     const parsed = vaultContextSchema.parse(ctx);
     this.clientId = parsed.clientId;
     this.db = db;
+    this.now = parsed.now ?? new Date(env.DEMO_DATE);
+  }
+
+  getNow(): Date {
+    return this.now;
+  }
+
+  /**
+   * Returns whether a client row exists for this vault id (lightweight existence check for APIs).
+   */
+  async vaultExists(): Promise<boolean> {
+    const row = await this.db.client.findUnique({
+      where: { id: this.clientId },
+      select: { id: true },
+    });
+    return row !== null;
   }
 
   /**
@@ -92,9 +112,45 @@ export class VaultService {
   }
 
   /**
+   * Checks if a duplicate action is being attempted within the cooldown period.
+   * Throws an error if the cooldown has not expired.
+   */
+  async checkActionCooldown(actionType: string, cooldownDays: number, documentId?: string) {
+    const history = await this.getActionHistory() as Array<{
+      actionType: string;
+      documentId: string | null;
+      performedAt: Date;
+    }>;
+
+    const latest = history.find(
+      (h) => h.actionType === actionType && (!documentId || h.documentId === documentId)
+    );
+
+    if (latest) {
+      const now = this.getNow();
+      const daysSince = (now.getTime() - latest.performedAt.getTime()) / (1000 * 60 * 60 * 24);
+      
+      if (daysSince < cooldownDays) {
+        throw new Error(
+          `Action ${actionType} was already performed ${Math.floor(daysSince)} days ago. ` +
+          `A cooldown of ${cooldownDays} days is required before repeating this action.`
+        );
+      }
+    }
+  }
+
+  /**
    * Updates a document status scoped to this vault.
    */
   async updateDocumentStatus(documentId: string, status: string, notes?: string) {
+    const docs = await this.db.document.findMany({
+      where: { id: documentId, clientId: this.clientId },
+    });
+    
+    if (docs.length === 0) {
+      throw new Error(`Document ${documentId} not found in client vault ${this.clientId}`);
+    }
+
     return this.db.document.update({
       where: {
         id: documentId,

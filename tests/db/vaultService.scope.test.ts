@@ -9,6 +9,7 @@ describe("VaultService client scoping", () => {
 
     const db = {
       client: {
+        findUnique: vi.fn(async () => null),
         findUniqueOrThrow,
         update: vi.fn(async () => ({})),
       },

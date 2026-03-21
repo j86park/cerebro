@@ -263,9 +263,11 @@ async function seedFirms() {
       where: { id: firm.id },
       update: {
         name: firm.name,
-        complianceOfficerId: firm.complianceOfficerId,
       },
-      create: firm,
+      create: {
+        id: firm.id,
+        name: firm.name,
+      },
     });
   }
 }
@@ -282,6 +284,17 @@ async function seedAdvisors() {
       },
       create: advisor,
     });
+  }
+}
+
+async function finalizeFirms() {
+  for (const firm of MOCK_FIRMS) {
+    if (firm.complianceOfficerId) {
+        await prisma.firm.update({
+            where: { id: firm.id },
+            data: { complianceOfficerId: firm.complianceOfficerId }
+        });
+    }
   }
 }
 
@@ -376,6 +389,18 @@ async function seedActionHistory() {
       clientId: "CLT-003",
       documentId: clt3DocId,
       agentType: "COMPLIANCE" as const,
+      actionType: "SEND_CLIENT_REMINDER" as const,
+      trigger: "SCHEDULED" as const,
+      reasoning: "Seeded stage 3 reminder after continued inaction.",
+      outcome: "SEEDED_HISTORY",
+      performedAt: addDaysFromDemo(-40),
+      nextScheduledAt: addDaysFromDemo(-30),
+    },
+    {
+      id: "ACT-CLT003-4",
+      clientId: "CLT-003",
+      documentId: clt3DocId,
+      agentType: "COMPLIANCE" as const,
       actionType: "ESCALATE_COMPLIANCE" as const,
       trigger: "SCHEDULED" as const,
       reasoning: "Seeded stage 4 escalation due to unresolved issue.",
@@ -410,14 +435,29 @@ async function seedActionHistory() {
  * Seeds the full Cerebro baseline dataset using idempotent upserts.
  */
 export async function runSeed() {
-  await seedAdvisors();
   await seedFirms();
+  await seedAdvisors();
+  await finalizeFirms();
   await seedClients();
   await seedDocuments();
   await seedActionHistory();
+
+  console.log(`
+--- Seed Summary ---
+✓ Firms: ${MOCK_FIRMS.length}
+✓ Advisors: ${MOCK_ADVISORS.length}
+✓ Clients: ${MOCK_CLIENTS.length}
+✓ Documents: ${MOCK_CLIENTS.length * Object.keys(DOCUMENT_REGISTRY).length}
+✓ Actions: 5 (Pre-populated)
+--------------------
+`);
 }
 
-const isDirectRun = process.argv[1]?.endsWith("prisma/seed.ts");
+// Windows uses backslashes in argv[1]; normalize so `tsx prisma/seed.ts` actually runs.
+const seedScriptArg = process.argv[1]?.replace(/\\/g, "/") ?? "";
+const isDirectRun =
+  seedScriptArg.endsWith("prisma/seed.ts") ||
+  process.env.npm_lifecycle_event === "seed";
 
 if (isDirectRun) {
   runSeed()
