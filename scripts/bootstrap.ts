@@ -34,7 +34,10 @@ async function main(): Promise<void> {
 
   await ensureFile(".env.example", "DRY_RUN=true\nNODE_ENV=development\n");
   await ensureFile(".env.local", "DRY_RUN=true\nNODE_ENV=development\n");
-  await ensureFile(".env.test", "DRY_RUN=true\nNODE_ENV=test\n");
+  await ensureFile(
+    ".env.test",
+    "# Vitest sets NODE_ENV=test. Do not set NODE_ENV here.\nDRY_RUN=true\n"
+  );
 
   console.log("Bootstrap complete.");
 }

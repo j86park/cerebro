@@ -2,8 +2,9 @@ import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
 
 // Load env before any module that imports Prisma or `@/lib/config` (imports are hoisted otherwise).
-loadEnv({ path: resolve(process.cwd(), ".env.local") });
+// Same order as Vitest: `.env` then `.env.local` with override so cloud `DATABASE_URL` wins over a template `.env`.
 loadEnv({ path: resolve(process.cwd(), ".env") });
+loadEnv({ path: resolve(process.cwd(), ".env.local"), override: true });
 
 /**
  * Prisma's datasource only reads `DATABASE_URL`. Map common Supabase/Vercel names so a single
@@ -37,8 +38,8 @@ function ensureDatabaseUrlForPrisma(): void {
 
 ensureDatabaseUrlForPrisma();
 
-const CLIENT_COUNT = 5;
-const SIMULATED_DAYS = 1;
+const CLIENT_COUNT = 10;
+const SIMULATED_DAYS = 2;
 
 async function main() {
   const { SimulationOrchestrator } = await import("@/lib/simulation/orchestrator");
