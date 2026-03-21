@@ -8,10 +8,18 @@ import { ComplianceScorecard } from "@/components/dashboard/ComplianceScorecard"
 import { ClientProfileCard } from "@/components/vault/ClientProfileCard";
 import { DocumentsTable } from "@/components/vault/DocumentsTable";
 import { ActionHistoryFeed } from "@/components/vault/ActionHistoryFeed";
+import type { Advisor, AgentAction, Client, Document, Firm } from "@prisma/client";
 import { VaultService } from "@/lib/db/vault-service";
+import type { DocumentData } from "@/components/vault/DocumentsTable";
+import type { ActionData } from "@/components/vault/ActionHistoryFeed";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
+
+type ClientProfileWithRelations = Client & {
+  advisor: Advisor;
+  firm: Firm;
+};
 
 export default async function VaultDetailPage({
   params,
@@ -23,15 +31,16 @@ export default async function VaultDetailPage({
   try {
     const vault = new VaultService({ clientId });
     
-    const [profile, documents, actions] = await Promise.all([
-      vault.getClientProfile().catch(() => null),
-      vault.getDocuments(),
-      vault.getActionHistory(),
-    ]) as [any, any[], any[]];
+    const profile = (await vault
+      .getClientProfile()
+      .catch(() => null)) as ClientProfileWithRelations | null;
 
     if (!profile) {
       notFound();
     }
+
+    const documents = (await vault.getDocuments()) as Document[];
+    const actions = (await vault.getActionHistory()) as AgentAction[];
 
     const profileData = {
       clientId: profile.id,
@@ -44,22 +53,24 @@ export default async function VaultDetailPage({
       firmName: profile.firm.name,
     };
 
-    // Serialize dates for client components
-    const safeDocuments = documents.map(d => ({
-      ...d,
-      expiryDate: d.expiryDate?.toISOString() || null,
-      uploadedAt: d.uploadedAt?.toISOString() || null,
-      notificationCount: d.notificationCount || 0
+    const safeDocuments: DocumentData[] = documents.map((d) => ({
+      id: d.id,
+      type: d.type,
+      category: d.category,
+      status: d.status,
+      expiryDate: d.expiryDate?.toISOString() ?? null,
+      uploadedAt: d.uploadedAt?.toISOString() ?? null,
+      notificationCount: d.notificationCount ?? 0,
     }));
 
-    const safeActions = actions.slice(0, 50).map(a => ({
-      ...a,
+    const safeActions: ActionData[] = actions.slice(0, 50).map((a) => ({
+      id: a.id,
       performedAt: a.performedAt.toISOString(),
       agentType: a.agentType,
       actionType: a.actionType,
       trigger: a.trigger,
       reasoning: a.reasoning,
-      outcome: a.outcome
+      outcome: a.outcome,
     }));
 
     return (
@@ -91,12 +102,12 @@ export default async function VaultDetailPage({
                   
                   <div className="pt-2">
                     <h2 className="text-xl font-semibold mb-4 text-foreground">Document Registry</h2>
-                    <DocumentsTable documents={safeDocuments as any} />
+                    <DocumentsTable documents={safeDocuments} />
                   </div>
                 </div>
                 
                 <div className="lg:col-span-1 h-full pb-6">
-                  <ActionHistoryFeed clientId={profileData.clientId} initialActions={safeActions as any} />
+                  <ActionHistoryFeed clientId={profileData.clientId} initialActions={safeActions} />
                 </div>
               </div>
             </TabsContent>
@@ -111,7 +122,7 @@ export default async function VaultDetailPage({
       </div>
     );
   } catch (error) {
-    console.error("Error loading vault detail page:", error);
+    console.error("[Cerebro][vault-detail] Error loading vault detail page:", error);
     notFound();
   }
 }

@@ -8,5 +8,5 @@ export type AbstractScenario = {
   expected: ExpectedOutcome;
   /** Copied from `GROUND_TRUTH` when present — used by mutation shadow gate only. */
   canary?: boolean;
-  scorers: MastraScorer<any, any, any, any>[];
+  scorers: MastraScorer[];
 };

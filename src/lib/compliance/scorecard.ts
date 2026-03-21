@@ -1,7 +1,14 @@
+import type { Document } from "@prisma/client";
 import { VaultService } from "@/lib/db/vault-service";
 import { DOCUMENT_REGISTRY, getRequiredDocs } from "@/lib/documents/registry";
 import { DocumentStatus } from "@/lib/db/enums";
 import { env } from "@/lib/config";
+
+type RegistryKey = keyof typeof DOCUMENT_REGISTRY;
+
+function registryEntry(type: string): (typeof DOCUMENT_REGISTRY)[RegistryKey] | undefined {
+  return type in DOCUMENT_REGISTRY ? DOCUMENT_REGISTRY[type as RegistryKey] : undefined;
+}
 
 export type UrgencyLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "NONE";
 
@@ -38,7 +45,7 @@ export function calculateUrgency(
 ): UrgencyLevel {
   if (status === DocumentStatus.EXPIRED) return "CRITICAL";
   if (status === DocumentStatus.MISSING) {
-    const reg = (DOCUMENT_REGISTRY as any)[type];
+    const reg = registryEntry(type);
     if (reg?.category === "IDENTITY") return "HIGH";
     return "LOW";
   }
@@ -58,7 +65,7 @@ export function getRegulatoryNote(
   if (status === DocumentStatus.EXPIRED)
     return "Document has expired — regulatory violation risk. Immediate action required.";
   if (status === DocumentStatus.MISSING) {
-    const reg = (DOCUMENT_REGISTRY as any)[type];
+    const reg = registryEntry(type);
     if (reg?.category === "IDENTITY")
       return `Critical identity document (${reg.label}) is missing. This blocks further compliance processing.`;
     return `Required document (${reg?.label || type}) is missing from the vault.`;
@@ -79,7 +86,7 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
   };
   const requiredTypes = getRequiredDocs(profile.accountType);
 
-  const existingDocs = (await vault.getDocuments()) as Array<Record<string, any>>;
+  const existingDocs = (await vault.getDocuments()) as Document[];
   const existingTypes = existingDocs.map((d) => d.type);
 
   // 1. Identify actually missing document types
@@ -94,7 +101,7 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
     const status = doc.status as string;
     const urgency = calculateUrgency(status, daysUntilExpiry, doc.type as string);
     const isBlocker =
-      (DOCUMENT_REGISTRY as any)[doc.type]?.category === "IDENTITY" &&
+      registryEntry(doc.type)?.category === "IDENTITY" &&
       (status === DocumentStatus.EXPIRED || status === DocumentStatus.MISSING);
 
     return {
@@ -113,7 +120,7 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
 
   // 3. Map missing documents
   const missingDocs = missingTypes.map((type) => {
-    const reg = (DOCUMENT_REGISTRY as any)[type];
+    const reg = registryEntry(type);
     const status = DocumentStatus.MISSING;
     const urgency = calculateUrgency(status, null, type);
     const isBlocker = reg?.category === "IDENTITY";

@@ -70,7 +70,10 @@ export function ScorerBreakdown({ breakdown }: ScorerBreakdownProps) {
                   borderRadius: "8px",
                   fontSize: "12px",
                 }}
-                formatter={(value: any) => [`${Number(value).toFixed(1)}%`, "Pass Rate"]}
+                formatter={(value) => {
+                  const v = Array.isArray(value) ? value[0] : value;
+                  return [`${Number(v ?? 0).toFixed(1)}%`, "Pass Rate"];
+                }}
               />
               <Bar dataKey="passRate" radius={[0, 4, 4, 0]}>
                 {data.map((entry, index) => (

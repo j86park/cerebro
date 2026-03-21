@@ -5,9 +5,9 @@ import { prisma } from "@/lib/db/client";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
-  const { clientId } = params;
+  const { clientId } = await params;
 
   try {
     const vault = new VaultService({ clientId });
@@ -33,7 +33,7 @@ export async function GET(
       auditTrail,
     });
   } catch (error) {
-    console.error("Scorecard API error:", error);
+    console.error("[Cerebro][api][scorecard] Scorecard API error:", error);
     return NextResponse.json(
       { error: "Failed to fetch scorecard data" },
       { status: 500 }

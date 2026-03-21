@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format } from "date-fns";
-import { Bot, UserCog, ShieldCheck, FileSearch, Zap, Calendar, History } from "lucide-react";
+import { UserCog, ShieldCheck, Zap, Calendar, History } from "lucide-react";
+import { useAgentActions } from "@/hooks/useAgentActions";
 
-type ActionData = {
+export type ActionData = {
   id: string;
   agentType: string;
   actionType: string;
@@ -16,8 +16,6 @@ type ActionData = {
   performedAt: string;
 };
 
-import { useAgentActions } from "@/hooks/useAgentActions";
-
 export function ActionHistoryFeed({ 
   clientId,
   initialActions = [] 
@@ -25,7 +23,7 @@ export function ActionHistoryFeed({
   clientId: string; 
   initialActions?: ActionData[];
 }) {
-  const { actions, isConnected } = useAgentActions(clientId, initialActions);
+  const { actions } = useAgentActions(clientId, initialActions);
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3 border-b border-border shrink-0">

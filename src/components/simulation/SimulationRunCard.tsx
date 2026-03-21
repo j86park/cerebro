@@ -13,7 +13,12 @@ interface SimulationRunCardProps {
     status: string;
     startedAt: string;
     completedAt?: string | null;
-    metrics?: any;
+    batchesCompleted?: number;
+    batchesTotal?: number;
+    metrics?: {
+      totalActionsTriggered?: number;
+      useMockAgents?: boolean;
+    } & Record<string, unknown>;
   };
 }
 
@@ -24,7 +29,9 @@ export function SimulationRunCard({ run }: SimulationRunCardProps) {
 
   const totalActions = run.metrics?.totalActionsTriggered || 0;
   const throughput = duration && totalActions ? (totalActions / duration).toFixed(1) : null;
-  const progress = (run as any).batchesCompleted / (run as any).batchesTotal * 100 || 0;
+  const bc = run.batchesCompleted ?? 0;
+  const bt = run.batchesTotal ?? 0;
+  const progress = bt > 0 ? (bc / bt) * 100 : 0;
 
   return (
     <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-sm hover:border-blue-500/50 transition-colors">

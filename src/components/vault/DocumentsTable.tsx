@@ -13,7 +13,7 @@ import { StatusBadge } from "@/components/ui-extensions/StatusBadge";
 import { format } from "date-fns";
 import { DOCUMENT_REGISTRY } from "@/lib/documents/registry";
 
-type DocumentData = {
+export type DocumentData = {
   id: string;
   type: string;
   category: string;

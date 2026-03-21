@@ -1,6 +1,16 @@
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
+
+type ClientWithVaultData = Prisma.ClientGetPayload<{
+  include: {
+    advisor: true;
+    firm: true;
+    documents: { select: { status: true; expiryDate: true } };
+    _count: { select: { documents: true } };
+  };
+}>;
 
 export async function GET() {
   try {
@@ -20,12 +30,12 @@ export async function GET() {
 
     const demoDate = new Date(env.DEMO_DATE);
 
-    const enrichedClients = clients.map((client: any) => {
+    const enrichedClients = clients.map((client: ClientWithVaultData) => {
       let expiredCount = 0;
       let expiringSoonCount = 0;
       let missingCount = 0;
 
-      client.documents.forEach((doc: any) => {
+      client.documents.forEach((doc) => {
         if (doc.status === "EXPIRED") expiredCount++;
         if (doc.status === "EXPIRING_SOON") expiringSoonCount++;
         if (doc.status === "MISSING") missingCount++;

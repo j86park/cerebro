@@ -1,3 +1,4 @@
+import type { AgentAction, Client, Document } from "@prisma/client";
 import { ActionType, AgentType, DocumentStatus, TriggerType } from "@/lib/db/enums";
 import { VaultService } from "@/lib/db/vault-service";
 import { getComplianceScorecard } from "@/lib/compliance/scorecard";
@@ -13,15 +14,17 @@ export interface MockAgentDecision {
 export class MockAgent {
   async decide(vault: VaultService, agentType: keyof typeof AgentType, trigger: keyof typeof TriggerType): Promise<MockAgentDecision> {
     if (agentType === "COMPLIANCE") {
-      return this.decideCompliance(vault, trigger);
+      return this.decideCompliance(vault);
     } else {
       return this.decideOnboarding(vault, trigger);
     }
   }
 
-  private async decideCompliance(vault: VaultService, trigger: keyof typeof TriggerType): Promise<MockAgentDecision> {
+  private async decideCompliance(vault: VaultService): Promise<MockAgentDecision> {
     const scorecard = await getComplianceScorecard(vault);
-    const history = (await vault.getActionHistory() as any[]).filter(h => h.agentType === "COMPLIANCE");
+    const history = (await vault.getActionHistory() as AgentAction[]).filter(
+      (h) => h.agentType === "COMPLIANCE"
+    );
     
     // 1. If everything is compliant, just scan
     if (scorecard.summary.highestUrgency === "NONE" && !scorecard.summary.hasBlocker) {
@@ -31,8 +34,8 @@ export class MockAgent {
       };
     }
 
-    // 2. Escalation logic based on COMPLIANCE_SYSTEM_PROMPT
-    const stage1Action = history.find(h => h.escalationStage === 1);
+    // 2. Escalation logic — schema has no persisted escalationStage; first NOTIFY_ADVISOR marks stage 1.
+    const stage1Action = history.find((h) => h.actionType === "NOTIFY_ADVISOR");
     
     if (!stage1Action) {
       return {
@@ -65,9 +68,9 @@ export class MockAgent {
   }
 
   private async decideOnboarding(vault: VaultService, trigger: keyof typeof TriggerType): Promise<MockAgentDecision> {
-    const client = await vault.getClientProfile() as any;
-    const documents = await vault.getDocuments() as any[];
-    const history = await vault.getActionHistory() as any[];
+    const client = (await vault.getClientProfile()) as Client;
+    const documents = (await vault.getDocuments()) as Document[];
+    const history = (await vault.getActionHistory()) as AgentAction[];
     
     const currentStage = client.onboardingStage;
     const stageConfig = ONBOARDING_STAGES[currentStage];

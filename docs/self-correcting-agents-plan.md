@@ -258,6 +258,19 @@ Singleton table: **`PromptMutationCircuitState`** (`id = "singleton"`).
 
 ---
 
+## Launch script
+
+From repo root (loads `.env.local`):
+
+| Command | What it does |
+|--------|----------------|
+| `npm run self-correcting:prep` | `prisma migrate deploy` + `npm run seed:prompts`, then prints next steps (dev + workers). |
+| `npm run self-correcting:test` | Same prep + `POST /api/testing/run` (retries until Next responds — start `npm run dev` first). |
+
+Full options: `node --env-file=.env.local --import tsx scripts/self-correcting-pipeline.ts --help`
+
+---
+
 ## References
 
 - Original feature spec: user-provided “Implement Cerebro Self-Correcting Agents” document (conversation).  

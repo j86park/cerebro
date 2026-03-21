@@ -10,8 +10,10 @@ export const connection = new Redis(env.REDIS_URL, {
   ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
 });
 
-connection.on("connect", () => console.log("[Redis] Connection: CONNECTED"));
-connection.on("ready", () => console.log("[Redis] Connection: READY"));
+connection.on("connect", () =>
+  console.log("[Cerebro][redis] Connection: CONNECTED")
+);
+connection.on("ready", () => console.log("[Cerebro][redis] Connection: READY"));
 connection.on("error", (err) => console.error("[Redis] Connection: ERROR", err));
 
 /** Standard retry config per database.mdc §Job Retry Configuration */

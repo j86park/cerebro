@@ -2,12 +2,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, XCircle, Activity, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
+type ScorerScoreEntry = { score?: number; reason?: string };
+
+type ScenarioResultRow = {
+  agent?: string;
+  scores?: Record<string, ScorerScoreEntry>;
+};
+
 interface EvalOverviewProps {
   latestRun: {
     overallScore: number;
     runAt: string | Date;
-    scorerBreakdown: any;
-    scenarioResults: any;
+    scorerBreakdown: Record<string, { total: number; passed: number }>;
+    scenarioResults: Record<string, ScenarioResultRow>;
   };
 }
 
@@ -15,7 +22,10 @@ export function EvalOverview({ latestRun }: EvalOverviewProps) {
   const scenarioResults = latestRun.scenarioResults || {};
   const totalScenarios = Object.keys(scenarioResults).length;
   const passedScenarios = Object.values(scenarioResults).filter(
-    (s: any) => !Object.values(s.scores || {}).some((score: any) => (score.score ?? 0) < 1)
+    (s: ScenarioResultRow) =>
+      !Object.values(s.scores || {}).some(
+        (score: ScorerScoreEntry) => (score.score ?? 0) < 1
+      )
   ).length;
   const failedScenarios = totalScenarios - passedScenarios;
 

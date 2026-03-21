@@ -21,6 +21,15 @@ import { StatusBadge } from "@/components/ui-extensions/StatusBadge";
 import { Shield, AlertTriangle, FileText, CheckCircle2 } from "lucide-react";
 import { ComplianceScorecard as ScorecardData } from "@/lib/compliance/scorecard";
 
+type AuditTrailRow = {
+  id: string;
+  agentType: string;
+  actionType: string;
+  outcome: string | null;
+  reasoning: string;
+  performedAt: Date | string;
+};
+
 interface ScorecardProps {
   clientId: string;
 }
@@ -28,7 +37,7 @@ interface ScorecardProps {
 export function ComplianceScorecard({ clientId }: ScorecardProps) {
   const [data, setData] = useState<{
     scorecard: ScorecardData;
-    auditTrail: any[];
+    auditTrail: AuditTrailRow[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
 

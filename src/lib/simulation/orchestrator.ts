@@ -1,9 +1,8 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/client";
 import { VaultService } from "@/lib/db/vault-service";
-import { DocumentStatus } from "@/lib/db/enums";
-import { SeededRandom, EntityFactory } from "./factory";
+import { SeededRandom, EntityFactory, type ClientProfile } from "./factory";
 import { MockAgent } from "./mock-agent";
-import { DOCUMENT_REGISTRY } from "@/lib/documents/registry";
 import { getComplianceAgent } from "@/agents/compliance/agent";
 import { getOnboardingAgent } from "@/agents/onboarding/agent";
 import { buildSharedTools } from "@/tools/shared";
@@ -31,7 +30,7 @@ export class SimulationOrchestrator {
         advisorResponseRate: params.advisorResponseRate,
         randomSeed: params.randomSeed || Math.random().toString(36).substring(7),
         status: "PENDING",
-        metrics: { useMockAgents: params.useMockAgents ?? true } as any
+        metrics: { useMockAgents: params.useMockAgents ?? true } as Prisma.InputJsonValue,
       },
     });
     return run;
@@ -44,7 +43,7 @@ export class SimulationOrchestrator {
     const batchesCompleted = run.batchesCompleted + 1;
     const isCompleted = batchesCompleted >= run.batchesTotal;
     
-    const data: any = {
+    const data: Prisma.SimulationRunUpdateInput = {
       batchesCompleted,
       status: isCompleted ? "COMPLETED" : "RUNNING",
     };
@@ -102,9 +101,13 @@ export class SimulationOrchestrator {
 
     const rng = new SeededRandom(`${run.randomSeed}-day-${currentDay}`);
     const factory = new EntityFactory(run.randomSeed, simDate);
-    const newDocs: any[] = [];
+    const newDocs: Prisma.DocumentCreateManyInput[] = [];
 
-    const useMock = !!(run.metrics && (run.metrics as any).useMockAgents);
+    const metricsJson =
+      run.metrics && typeof run.metrics === "object" && !Array.isArray(run.metrics)
+        ? (run.metrics as { useMockAgents?: boolean })
+        : {};
+    const useMock = !!metricsJson.useMockAgents;
     let complianceAgent: Awaited<ReturnType<typeof getComplianceAgent>> | null =
       null;
     let onboardingAgent: Awaited<ReturnType<typeof getOnboardingAgent>> | null =
@@ -117,12 +120,16 @@ export class SimulationOrchestrator {
     }
 
     for (const client of clients) {
-      const trigger: any = rng.next() < 0.05 ? "EVENT_UPLOAD" : "SCHEDULED";
-      
+      const trigger = rng.next() < 0.05 ? "EVENT_UPLOAD" : "SCHEDULED";
+
       // 1. Document Events
       if (trigger === "EVENT_UPLOAD") {
-        const profile = (client as any).profile || "MESSY";
-        const docs = factory.generateDocuments(client.id, profile as any).slice(0, 1);
+        const rawProfile = (client as { profile?: string }).profile;
+        const profile: ClientProfile =
+          rawProfile === "IDEAL" || rawProfile === "MESSY" || rawProfile === "HIGH_RISK"
+            ? rawProfile
+            : "MESSY";
+        const docs = factory.generateDocuments(client.id, profile).slice(0, 1);
         
         if (docs.length > 0) {
           newDocs.push({
@@ -130,7 +137,7 @@ export class SimulationOrchestrator {
             id: `${client.id}-SIM-${currentDay}`,
             status: "PENDING_REVIEW",
             uploadedAt: simDate,
-          });
+          } as Prisma.DocumentCreateManyInput);
         }
       }
 
@@ -141,24 +148,20 @@ export class SimulationOrchestrator {
         // Compliance (Mock)
         const compDec = await this.mockAgent.decide(vault, "COMPLIANCE", trigger);
         await vault.logAction({
-            agentType: "COMPLIANCE",
-            actionType: compDec.actionTaken,
-            trigger,
-            reasoning: compDec.reasoning,
-            escalationStage: compDec.escalationStage,
-            performedAt: simDate,
-        } as any);
+          agentType: "COMPLIANCE",
+          actionType: compDec.actionTaken,
+          trigger,
+          reasoning: compDec.reasoning,
+        });
 
         // Onboarding (Mock)
         const onbDec = await this.mockAgent.decide(vault, "ONBOARDING", trigger);
         await vault.logAction({
-            agentType: "ONBOARDING",
-            actionType: onbDec.actionTaken,
-            trigger,
-            reasoning: onbDec.reasoning,
-            onboardingStage: onbDec.onboardingStage,
-            performedAt: simDate,
-        } as any);
+          agentType: "ONBOARDING",
+          actionType: onbDec.actionTaken,
+          trigger,
+          reasoning: onbDec.reasoning,
+        });
       } else {
         // Real Mastra Agents (High Fidelity)
         console.log(`[Orchestrator] Executing REAL agents for client ${client.id} (Day ${currentDay})...`);
@@ -206,8 +209,15 @@ export class SimulationOrchestrator {
       }
     });
 
-    const metrics = {
-      ... (run.metrics as any || {}),
+    const baseMetrics =
+      run.metrics &&
+      typeof run.metrics === "object" &&
+      run.metrics !== null &&
+      !Array.isArray(run.metrics)
+        ? (run.metrics as Record<string, unknown>)
+        : {};
+    const metrics: Prisma.InputJsonObject = {
+      ...baseMetrics,
       documentStatusDistribution: documentStats,
       totalActionsTriggered: actionHistory,
       simulatedDaysProcessed: run.batchesCompleted,
@@ -215,7 +225,7 @@ export class SimulationOrchestrator {
 
     await prisma.simulationRun.update({
       where: { id: runId },
-      data: { metrics: metrics as any }
+      data: { metrics: metrics as Prisma.InputJsonValue },
     });
 
     return metrics;

@@ -15,7 +15,10 @@ export function SimulationRunList() {
       simulatedDays: number;
       batchesCompleted: number;
       batchesTotal: number;
-      metrics?: unknown;
+      metrics?: {
+        totalActionsTriggered?: number;
+        useMockAgents?: boolean;
+      } & Record<string, unknown>;
       startedAt: string;
       completedAt?: string | null;
     }>

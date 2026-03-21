@@ -4,7 +4,20 @@ import { AlertOctagon } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 
-export function EscalationQueuePanel({ escalations }: { escalations: any[] }) {
+export type EscalationListItem = {
+  id: string;
+  clientId: string;
+  client: { name: string };
+  reasoning: string;
+  stage: string;
+  performedAt: string;
+};
+
+export function EscalationQueuePanel({
+  escalations,
+}: {
+  escalations: EscalationListItem[];
+}) {
   return (
     <Card className="h-[500px] flex flex-col">
       <CardHeader className="border-b pb-4 shrink-0 bg-red-50/50">

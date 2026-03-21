@@ -5,6 +5,19 @@ import { prisma } from "@/lib/db/client";
 import { extractDocumentText } from "@/lib/documents/parser";
 import { queues } from "@/lib/queue/client";
 import type { DocumentCategory, DocumentType } from "@prisma/client";
+import { DocumentCategory as DocumentCategoryValues, DocumentType as DocumentTypeValues } from "@/lib/db/enums";
+
+function parseDocumentTypeField(raw: FormDataEntryValue | null): DocumentType {
+  const s = typeof raw === "string" ? raw : "";
+  const values = Object.values(DocumentTypeValues) as string[];
+  return (values.includes(s) ? s : "GOVERNMENT_ID") as DocumentType;
+}
+
+function parseDocumentCategoryField(raw: FormDataEntryValue | null): DocumentCategory {
+  const s = typeof raw === "string" ? raw : "";
+  const values = Object.values(DocumentCategoryValues) as string[];
+  return (values.includes(s) ? s : "IDENTITY") as DocumentCategory;
+}
 
 /**
  * POST /api/vaults/[clientId]/upload
@@ -12,16 +25,15 @@ import type { DocumentCategory, DocumentType } from "@prisma/client";
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
-  const { clientId } = params;
+  const { clientId } = await params;
 
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
-    // Cast to any then to enum type to satisfy prisma types from string input
-    const type = (formData.get("type") as string) as any as DocumentType || "GOVERNMENT_ID";
-    const category = (formData.get("category") as string) as any as DocumentCategory || "IDENTITY";
+    const type = parseDocumentTypeField(formData.get("type"));
+    const category = parseDocumentCategoryField(formData.get("category"));
 
     if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
@@ -75,7 +87,7 @@ export async function POST(
     });
 
   } catch (error) {
-    console.error("[Upload API] Error:", error);
+    console.error("[Cerebro][api][upload] Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error", details: error instanceof Error ? error.message : String(error) },
       { status: 500 }

@@ -4,8 +4,22 @@ import { queues } from "@/lib/queue/client";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type QueueCounts = {
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+};
+
+type AgentsStatusPayload = {
+  priorityQueue: QueueCounts;
+  scheduledQueue: QueueCounts;
+  simulationQueue: QueueCounts;
+};
+
 // Simple 1s in-memory cache to prevent Redis request limit hits from aggressive polling
-let cachedStatus: any = null;
+let cachedStatus: AgentsStatusPayload | null = null;
 let lastFetchTime = 0;
 const CACHE_TTL = 1000; // 1 second
 

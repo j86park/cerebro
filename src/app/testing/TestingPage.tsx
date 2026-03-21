@@ -54,6 +54,7 @@ export default function TestingPage({
         ? fresh.data
         : [];
       setRuns(list);
+      setMutationHistoryKey((k) => k + 1);
     } catch (err) {
       console.error(err);
       alert(

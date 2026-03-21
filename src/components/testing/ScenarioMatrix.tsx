@@ -3,7 +3,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, Minus } from "lucide-react";
-import { CHART_COLORS } from "@/lib/chart-colors";
 
 interface ScenarioMatrixProps {
   results: Record<

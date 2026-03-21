@@ -11,7 +11,7 @@ Cerebro is an autonomous AI agent system built for FutureVault. It contains two 
 ## Stack — Never Deviate From This
 - **Framework:** Next.js 15 App Router
 - **Language:** TypeScript — strict mode always on, no `any` types ever
-- **Agent Framework:** Mastra (`@mastra/core`, `@mastra/memory`, `@mastra/evals`)
+- **Agent Framework:** Mastra (`@mastra/core`, `@mastra/memory`) — eval scorers use `createScorer` from `@mastra/core/evals`
 - **AI Model Gateway:** OpenRouter via `@openrouter/ai-sdk-provider`
 - **Database:** PostgreSQL via Prisma ORM on Supabase
 - **Queue:** BullMQ with Redis (`REDIS_URL`, local Docker by default)

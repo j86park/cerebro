@@ -5,9 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui-extensions/StatusBadge";
 import { RealUploadDialog } from "@/components/vault/RealUploadDialog";
-import { Play, User, Building, Briefcase, FileText } from "lucide-react";
+import { Play, User, Building, Briefcase } from "lucide-react";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 type ProfileProps = {
   clientId: string;
@@ -21,7 +20,6 @@ type ProfileProps = {
 };
 
 export function ClientProfileCard({ profile }: { profile: ProfileProps }) {
-  const router = useRouter();
   const [triggering, setTriggering] = useState<string | null>(null);
 
   const handleTrigger = async (agentType: "COMPLIANCE" | "ONBOARDING") => {

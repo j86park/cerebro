@@ -51,7 +51,7 @@ export async function runAllEvals(
   const enforceThreshold = options?.enforceThreshold ?? false;
   const skipPersist = options?.skipPersist ?? false;
 
-  console.log(`Starting Evaluation Suite (Batch Size: ${batchSize})...`);
+  console.log(`[Cerebro][evals] Starting evaluation suite (batch size: ${batchSize})...`);
   const scenarios = [...complianceScenarios, ...onboardingScenarios];
   const scenarioResults: Record<string, ScenarioEvalRow> = {};
   const scorerBreakdown: Record<string, { total: number; passed: number }> = {};
@@ -69,13 +69,13 @@ export async function runAllEvals(
   }
 
   for (const chunk of chunks) {
-    console.log(`\n--- Processing Batch of ${chunk.length} Scenarios ---`);
+    console.log(`[Cerebro][evals] Processing batch of ${chunk.length} scenario(s)...`);
 
     await Promise.all(
       chunk.map(async (sc) => {
         try {
           console.log(
-            `Evaluating ${sc.agentType} scenario for client ${sc.clientId}...`
+            `[Cerebro][evals] Evaluating ${sc.agentType} scenario for client ${sc.clientId}...`
           );
           const vault = new VaultService({ clientId: sc.clientId });
           const sharedTools = buildSharedTools(vault);
@@ -105,7 +105,7 @@ export async function runAllEvals(
                 scores[scorer.id] = scorerResult as ScorerResultEntry;
               } catch (err) {
                 console.error(
-                  `  - [${scorer.id}] scorer failed on client ${sc.clientId}:`,
+                  `[Cerebro][evals] [${scorer.id}] scorer failed on client ${sc.clientId}:`,
                   err
                 );
                 scores[scorer.id] = { score: 0, reason: String(err) };
@@ -119,7 +119,7 @@ export async function runAllEvals(
             scores,
           };
         } catch (e) {
-          console.error(`  - FAILED scenario for ${sc.clientId}:`, e);
+          console.error(`[Cerebro][evals] FAILED scenario for ${sc.clientId}:`, e);
           const failScores: Record<string, ScorerResultEntry> = {};
           sc.scorers?.forEach((scorer) => {
             failScores[scorer.id] = {
@@ -156,14 +156,14 @@ export async function runAllEvals(
 
   const overallScore = maxScore > 0 ? totalScore / maxScore : 0;
   console.log(
-    `[Eval] Final Stats: totalScore=${totalScore}, maxScore=${maxScore}, overallScore=${overallScore}`
+    `[Cerebro][evals] Final stats: totalScore=${totalScore}, maxScore=${maxScore}, overallScore=${overallScore}`
   );
 
-  console.log(`\n========================================`);
+  console.log(`[Cerebro][evals] ========================================`);
   console.log(
-    `Eval Suite Completed. Overall Score: ${(overallScore * 100).toFixed(1)}%`
+    `[Cerebro][evals] Eval suite completed. Overall score: ${(overallScore * 100).toFixed(1)}%`
   );
-  console.log(`========================================`);
+  console.log(`[Cerebro][evals] ========================================`);
 
   let evalRun: { id: string } = { id: "dry-run" };
 
@@ -182,7 +182,7 @@ export async function runAllEvals(
       const decision = await getMutationEnqueueDecision();
       if (!decision.allowed) {
         console.warn(
-          `[Eval] Skipping mutation-analysis (${decision.reason}): ${decision.detail ?? ""}`
+          `[Cerebro][evals] Skipping mutation-analysis (${decision.reason}): ${decision.detail ?? ""}`
         );
       } else {
         try {
@@ -190,7 +190,7 @@ export async function runAllEvals(
           await recordMutationEnqueue();
         } catch (err) {
           console.error(
-            "[Eval] Failed to enqueue mutation-analysis job (is Redis running?):",
+            "[Cerebro][evals] Failed to enqueue mutation-analysis job (is Redis running?):",
             err
           );
         }
@@ -218,11 +218,12 @@ if (isMain) {
   const batchIdx = args.indexOf("--batch-size");
   const batchSize =
     batchIdx !== -1 ? parseInt(args[batchIdx + 1] ?? "3", 10) : 3;
+  const enforceThreshold = args.includes("--enforce-threshold");
 
-  runAllEvals(batchSize, { enforceThreshold: true })
+  runAllEvals(batchSize, { enforceThreshold })
     .then(() => process.exit(0))
     .catch((err) => {
-      console.error(err);
+      console.error("[Cerebro][evals]", err);
       process.exit(1);
     });
 }

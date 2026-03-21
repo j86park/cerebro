@@ -10,7 +10,7 @@ import { buildSharedTools } from "@/tools/shared";
 import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
 import { agentJobSchema } from "./jobs";
 
-import { connection, queues } from "./client";
+import { connection } from "./client";
 import { emitAgentRunComplete } from "@/lib/events/emit";
 import {
   recordJobCompleted,

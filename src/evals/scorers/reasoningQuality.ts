@@ -2,12 +2,22 @@ import { createScorer } from "@mastra/core/evals";
 import { generateText } from "ai";
 import { getModel } from "@/lib/config";
 
-function extractReasoningFromOutput(output: any): string {
+function extractReasoningFromOutput(output: unknown): string {
   if (typeof output === "string") return output;
-  if (output?.toolCalls && Array.isArray(output.toolCalls)) {
-    for (const call of output.toolCalls) {
-      if (call.name === "logAction" && call.args?.reasoning) {
-        return call.args.reasoning;
+  if (typeof output !== "object" || output === null) {
+    return "No reasoning explicitly logged.";
+  }
+  const rec = output as Record<string, unknown>;
+  const toolCalls = rec.toolCalls;
+  if (!Array.isArray(toolCalls)) return "No reasoning explicitly logged.";
+  for (const call of toolCalls) {
+    if (typeof call !== "object" || call === null) continue;
+    const c = call as Record<string, unknown>;
+    if (c.name === "logAction") {
+      const args = c.args;
+      if (typeof args === "object" && args !== null) {
+        const a = args as Record<string, unknown>;
+        if (typeof a.reasoning === "string") return a.reasoning;
       }
     }
   }
@@ -43,7 +53,7 @@ Respond with JSON only: { "score": 0.0-1.0, "reason": "brief explanation" }
   try {
     const parsed = JSON.parse(text);
     return parsed.score ?? 0.0;
-  } catch (e) {
+  } catch {
     return 0.0;
   }
 })
@@ -72,7 +82,7 @@ Respond with JSON only: { "score": 0.0-1.0, "reason": "brief explanation" }
   try {
     const parsed = JSON.parse(text);
     return parsed.reason ?? "LLM evaluation succeeded but returned no explicit reason.";
-  } catch (e) {
+  } catch {
     return `Failed to parse JSON from LLM: ${text}`;
   }
 });
