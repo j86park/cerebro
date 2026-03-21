@@ -17,11 +17,13 @@ Before you start, you need:
 - Node.js 18+
 - A [Supabase](https://supabase.com) project (free tier works) with Postgres
 - An [OpenRouter](https://openrouter.ai) API key
-- A Redis instance — [Upstash](https://upstash.com) free tier works, or run Redis locally with Docker:
+- A Redis instance — [Upstash](https://upstash.com) free tier works, or run Redis locally with Docker. This repo includes **`docker-compose-redis.yml`**; you need Redis running whenever you use the app with BullMQ (queue-backed agent runs, simulation API, dashboard queue status, workers). Start it before `npm run dev` if you use local Redis:
 
 ```bash
-docker run -d -p 6379:6379 redis:alpine
+docker compose -f docker-compose-redis.yml up -d
 ```
+
+To stop it later: `docker compose -f docker-compose-redis.yml down`. Alternatively: `docker run -d -p 6379:6379 redis:alpine` (same port as `REDIS_URL=redis://localhost:6379`).
 
 ## Quick Start
 
@@ -54,7 +56,17 @@ npm run db:seed
 
 Optional: load the larger demo dataset with `npm run seed` (uses `prisma/seed.ts`).
 
-### 4. Start the dev server
+### 4. Start Redis (local development)
+
+The Next.js server opens a Redis connection for BullMQ on startup. If nothing is listening on `REDIS_URL` (default `redis://localhost:6379`), you will see connection errors and queue-related features will not work.
+
+```bash
+docker compose -f docker-compose-redis.yml up -d
+```
+
+Use a cloud `REDIS_URL` in `.env.local` instead if you prefer not to run Docker.
+
+### 5. Start the dev server
 
 ```bash
 npm run dev
@@ -192,7 +204,7 @@ prisma/
 Run `npm run db:generate` (also runs on `postinstall`).
 
 **Redis connection refused**  
-Start Redis locally (`docker run -d -p 6379:6379 redis:alpine`) or set `REDIS_URL` to a cloud Redis URL.
+Start Redis: `docker compose -f docker-compose-redis.yml up -d` (see **Quick Start → step 4** above), or `docker run -d -p 6379:6379 redis:alpine`, or set `REDIS_URL` to a cloud Redis URL.
 
 **Eval suite fails immediately**  
 Ensure `DATABASE_URL` is set and migrations have run (`npm run db:migrate`).

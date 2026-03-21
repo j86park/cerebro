@@ -14,7 +14,34 @@ connection.on("connect", () =>
   console.log("[Cerebro][redis] Connection: CONNECTED")
 );
 connection.on("ready", () => console.log("[Cerebro][redis] Connection: READY"));
-connection.on("error", (err) => console.error("[Redis] Connection: ERROR", err));
+
+/** ioredis retries forever; in dev, ECONNREFUSED spams the console — throttle to one hint. */
+let lastRedisConnRefusedLogAt = 0;
+connection.on("error", (err) => {
+  const isRefused =
+    (err as NodeJS.ErrnoException).code === "ECONNREFUSED" ||
+    (typeof err === "object" &&
+      err !== null &&
+      "errors" in err &&
+      Array.isArray((err as AggregateError).errors) &&
+      (err as AggregateError).errors.some(
+        (e) => (e as NodeJS.ErrnoException).code === "ECONNREFUSED"
+      ));
+  if (
+    env.NODE_ENV === "development" &&
+    isRefused &&
+    Date.now() - lastRedisConnRefusedLogAt > 60_000
+  ) {
+    lastRedisConnRefusedLogAt = Date.now();
+    console.warn(
+      "[Redis] Connection refused (nothing listening on REDIS_URL). " +
+        "Start Redis, e.g. `docker compose -f docker-compose-redis.yml up -d`, " +
+        "or point REDIS_URL at a running instance. Queue/dashboard polling errors will repeat until Redis is up."
+    );
+    return;
+  }
+  console.error("[Redis] Connection: ERROR", err);
+});
 
 /** Standard retry config per database.mdc §Job Retry Configuration */
 const defaultJobOptions = {

@@ -10,7 +10,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "test": "vitest run",
-    "dev": "next dev",
+    "dev": "dotenv -e .env -e .env.local -o -- cross-env NODE_ENV=development next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -84,7 +84,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "concurrently": "^9.1.2",
+    "cross-env": "^10.1.0",
     "dotenv": "^17.3.1",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.21.0",
     "eslint-config-next": "^15.5.12",
     "prisma": "^5.22.0",
