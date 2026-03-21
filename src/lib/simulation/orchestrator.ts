@@ -4,8 +4,8 @@ import { DocumentStatus } from "@/lib/db/enums";
 import { SeededRandom, EntityFactory } from "./factory";
 import { MockAgent } from "./mock-agent";
 import { DOCUMENT_REGISTRY } from "@/lib/documents/registry";
-import { complianceAgent } from "@/agents/compliance/agent";
-import { onboardingAgent } from "@/agents/onboarding/agent";
+import { getComplianceAgent } from "@/agents/compliance/agent";
+import { getOnboardingAgent } from "@/agents/onboarding/agent";
 import { buildSharedTools } from "@/tools/shared";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
@@ -103,7 +103,19 @@ export class SimulationOrchestrator {
     const rng = new SeededRandom(`${run.randomSeed}-day-${currentDay}`);
     const factory = new EntityFactory(run.randomSeed, simDate);
     const newDocs: any[] = [];
-    
+
+    const useMock = !!(run.metrics && (run.metrics as any).useMockAgents);
+    let complianceAgent: Awaited<ReturnType<typeof getComplianceAgent>> | null =
+      null;
+    let onboardingAgent: Awaited<ReturnType<typeof getOnboardingAgent>> | null =
+      null;
+    if (!useMock) {
+      [complianceAgent, onboardingAgent] = await Promise.all([
+        getComplianceAgent(),
+        getOnboardingAgent(),
+      ]);
+    }
+
     for (const client of clients) {
       const trigger: any = rng.next() < 0.05 ? "EVENT_UPLOAD" : "SCHEDULED";
       
@@ -123,7 +135,6 @@ export class SimulationOrchestrator {
       }
 
       // 2. Real/Mock Agent Integration
-      const useMock = !!(run.metrics && (run.metrics as any).useMockAgents);
       const vault = new VaultService({ clientId: client.id });
       
       if (useMock) {
@@ -152,15 +163,15 @@ export class SimulationOrchestrator {
         // Real Mastra Agents (High Fidelity)
         console.log(`[Orchestrator] Executing REAL agents for client ${client.id} (Day ${currentDay})...`);
         const sharedTools = buildSharedTools(vault);
-        
+
         // Compliance
-        await complianceAgent.generate(`Process current vault state for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
+        await complianceAgent!.generate(`Process current vault state for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
           memory: { thread: client.id, resource: client.id },
           toolsets: { shared: sharedTools, compliance: buildComplianceTools(vault) }
         });
 
         // Onboarding
-        await onboardingAgent.generate(`Determine onboarding progress for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
+        await onboardingAgent!.generate(`Determine onboarding progress for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
           memory: { thread: client.id, resource: client.id },
           toolsets: { shared: sharedTools, onboarding: buildOnboardingTools(vault) }
         });

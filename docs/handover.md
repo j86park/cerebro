@@ -138,7 +138,7 @@ Milestones not started (based on implementation files currently present):
 ## 8. Where To Start Next
 - Next milestone: Milestone 2 — Infrastructure (Queues, Workers, Event System).
 - First task (internal dependency order): create queue primitives first.
-  1. Create `src/lib/queue/client.ts` with Upstash Redis connection and three queues.
+  1. Create `src/lib/queue/client.ts` with Redis (`REDIS_URL`, local Docker) and three queues.
   2. Create `src/lib/queue/jobs.ts` with strong TS types + Zod payload schemas.
   3. Create `src/lib/queue/workers.ts` with retry/backoff and placeholder run dispatcher.
 - Then create event/webhook and manual trigger API handlers:

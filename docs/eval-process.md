@@ -916,8 +916,8 @@ import { env } from "@/lib/config";
 import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
 
 // BullMQ requires maxRetriesPerRequest to be null
-const isTls = env.UPSTASH_REDIS_URL.startsWith("rediss://");
-export const connection = new Redis(env.UPSTASH_REDIS_URL, {
+const isTls = env.REDIS_URL.startsWith("rediss://");
+export const connection = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
   ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
 });
@@ -958,7 +958,7 @@ export const queues = {
 ```
 
 - **Workers**: `src/lib/queue/workers.ts` — **`Worker`**, **`Job`** from **`bullmq`**, **`Redis`** from **`ioredis`** (same connection pattern).
-- **Env**: the app uses **`UPSTASH_REDIS_URL`** (and optional token in config), **not** `REDIS_URL`. See `.env.example`.
+- **Env**: BullMQ uses **`REDIS_URL`** (local Docker default `redis://localhost:6379`). See `.env.example`.
 
 ---
 
@@ -996,9 +996,8 @@ if (env.NODE_ENV !== "production") {
 
 ## 9. Environment variables (reference)
 
-- Authoritative template: **`.env.example`** (committed). Typical keys include **`DATABASE_URL`**, **`UPSTASH_REDIS_URL`**, **`UPSTASH_REDIS_TOKEN`**, Supabase URLs/keys, **`OPENROUTER_API_KEY`**, **`RESEND_API_KEY`**, **`DEMO_DATE`**, model tiers, **`DRY_RUN`**, **`NODE_ENV`**, **`WEBHOOK_SECRET`**, optional **`MASTRA_PG_POOL_MAX`**.
+- Authoritative template: **`.env.example`** (committed). Typical keys include **`DATABASE_URL`**, **`REDIS_URL`**, Supabase URLs/keys, **`OPENROUTER_API_KEY`**, **`RESEND_API_KEY`**, **`DEMO_DATE`**, model tiers, **`DRY_RUN`**, **`NODE_ENV`**, **`WEBHOOK_SECRET`**, optional **`MASTRA_PG_POOL_MAX`**.
 - **`src/lib/config.ts`** also defines optional **`GITHUB_SHA`**, **`CRON_SECRET`**, **`SUPABASE_SERVICE_ROLE_KEY`**, **`NEXT_PUBLIC_*`**, etc.
-- **`REDIS_URL`**: **not** used; use **`UPSTASH_REDIS_URL`**.
 - **Embedding-specific keys**: **none** in the standard env schema documented in `.env.example`.
 
 ---

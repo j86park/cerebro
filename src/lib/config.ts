@@ -22,8 +22,11 @@ const databaseUrlSchema = z
 
 const envSchema = z.object({
   DATABASE_URL: databaseUrlSchema,
-  UPSTASH_REDIS_URL: z.string().url().default("redis://localhost:6379"),
-  UPSTASH_REDIS_TOKEN: z.string().optional(),
+  /**
+   * BullMQ / ioredis — local Docker is the supported setup (e.g. redis://localhost:6379).
+   * Password, if any, belongs in the URL (redis://:secret@host:6379).
+   */
+  REDIS_URL: z.string().url().default("redis://localhost:6379"),
   SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
   SUPABASE_ANON_KEY: z.string().default("dev-anon-key"),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
@@ -50,6 +53,18 @@ const envSchema = z.object({
    * Keep low on Supabase (pooler has a small per-user cap; Prisma uses a separate pool).
    */
   MASTRA_PG_POOL_MAX: z.coerce.number().int().min(1).max(30).default(5),
+  /**
+   * Self-correcting prompt pipeline: max gate rejections in a row before enqueue is blocked
+   * (reset on promotion). Set 0 to disable the rejection cap (not recommended in prod).
+   */
+  MUTATION_MAX_CONSECUTIVE_REJECTIONS: z.coerce.number().int().min(0).max(100).default(3),
+  /** Minimum minutes between mutation-analysis enqueues (0 = no cooldown). */
+  MUTATION_COOLDOWN_MINUTES: z.coerce.number().int().min(0).max(10_080).default(5),
+  /**
+   * When rejection cap is hit, block new enqueues until this many hours pass (0 = block until DB reset).
+   * REGULATORY: prevents runaway LLM spend while humans inspect prompts.
+   */
+  MUTATION_CIRCUIT_PAUSE_HOURS: z.coerce.number().int().min(0).max(8760).default(24),
 });
 
 export const env = envSchema.parse(process.env);

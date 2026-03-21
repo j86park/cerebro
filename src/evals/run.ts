@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { complianceScenarios } from "./scenarios/compliance.eval";
 import { onboardingScenarios } from "./scenarios/onboarding.eval";
-import { complianceAgent } from "@/agents/compliance/agent";
-import { onboardingAgent } from "@/agents/onboarding/agent";
+import { getComplianceAgent } from "@/agents/compliance/agent";
+import { getOnboardingAgent } from "@/agents/onboarding/agent";
 import { VaultService } from "@/lib/db/vault-service";
 import { buildSharedTools } from "@/tools/shared";
 import { buildComplianceTools } from "@/tools/compliance";
@@ -10,6 +10,11 @@ import { buildOnboardingTools } from "@/tools/onboarding";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
 import { assertEvalOverallScore } from "@/evals/threshold";
+import {
+  getMutationEnqueueDecision,
+  recordMutationEnqueue,
+} from "@/lib/mutation-circuit";
+import { mutationAnalysisQueue } from "@/workers/queues";
 
 type ScorerResultEntry = { score?: number; reason?: string };
 
@@ -23,7 +28,13 @@ export type ScenarioEvalRow = {
 export type RunEvalsOptions = {
   /** When true, throws if overall score is below the milestone threshold (CLI / CI). */
   enforceThreshold?: boolean;
+  /** Skip `EvalRun` persistence — used by shadow evals so history stays clean. */
+  skipPersist?: boolean;
 };
+
+function scenarioHasFailure(row: ScenarioEvalRow): boolean {
+  return Object.values(row.scores).some((s) => (s.score ?? 0) < 1);
+}
 
 /**
  * Runs all compliance + onboarding eval scenarios, persists an `EvalRun`, and optionally enforces score gate.
@@ -38,6 +49,7 @@ export async function runAllEvals(
   evalRunId: string;
 }> {
   const enforceThreshold = options?.enforceThreshold ?? false;
+  const skipPersist = options?.skipPersist ?? false;
 
   console.log(`Starting Evaluation Suite (Batch Size: ${batchSize})...`);
   const scenarios = [...complianceScenarios, ...onboardingScenarios];
@@ -45,6 +57,11 @@ export async function runAllEvals(
   const scorerBreakdown: Record<string, { total: number; passed: number }> = {};
   let totalScore = 0;
   let maxScore = 0;
+
+  const [complianceAgent, onboardingAgent] = await Promise.all([
+    getComplianceAgent(),
+    getOnboardingAgent(),
+  ]);
 
   const chunks: (typeof scenarios)[] = [];
   for (let i = 0; i < scenarios.length; i += batchSize) {
@@ -148,20 +165,49 @@ export async function runAllEvals(
   );
   console.log(`========================================`);
 
-  const evalRun = await prisma.evalRun.create({
-    data: {
-      gitCommit: env.GITHUB_SHA ?? "local",
-      overallScore,
-      scenarioResults: scenarioResults as unknown as Prisma.InputJsonValue,
-      scorerBreakdown: scorerBreakdown as unknown as Prisma.InputJsonValue,
-    },
-  });
+  let evalRun: { id: string } = { id: "dry-run" };
+
+  if (!skipPersist) {
+    evalRun = await prisma.evalRun.create({
+      data: {
+        gitCommit: env.GITHUB_SHA ?? "local",
+        overallScore,
+        scenarioResults: scenarioResults as unknown as Prisma.InputJsonValue,
+        scorerBreakdown: scorerBreakdown as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    const anyFailed = Object.values(scenarioResults).some(scenarioHasFailure);
+    if (anyFailed) {
+      const decision = await getMutationEnqueueDecision();
+      if (!decision.allowed) {
+        console.warn(
+          `[Eval] Skipping mutation-analysis (${decision.reason}): ${decision.detail ?? ""}`
+        );
+      } else {
+        try {
+          await mutationAnalysisQueue.add("analyze", { evalRunId: evalRun.id });
+          await recordMutationEnqueue();
+        } catch (err) {
+          console.error(
+            "[Eval] Failed to enqueue mutation-analysis job (is Redis running?):",
+            err
+          );
+        }
+      }
+    }
+  }
 
   if (enforceThreshold) {
     assertEvalOverallScore(overallScore);
   }
 
-  return { overallScore, scenarioResults, scorerBreakdown, evalRunId: evalRun.id };
+  return {
+    overallScore,
+    scenarioResults,
+    scorerBreakdown,
+    evalRunId: evalRun.id,
+  };
 }
 
 const argvScript = process.argv[1]?.replace(/\\/g, "/") ?? "";

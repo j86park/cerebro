@@ -167,7 +167,7 @@ The model used at any point is a configuration value, not hardcoded. Switching f
 
 **`BullMQ`** — Redis-backed job queue for managing scheduled agent runs, follow-up timing, and the time-compressed simulation engine. Critical for the compliance agent which needs to check vaults on a schedule and re-check clients at defined intervals (e.g., "if no response in 5 days, run again"). BullMQ handles job persistence, retries on failure, and delayed execution reliably.
 
-**`Upstash Redis`** — Serverless Redis instance backing BullMQ. Serverless because the demo runs on Vercel which is serverless — a traditional Redis instance would require separate infrastructure.
+**`Redis`** — Backing store for BullMQ. The Cerebro codebase uses **`REDIS_URL`** (default `redis://localhost:6379`); **local Docker** is the standard development setup. Production may use any Redis-compatible host (including managed/serverless providers) without code changes beyond the URL.
 
 ### Notifications
 
@@ -193,7 +193,7 @@ The model used at any point is a configuration value, not hardcoded. Switching f
 | Validation | Zod | Schema enforcement throughout |
 | Database | PostgreSQL via Prisma on Supabase | Vault data, documents, action logs |
 | Real-time | Supabase Realtime + Webhooks | Live dashboard updates + event-driven agent triggers |
-| Job Queue | BullMQ + Upstash Redis | Agent scheduling, event-driven triggers, follow-ups |
+| Job Queue | BullMQ + Redis (`REDIS_URL`) | Agent scheduling, event-driven triggers, follow-ups |
 | Email | Resend | Mock notifications |
 | Testing | Vitest + `@mastra/evals` | Agent quality measurement |
 | Deployment | Vercel | Public demo URL |

@@ -8,7 +8,7 @@
 - Milestone 1: Foundation (Schema, Seed, Config, VaultService)
 
 ## Phase 2 — Infrastructure (COMPLETE)
-- Goal: Create Upstash Redis + BullMQ connection for three queues. Create strongly typed job payloads, workers with backoff policies. Implement webhook triggers and manual trigger API handlers.
+- Goal: Create Redis (`REDIS_URL`) + BullMQ connection for three queues. Create strongly typed job payloads, workers with backoff policies. Implement webhook triggers and manual trigger API handlers.
 
 ## Phase 3 — Agents (COMPLETE)
 - Goal: Create compliance and onboarding Mastra agents with scoped memory threads.

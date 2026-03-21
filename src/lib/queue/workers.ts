@@ -1,7 +1,8 @@
 import { Worker, Job } from "bullmq";
-import Redis from "ioredis";
 import { env } from "@/lib/config";
-import { cerebro } from "@/agents/mastra";
+import { getCerebro } from "@/agents/mastra";
+import "@/workers/mutation-analysis.worker";
+import "@/workers/shadow-runner.worker";
 import { VaultService } from "@/lib/db/vault-service";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
@@ -61,6 +62,7 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
 
   const agentName =
     agentType === "COMPLIANCE" ? "complianceAgent" : "onboardingAgent";
+  const cerebro = await getCerebro();
   const agent = cerebro.getAgent(agentName);
 
   const agentSpecificTools =

@@ -13,12 +13,15 @@ export type EvalScenario = {
   agentType: keyof typeof AgentType;
   trigger: keyof typeof TriggerType;
   expected: ExpectedOutcome;
+  /** Regression gate: deterministic scenarios that must stay at 100% pass rate after prompt mutations. */
+  canary?: boolean;
 };
 
 export const GROUND_TRUTH: EvalScenario[] = [
   // CLT-001: Brand new TFSA client, Day 1. No docs.
   {
     clientId: "CLT-001",
+    canary: true,
     agentType: "ONBOARDING",
     trigger: "SCHEDULED",
     expected: {
@@ -41,6 +44,7 @@ export const GROUND_TRUTH: EvalScenario[] = [
   // CLT-003: KYC expired 60 days ago, full escalation history. Due today.
   {
     clientId: "CLT-003",
+    canary: true,
     agentType: "COMPLIANCE",
     trigger: "SCHEDULED",
     expected: {
@@ -64,6 +68,7 @@ export const GROUND_TRUTH: EvalScenario[] = [
   // CLT-005: Fully compliant.
   {
     clientId: "CLT-005",
+    canary: true,
     agentType: "COMPLIANCE",
     trigger: "SCHEDULED",
     expected: {
@@ -364,3 +369,8 @@ export const GROUND_TRUTH: EvalScenario[] = [
     },
   },
 ];
+
+/** Client IDs used as the canary partition for mutation regression gates. */
+export const CANARY_CLIENT_IDS = new Set<string>(
+  GROUND_TRUTH.filter((g) => g.canary === true).map((g) => g.clientId)
+);

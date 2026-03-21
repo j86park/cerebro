@@ -28,7 +28,7 @@ FutureVault and their enterprise wealth management clients (demonstrating how st
 - **Language**: TypeScript with Zod validation
 - **Database**: PostgreSQL (via Supabase)
 - **ORM**: Prisma
-- **Job Scheduling**: BullMQ + Upstash Redis
+- **Job Scheduling**: BullMQ + Redis (`REDIS_URL`, local Docker)
 - **Notifications**: Resend (Email API)
 - **Testing**: Vitest + `@mastra/evals`
 - **Deployment**: Vercel

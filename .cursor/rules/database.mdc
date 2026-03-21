@@ -165,16 +165,16 @@ defaultJobOptions: {
 }
 ```
 
-### Upstash Redis Connection
-```typescript
-// CORRECT — use this pattern for Vercel serverless compatibility
-const connection = new IORedis(env.UPSTASH_REDIS_URL, {
-  maxRetriesPerRequest: null,  // required for BullMQ
-  tls: { rejectUnauthorized: false },
-})
+### Redis connection (local Docker)
 
-// WRONG — standard Redis won't work on Vercel serverless
-const connection = new IORedis(env.REDIS_URL)
+BullMQ uses **`REDIS_URL`** from `src/lib/config.ts` (default `redis://localhost:6379`). Enable TLS only when the URL uses `rediss://`.
+
+```typescript
+const isTls = env.REDIS_URL.startsWith("rediss://");
+const connection = new IORedis(env.REDIS_URL, {
+  maxRetriesPerRequest: null, // required for BullMQ
+  ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
+});
 ```
 
 ## Supabase Realtime Rules

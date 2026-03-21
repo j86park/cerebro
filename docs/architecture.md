@@ -45,7 +45,7 @@ Cerebro is a two-agent autonomous document management system built on top of a r
 │  ┌──────────────────────────────────────▼─────────────────┐ │
 │  │                    DATA LAYER                           │ │
 │  │                                                         │ │
-│  │  PostgreSQL (Supabase)    BullMQ (Upstash Redis)        │ │
+│  │  PostgreSQL (Supabase)    BullMQ (Redis, local Docker)   │ │
 │  │  - Vault data             - Priority queue (events)     │ │
 │  │  - Documents              - Scheduled queue (scans)     │ │
 │  │  - Action logs            - Simulation queue            │ │
@@ -110,12 +110,14 @@ cerebro/
 │   │   │   ├── client.ts        ← Prisma client singleton
 │   │   │   └── vault-service.ts ← ALL db access goes through here
 │   │   ├── queue/
-│   │   │   ├── client.ts        ← BullMQ + Upstash Redis setup
+│   │   │   ├── client.ts        ← BullMQ + Redis (`REDIS_URL`) setup
 │   │   │   ├── workers.ts       ← queue worker definitions
 │   │   │   └── jobs.ts          ← job type definitions
 │   │   ├── email/
 │   │   │   └── resend.ts
 │   │   └── config.ts            ← MODEL, DEMO_DATE, all env vars
+│   ├── workers/                 ← BullMQ: mutation-analysis, shadow-run (self-correcting prompts)
+│   ├── workflows/               ← Meta-agent async pipeline (taxonomy + mutate; not Mastra Workflow)
 │   ├── simulation/
 │   │   ├── engine.ts
 │   │   ├── generator.ts         ← synthetic client generator
@@ -372,7 +374,7 @@ Priority queue jobs always execute before scheduled queue jobs. A client uploadi
 
 ```typescript
 // src/lib/queue/client.ts
-const connection = new IORedis(env.UPSTASH_REDIS_URL, {
+const connection = new IORedis(env.REDIS_URL, {
   maxRetriesPerRequest: null  // required for BullMQ
 })
 
@@ -511,8 +513,7 @@ import { z } from "zod"
 
 const envSchema = z.object({
   DATABASE_URL:          z.string().url(),
-  UPSTASH_REDIS_URL:     z.string().url(),
-  UPSTASH_REDIS_TOKEN:   z.string(),
+  REDIS_URL:             z.string().url(),
   SUPABASE_URL:          z.string().url(),
   SUPABASE_ANON_KEY:     z.string(),
   OPENROUTER_API_KEY:    z.string(),

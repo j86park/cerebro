@@ -4,8 +4,8 @@ import { env } from "@/lib/config";
 import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
 
 // BullMQ requires maxRetriesPerRequest to be null
-const isTls = env.UPSTASH_REDIS_URL.startsWith("rediss://");
-export const connection = new Redis(env.UPSTASH_REDIS_URL, {
+const isTls = env.REDIS_URL.startsWith("rediss://");
+export const connection = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
   ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
 });

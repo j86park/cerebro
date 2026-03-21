@@ -94,7 +94,7 @@ Database, config, and client-scoped VaultService are live, and seeded mock data 
 ## Milestone 2 — Infrastructure (Queues, Workers, Event System)
 
 ### SCOPE
-- Create `src/lib/queue/client.ts` for Upstash Redis + BullMQ connection and three queues (`cerebro-priority`, `cerebro-scheduled`, `cerebro-simulation`).
+- Create `src/lib/queue/client.ts` for Redis (`REDIS_URL`) + BullMQ connection and three queues (`cerebro-priority`, `cerebro-scheduled`, `cerebro-simulation`).
 - Create `src/lib/queue/jobs.ts` with typed job payloads and parallel Zod schemas for enqueue validation.
 - Create `src/lib/queue/workers.ts` with separate workers, concurrency/rate limits, retries, and agent-run wrapper hooks.
 - Create `src/lib/events/emit.ts` (or equivalent) to publish completion events to realtime layer.

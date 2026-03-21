@@ -17,7 +17,7 @@
 | **PostgreSQL (Supabase)** | Database | Relational model is correct for firm/advisor/client/doc relationships; Supabase provides realtime triggers. |
 | **Prisma** | ORM | TS-first ORM; auto-generates types from schema. |
 | **BullMQ** | Job Scheduling | Essential for delayed execution, event queues, and time-compressed simulation worker. |
-| **Upstash Redis** | Queue Store | Serverless Redis backing for BullMQ; works on Vercel deployment. |
+| **Redis** | Queue Store | BullMQ backing via **`REDIS_URL`**; local Docker in dev, any compatible host in prod. |
 | **Resend** | Notifications | Modern email API for mock advisor alerts and client requests. |
 | **Vitest** | Testing | Fast TS-native runner for unit tests and Mastra integrations. |
 | **Vercel** | Deployment | Zero-config deployment for the Next.js application. |
@@ -29,6 +29,6 @@
 | **Mastra Framework** | Free | 100% open source under the Apache 2.0 license. Zero cost. |
 | **Vercel** | Free / Pro | Frontend hosting and zero-config deployment. Fits inside basic tiers. |
 | **Supabase** | Free / Pro | Database and real-time sockets. Fits inside generous free tiers for demo traffic. |
-| **Upstash Redis** | Free Tier | Pay-per-request model fits within free tier. |
+| **Redis** | Local / hosted | Local Docker has no vendor cap; managed Redis pricing varies by provider. |
 | **Resend** | Free Tier | Free tier easily covers the demo volume of transactional emails. |
 | **OpenRouter (LLM)** | Paid | Uses cheap tier (e.g. Gemini 2.0 Flash or Haiku). A 10,000-client real LLM simulation costs a few dollars. Using Mock Agent for ultra-scale cuts this to $0. Total API cost overall is estimated to be extremely low. |

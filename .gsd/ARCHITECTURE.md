@@ -25,7 +25,7 @@ Cerebro is a two-agent autonomous document management system built on top of a r
 │  ┌──────────────────────────────────────▼─────────────────┐ │
 │  │                    DATA LAYER                           │ │
 │  │                                                         │ │
-│  │  PostgreSQL (Supabase)    BullMQ (Upstash Redis)        │ │
+│  │  PostgreSQL (Supabase)    BullMQ (Redis, local Docker)   │ │
 │  │  - Vault data             - Priority queue (events)     │ │
 │  │  - Documents              - Scheduled queue (scans)     │ │
 │  │  - Action logs            - Simulation queue            │ │
@@ -88,7 +88,7 @@ cerebro/
 │   │   │   ├── client.ts        ← Prisma client singleton
 │   │   │   └── vault-service.ts ← ALL db access goes through here
 │   │   ├── queue/
-│   │   │   ├── client.ts        ← BullMQ + Upstash Redis setup
+│   │   │   ├── client.ts        ← BullMQ + Redis (`REDIS_URL`) setup
 │   │   │   ├── workers.ts       ← queue worker definitions
 │   │   │   └── jobs.ts          ← job type definitions
 │   │   ├── email/

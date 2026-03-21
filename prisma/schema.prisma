@@ -106,6 +106,84 @@ model EvalRun {
   runAt           DateTime @default(now())
 }
 
+model PromptVersion {
+  id              String   @id @default(cuid())
+  agentId         String
+  content         String
+  parentVersionId String?
+  isActive        Boolean  @default(false)
+  mutationReason  String?
+  createdAt       DateTime @default(now())
+
+  parent   PromptVersion? @relation("PromptLineage", fields: [parentVersionId], references: [id])
+  children PromptVersion[] @relation("PromptLineage")
+
+  candidateForJobs PromptMutationJob[] @relation("MutationJobCandidate")
+
+  @@index([agentId, isActive])
+}
+
+model PromptMutationJob {
+  id                  String   @id @default(cuid())
+  agentId             String
+  triggerEvalRunId    String
+  taxonomy            Json
+  status              String   @default("pending")
+  candidateVersionId  String?
+  consecutiveFailures Int      @default(0)
+  expectedShadowRuns  Int      @default(3)
+  candidateVersionIds String[] @default([])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  candidateVersion PromptVersion?    @relation("MutationJobCandidate", fields: [candidateVersionId], references: [id])
+  shadowRunResults ShadowRunResult[]
+
+  @@index([agentId, status])
+}
+
+model ShadowRunResult {
+  id                 String   @id @default(cuid())
+  mutationJobId      String
+  candidateVersionId String?
+  targetDelta        Float
+  corpusDelta        Float
+  canaryDelta        Float
+  overallDelta       Float
+  gateDecision       String   @default("pending")
+  scoreBreakdown     Json
+  createdAt          DateTime @default(now())
+
+  mutationJob PromptMutationJob @relation(fields: [mutationJobId], references: [id])
+
+  @@index([mutationJobId])
+}
+
+model PromptLesson {
+  id              String    @id @default(cuid())
+  agentId         String
+  failureType     String
+  triggerPattern  String
+  lessonText      String
+  passedGate      Boolean   @default(false)
+  appliedCount    Int       @default(0)
+  regressionCount Int       @default(0)
+  lastValidatedAt DateTime?
+  sourceJobId     String?
+  createdAt       DateTime  @default(now())
+
+  @@index([agentId, passedGate])
+}
+
+// Singleton row id = singleton: guardrails for mutation-analysis loops and runaway LLM cost.
+model PromptMutationCircuitState {
+  id                    String    @id @default("singleton")
+  consecutiveRejections Int       @default(0)
+  lastEnqueueAt         DateTime?
+  blockedUntil          DateTime?
+  updatedAt             DateTime  @updatedAt
+}
+
 enum AccountType {
   RRSP
   TFSA

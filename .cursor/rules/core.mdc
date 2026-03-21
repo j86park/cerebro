@@ -14,7 +14,7 @@ Cerebro is an autonomous AI agent system built for FutureVault. It contains two 
 - **Agent Framework:** Mastra (`@mastra/core`, `@mastra/memory`, `@mastra/evals`)
 - **AI Model Gateway:** OpenRouter via `@openrouter/ai-sdk-provider`
 - **Database:** PostgreSQL via Prisma ORM on Supabase
-- **Queue:** BullMQ with Upstash Redis
+- **Queue:** BullMQ with Redis (`REDIS_URL`, local Docker by default)
 - **UI:** Tailwind CSS v4 + shadcn/ui components
 - **Charts:** Recharts
 - **Email:** Resend

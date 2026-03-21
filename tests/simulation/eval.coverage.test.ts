@@ -19,20 +19,38 @@ const { mockScorers } = vi.hoisted(() => {
 
 vi.mock("@/evals/scorers", () => mockScorers);
 
+vi.mock("@/workers/queues", () => ({
+  mutationAnalysisQueue: {
+    add: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock("@/lib/mutation-circuit", () => ({
+  getMutationEnqueueDecision: vi.fn().mockResolvedValue({
+    allowed: true,
+    reason: "ok",
+  }),
+  recordMutationEnqueue: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { runAllEvals } from "../../src/evals/run";
 import { complianceScenarios } from "../../src/evals/scenarios/compliance.eval";
 import { onboardingScenarios } from "../../src/evals/scenarios/onboarding.eval";
 
 // Mocking other dependencies
-vi.mock("../../src/agents/compliance/agent", () => ({
-  complianceAgent: {
-    generate: vi.fn(() => Promise.resolve({ text: "Compliance action taken" })),
-  },
+vi.mock("@/agents/compliance/agent", () => ({
+  getComplianceAgent: vi.fn(() =>
+    Promise.resolve({
+      generate: vi.fn(() => Promise.resolve({ text: "Compliance action taken" })),
+    })
+  ),
 }));
-vi.mock("../../src/agents/onboarding/agent", () => ({
-  onboardingAgent: {
-    generate: vi.fn(() => Promise.resolve({ text: "Onboarding action taken" })),
-  },
+vi.mock("@/agents/onboarding/agent", () => ({
+  getOnboardingAgent: vi.fn(() =>
+    Promise.resolve({
+      generate: vi.fn(() => Promise.resolve({ text: "Onboarding action taken" })),
+    })
+  ),
 }));
 vi.mock("@/lib/db/vault-service", () => ({
   VaultService: vi.fn().mockImplementation(function() {
@@ -49,6 +67,12 @@ vi.mock("@/lib/db/client", () => ({
   prisma: {
     evalRun: {
       create: vi.fn().mockResolvedValue({ id: "eval-1" }),
+    },
+    promptVersion: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    promptLesson: {
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }));

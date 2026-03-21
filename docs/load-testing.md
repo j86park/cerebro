@@ -5,7 +5,7 @@ This runbook supports **10k+ client** simulation smoke tests and operator expect
 ## Prerequisites
 
 - PostgreSQL reachable via `DATABASE_URL`
-- Upstash Redis for BullMQ (`UPSTASH_REDIS_URL`)
+- Local Redis (Docker) for BullMQ (`REDIS_URL`, default `redis://localhost:6379`)
 - Workers running: `npx tsx scripts/start-workers.ts` (or your process manager)
 - Optional: seed baseline demo data (`npm run seed`)
 
@@ -28,7 +28,7 @@ npx tsx scripts/benchmark-report.ts > benchmark-latest.md
 
 ## Teardown
 
-- Purge failed jobs in Redis if needed (Upstash console).
+- Purge failed jobs in Redis if needed (`redis-cli`, Docker exec, or a desktop GUI against your local instance).
 - For local DB resets: `npm run reset-demo` (restores seeded documents, clients, and non-runtime actions).
 
 ## Deployment note

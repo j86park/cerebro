@@ -7,6 +7,7 @@ import { EvalOverview } from "@/components/testing/EvalOverview";
 import { RegressionTracker } from "@/components/testing/RegressionTracker";
 import { ScorerBreakdown } from "@/components/testing/ScorerBreakdown";
 import { ScenarioMatrix } from "@/components/testing/ScenarioMatrix";
+import { MutationHistory } from "@/components/testing/MutationHistory";
 import { FailureInspector } from "@/components/testing/FailureInspector";
 import { GROUND_TRUTH } from "@/evals/ground-truth";
 
@@ -38,6 +39,7 @@ export default function TestingPage({
     clientId: string;
     scorerId: string;
   } | null>(null);
+  const [mutationHistoryKey, setMutationHistoryKey] = useState(0);
 
   const latestRun = runs[0];
 
@@ -150,6 +152,8 @@ export default function TestingPage({
               />
             </div>
           </div>
+
+          <MutationHistory key={mutationHistoryKey} />
 
           <FailureInspector
             isOpen={!!selectedCell}
