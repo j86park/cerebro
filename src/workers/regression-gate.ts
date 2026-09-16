@@ -4,6 +4,7 @@ import {
   recordMutationPromoted,
   recordMutationRejected,
 } from "@/lib/mutation-circuit";
+import { setEnvironmentPointer } from "@/lib/prompt-ops";
 import { taxonomyReportSchema, type TaxonomyReport } from "@/workflows/types";
 
 type GateDecision =
@@ -75,18 +76,16 @@ export async function evaluateGate(mutationJobId: string): Promise<void> {
       throw new Error("evaluateGate: promoted run missing candidateVersionId");
     }
 
-    await prisma.$transaction([
-      prisma.promptVersion.updateMany({
-        where: { agentId: job.agentId, isActive: true },
-        data: { isActive: false },
-      }),
-      prisma.promptVersion.update({
-        where: { id: best.candidateVersionId },
-        data: { isActive: true },
-      }),
-    ]);
+    // REGULATORY: mutation gate promotes to STAGING only — never unsupervised production.
+    await setEnvironmentPointer({
+      agentId: job.agentId === "onboarding" ? "onboarding" : "compliance",
+      environment: "STAGING",
+      promptVersionId: best.candidateVersionId,
+    });
+    // Keep runtime on production `isActive`; staging pointer holds the candidate for human promote.
     invalidateAgent(job.agentId);
 
+    // REGULATORY: lessons are append-only creates — never update/delete existing lesson text.
     for (const f of taxonomy.findings) {
       await prisma.promptLesson.create({
         data: {

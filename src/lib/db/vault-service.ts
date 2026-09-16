@@ -3,6 +3,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
 import { EscalationStatus, LedgerActor, OnboardingStatus } from "@/lib/db/enums";
+import {
+  agentTypeToPromptAgentId,
+  resolveProductionPromptVersionId,
+} from "@/lib/prompt-ops";
 
 const vaultContextSchema = z.object({
   clientId: z.string().min(1),
@@ -169,11 +173,31 @@ export class VaultService {
   /**
    * Writes an append-only ActionLedger entry scoped to this vault.
    * When `idempotencyKey` is set, a prior row for the same key is returned (no-op) instead of inserting again.
+   * Resolves production `promptVersionId` when the caller omits it (version-on-audit).
    */
   async logAction(
     input: LogActionInput,
   ): Promise<Record<string, unknown> & { duplicate: boolean; id: string }> {
     const parsed = logActionInputSchema.parse(input);
+
+    let promptVersionId = parsed.promptVersionId;
+    if (!promptVersionId) {
+      const promptAgentId = agentTypeToPromptAgentId(parsed.agentType);
+      if (promptAgentId) {
+        try {
+          promptVersionId =
+            (await resolveProductionPromptVersionId(promptAgentId)) ??
+            undefined;
+        } catch (error: unknown) {
+          // Unit stubs / missing prompt tables must not block ledger writes.
+          console.error(
+            "[VaultService.logAction] promptVersionId resolve failed:",
+            error instanceof Error ? error.message : error,
+          );
+        }
+      }
+    }
+
     const data = {
       documentId: parsed.documentId,
       agentType: parsed.agentType,
@@ -184,7 +208,7 @@ export class VaultService {
       nextScheduledAt: parsed.nextScheduledAt,
       stage: parsed.stage,
       policyVersion: parsed.policyVersion,
-      promptVersionId: parsed.promptVersionId,
+      promptVersionId,
       actor: parsed.actor ?? LedgerActor.AGENT,
       reasonCodes: parsed.reasonCodes ?? [],
       citedFields: parsed.citedFields,
