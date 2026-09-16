@@ -38,4 +38,12 @@ describe("prisma migrations (smoke)", () => {
     );
     expect(existsSync(migrationFile)).toBe(true);
   });
+
+  it("has committed EscalationState hitlContext migration SQL", () => {
+    const migrationFile = resolve(
+      process.cwd(),
+      "prisma/migrations/20260316210000_escalation_hitl_context/migration.sql"
+    );
+    expect(existsSync(migrationFile)).toBe(true);
+  });
 });

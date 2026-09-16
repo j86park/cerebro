@@ -146,6 +146,8 @@ model EscalationState {
   openKey       String?
   reasonCodes   String[]         @default([])
   policyVersion String?
+  /// Durable HITL payload (Mastra workflowRunId, tool, reasoning) while PENDING_APPROVAL / SAFE_HOLD.
+  hitlContext   Json?
   openedAt      DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   resolvedAt    DateTime?

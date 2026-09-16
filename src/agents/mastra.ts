@@ -1,6 +1,7 @@
 import { Mastra } from "@mastra/core";
 import { getComplianceAgent } from "./compliance/agent";
 import { getOnboardingAgent } from "./onboarding/agent";
+import { complianceHitlApprovalWorkflow } from "./workflows/complianceHitl.workflow";
 import { mastraPostgres } from "@/lib/mastra-postgres";
 import { registerCerebroMemoClear } from "@/lib/agent-runtime-registry";
 import { createCerebroObservability } from "@/lib/observability/mastra-tracing";
@@ -10,6 +11,7 @@ let _initPromise: Promise<Mastra> | null = null;
 
 /**
  * Lazily constructs the shared `Mastra` instance after async prompt load for both agents.
+ * Registers the compliance HITL suspend/resume workflow for durable advisor approvals.
  * Enables Mastra AI Tracing (DefaultExporter + SensitiveDataFilter) when configured.
  */
 export async function getCerebro(): Promise<Mastra> {
@@ -25,6 +27,9 @@ export async function getCerebro(): Promise<Mastra> {
         agents: {
           complianceAgent,
           onboardingAgent,
+        },
+        workflows: {
+          complianceHitlApproval: complianceHitlApprovalWorkflow,
         },
         storage: mastraPostgres.mainStore,
         ...(observability ? { observability } : {}),

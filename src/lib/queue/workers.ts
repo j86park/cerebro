@@ -9,12 +9,22 @@ import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildSharedTools } from "@/tools/shared";
 import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
-import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
+import { processHitlResumeFromEscalation } from "@/lib/hitl/resume";
+import type {
+  AgentJobPayload,
+  HitlResumeJobPayload,
+  HitlTimeoutJobPayload,
+  PriorityJobPayload,
+  SimulationJobPayload,
+} from "./jobs";
 import {
   AGENT_JOB_COMPLETED_OUTCOME,
   AGENT_JOB_SKIPPED_OUTCOME,
   agentJobSchema,
   demoDateKey,
+  hitlResumeJobSchema,
+  hitlTimeoutJobSchema,
+  isHitlQueueJob,
 } from "./jobs";
 
 import { connection } from "./client";
@@ -108,10 +118,61 @@ function extractToolNames(result: unknown): string[] {
 }
 
 /**
+ * Processes HITL resume or timeout jobs for durable advisor approvals.
+ */
+export async function processHitlJob(
+  job: Job<HitlResumeJobPayload | HitlTimeoutJobPayload>,
+) {
+  const kind = (job.data as { kind?: string }).kind;
+  if (kind === "hitl_timeout") {
+    const parsed = hitlTimeoutJobSchema.parse(job.data);
+    console.log(
+      `[Worker] HITL timeout job ${job.id} for client ${parsed.clientId} run=${parsed.workflowRunId}`,
+    );
+    const vault = new VaultService({ clientId: parsed.clientId });
+    const result = await processHitlResumeFromEscalation({
+      vault,
+      clientId: parsed.clientId,
+      openKey: parsed.openKey,
+      decision: "timeout",
+    });
+    return { success: true, ...result };
+  }
+
+  const parsed = hitlResumeJobSchema.parse(job.data);
+  console.log(
+    `[Worker] HITL resume job ${job.id} decision=${parsed.decision} client=${parsed.clientId}`,
+  );
+  const vault = new VaultService({ clientId: parsed.clientId });
+  const result = await processHitlResumeFromEscalation({
+    vault,
+    clientId: parsed.clientId,
+    openKey: parsed.openKey,
+    decision: parsed.decision,
+    editedReasoning: parsed.editedReasoning,
+    advisorId: parsed.advisorId,
+  });
+  return { success: true, ...result };
+}
+
+/**
+ * Priority queue processor: routes HITL resume/timeout vs agent runs.
+ */
+async function processPriorityJob(job: Job<PriorityJobPayload>) {
+  if (isHitlQueueJob(job.data)) {
+    return processHitlJob(
+      job as Job<HitlResumeJobPayload | HitlTimeoutJobPayload>,
+    );
+  }
+  return processAgentJob(job as Job<AgentJobPayload>);
+}
+
+/**
  * Processes an agent job: instantiates VaultService, builds scoped tools,
  * fetches the correct agent, and runs it with proper memory scoping + AI Tracing tags.
  * Skips re-execution when a successful completion marker already exists for this
  * logical job (queue jobId dedupe + processor-level idempotency).
+ * Approve-class tools suspend via HITL workflow — this job completes without blocking.
  */
 export async function processAgentJob(job: Job<AgentJobPayload>) {
   const parsed = agentJobSchema.parse(job.data);
@@ -372,7 +433,7 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
 }
 
 type WorkerBundle = {
-  priority: Worker<AgentJobPayload>;
+  priority: Worker<PriorityJobPayload>;
   scheduled: Worker<AgentJobPayload>;
   simulation: Worker<SimulationJobPayload>;
 };
@@ -384,9 +445,9 @@ const isVitest = process.env.VITEST === "true";
 export const workers: WorkerBundle = isVitest
   ? ({} as WorkerBundle)
   : {
-      priority: new Worker<AgentJobPayload>(
+      priority: new Worker<PriorityJobPayload>(
         "cerebro-priority",
-        processAgentJob,
+        processPriorityJob,
         {
           connection: connection as never,
           concurrency: 5,

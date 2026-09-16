@@ -162,6 +162,7 @@ model EscalationState {
   openKey       String?
   reasonCodes   String[]         @default([])
   policyVersion String?
+  hitlContext   Json?
   openedAt      DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   resolvedAt    DateTime?

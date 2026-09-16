@@ -217,7 +217,16 @@ describe("processAgentJob processor idempotency", () => {
   it("runs agent once when no completion marker exists", async () => {
     const generate = vi.fn().mockResolvedValue({ text: "ok" });
     const logAction = vi.fn().mockResolvedValue({});
+    const logDecision = vi.fn().mockResolvedValue({ id: "dec-1" });
     const hasCompletedAgentJob = vi.fn().mockResolvedValue(false);
+    const getOnboardingStageState = vi.fn().mockResolvedValue({ stage: 1 });
+    const getDocumentContentForAgent = vi.fn().mockResolvedValue({
+      documentId: "doc-1",
+      type: "ID",
+      text: "safe",
+      strippedPatterns: [],
+      agentContextBlock: "<<<UNTRUSTED_DOCUMENT doc-1>>>\nsafe\n<<<END>>>",
+    });
 
     vi.doMock("@/agents/mastra", () => ({
       getCerebro: vi.fn().mockResolvedValue({
@@ -228,7 +237,21 @@ describe("processAgentJob processor idempotency", () => {
       VaultService: class {
         hasCompletedAgentJob = hasCompletedAgentJob;
         logAction = logAction;
+        logDecision = logDecision;
+        getOnboardingStageState = getOnboardingStageState;
+        getDocumentContentForAgent = getDocumentContentForAgent;
       },
+    }));
+    vi.doMock("@/lib/policy/toolAllowlists", () => ({
+      assertAgentToolAllowlist: vi.fn(),
+    }));
+    vi.doMock("@/lib/observability/mastra-tracing", () => ({
+      buildJobTracingContext: vi.fn(() => ({
+        requestContext: {},
+        tracingOptions: {},
+        traceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        contentCaptured: false,
+      })),
     }));
     vi.doMock("@/tools/compliance", () => ({
       buildComplianceTools: vi.fn(() => ({})),
@@ -244,6 +267,12 @@ describe("processAgentJob processor idempotency", () => {
     }));
     vi.doMock("@/lib/queue/client", () => ({
       connection: { on: vi.fn() },
+    }));
+    vi.doMock("@/lib/queue/clientMemory", () => ({
+      buildClientMemoryScope: vi.fn(() => ({
+        resource: "CLT-001",
+        thread: "CLT-001",
+      })),
     }));
     vi.doMock("@/workers/mutation-analysis.worker", () => ({}));
     vi.doMock("@/workers/shadow-runner.worker", () => ({}));
@@ -261,7 +290,11 @@ describe("processAgentJob processor idempotency", () => {
       },
     } as never);
 
-    expect(result).toEqual({ success: true, text: "ok" });
+    expect(result).toEqual({
+      success: true,
+      text: "ok",
+      traceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    });
     expect(generate).toHaveBeenCalledTimes(1);
     expect(logAction).toHaveBeenCalledWith(
       expect.objectContaining({ outcome: AGENT_JOB_COMPLETED_OUTCOME })
