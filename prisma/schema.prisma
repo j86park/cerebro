@@ -44,6 +44,7 @@ model Client {
   createdAt        DateTime         @default(now())
   documents        Document[]
   agentActions     AgentAction[]
+  decisionRecords  DecisionRecord[]
   escalationStates EscalationState[]
   onboardingStageState OnboardingStage?
 }
@@ -97,6 +98,39 @@ model AgentAction {
   @@unique([clientId, idempotencyKey])
   @@index([clientId, performedAt])
   @@index([agentType, actionType])
+}
+
+/// Examiner system-of-record decision log (WP-P0.6). Correlates with Mastra AI Tracing via traceId.
+/// One logical GenAI trace per BullMQ job; multiple DecisionRecord rows may share the same jobId/traceId.
+model DecisionRecord {
+  id              String   @id @default(cuid())
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id])
+  jobId           String
+  agentName       String
+  stage           Int?
+  /// Mastra / GenAI trace id shared across spans for this job (hex, ≤32 chars).
+  traceId         String
+  policyVersion   String?
+  /// Policy rule or matrix cell that fired (e.g. stage×tool mode).
+  policyFired     String?
+  toolProposed    String[] @default([])
+  toolExecuted    String[] @default([])
+  refusalCodes    String[] @default([])
+  /// Human reviewer identity when applicable (advisor id / email); null for autonomous outcomes.
+  reviewer        String?
+  outcome         String
+  reason          String
+  promptVersionId String?
+  /// True only when prompt/completion content was opted into capture for this decision.
+  contentCaptured Boolean  @default(false)
+  metadata        Json?
+  decidedAt       DateTime @default(now())
+
+  @@index([clientId, decidedAt])
+  @@index([jobId])
+  @@index([traceId])
+  @@index([clientId, jobId])
 }
 
 /// Durable escalation ladder state — authority for open escalations (not Mastra memory).
@@ -163,6 +197,7 @@ model PromptVersion {
   agentId         String
   content         String
   parentVersionId String?
+  /// Runtime active flag used by shadow eval swaps; production pointer is the product SoR.
   isActive        Boolean  @default(false)
   mutationReason  String?
   createdAt       DateTime @default(now())
@@ -172,8 +207,28 @@ model PromptVersion {
 
   candidateForJobs PromptMutationJob[] @relation("MutationJobCandidate")
   agentActions     AgentAction[]
+  environmentPointers PromptEnvironmentPointer[] @relation("PointerCurrent")
+  previousEnvironmentPointers PromptEnvironmentPointer[] @relation("PointerPrevious")
 
   @@index([agentId, isActive])
+}
+
+/// Movable env label (staging / production) per agent — immutable PromptVersion rows stay append-only.
+model PromptEnvironmentPointer {
+  id                      String            @id @default(cuid())
+  agentId                 String
+  environment             PromptEnvironment
+  promptVersionId         String
+  /// Prior production/staging target for one-step rollback without redeploy.
+  previousPromptVersionId String?
+  updatedAt               DateTime          @updatedAt
+  createdAt               DateTime          @default(now())
+
+  promptVersion         PromptVersion  @relation("PointerCurrent", fields: [promptVersionId], references: [id])
+  previousPromptVersion PromptVersion? @relation("PointerPrevious", fields: [previousPromptVersionId], references: [id])
+
+  @@unique([agentId, environment])
+  @@index([promptVersionId])
 }
 
 model PromptMutationJob {
@@ -314,6 +369,10 @@ enum TriggerType {
   EVENT_UPLOAD
   MANUAL
   SIMULATION
+  EVENT_EXPIRY_PROXIMITY
+  EVENT_RISK_TIER_CHANGE
+  EVENT_PROFILE_MATERIAL_CHANGE
+  EVENT_SANCTIONS_PEP
 }
 
 enum RiskProfile {
@@ -346,4 +405,10 @@ enum EscalationStatus {
   RESOLVED
   TIMED_OUT
   SAFE_HOLD
+}
+
+/// Movable prompt release labels — versions are immutable; pointers move.
+enum PromptEnvironment {
+  STAGING
+  PRODUCTION
 }

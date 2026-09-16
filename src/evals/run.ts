@@ -7,9 +7,11 @@ import { VaultService } from "@/lib/db/vault-service";
 import { buildSharedTools } from "@/tools/shared";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
+import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
+import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
-import { assertEvalOverallScore } from "@/evals/threshold";
+import { assertEvalReleaseGates } from "@/evals/threshold";
 import {
   getMutationEnqueueDecision,
   recordMutationEnqueue,
@@ -30,6 +32,8 @@ export type RunEvalsOptions = {
   enforceThreshold?: boolean;
   /** Skip `EvalRun` persistence — used by shadow evals so history stays clean. */
   skipPersist?: boolean;
+  /** When set, only run scenarios whose clientId is in this set (canary pass^k trials). */
+  clientIds?: readonly string[];
 };
 
 function scenarioHasFailure(row: ScenarioEvalRow): boolean {
@@ -50,9 +54,13 @@ export async function runAllEvals(
 }> {
   const enforceThreshold = options?.enforceThreshold ?? false;
   const skipPersist = options?.skipPersist ?? false;
+  const clientIdFilter =
+    options?.clientIds !== undefined ? new Set(options.clientIds) : null;
 
   console.log(`[Cerebro][evals] Starting evaluation suite (batch size: ${batchSize})...`);
-  const scenarios = [...complianceScenarios, ...onboardingScenarios];
+  const scenarios = [...complianceScenarios, ...onboardingScenarios].filter((sc) =>
+    clientIdFilter === null ? true : clientIdFilter.has(sc.clientId)
+  );
   const scenarioResults: Record<string, ScenarioEvalRow> = {};
   const scorerBreakdown: Record<string, { total: number; passed: number }> = {};
   let totalScore = 0;
@@ -79,16 +87,26 @@ export async function runAllEvals(
           );
           const vault = new VaultService({ clientId: sc.clientId });
           const sharedTools = buildSharedTools(vault);
+          const domainTools =
+            sc.agentType === "COMPLIANCE"
+              ? buildComplianceTools(vault)
+              : buildOnboardingTools(vault);
+          const domain =
+            sc.agentType === "COMPLIANCE" ? "compliance" : "onboarding";
+          assertAgentToolAllowlist(domain, [
+            ...Object.keys(sharedTools),
+            ...Object.keys(domainTools),
+          ]);
 
           const agent =
             sc.agentType === "COMPLIANCE" ? complianceAgent : onboardingAgent;
           const toolsets =
             sc.agentType === "COMPLIANCE"
-              ? { shared: sharedTools, compliance: buildComplianceTools(vault) }
-              : { shared: sharedTools, onboarding: buildOnboardingTools(vault) };
+              ? { shared: sharedTools, compliance: domainTools }
+              : { shared: sharedTools, onboarding: domainTools };
 
           const result = await agent.generate(sc.input, {
-            memory: { thread: sc.clientId, resource: sc.clientId },
+            memory: buildClientMemoryScope(sc.clientId),
             toolsets: toolsets as never,
           });
 
@@ -199,7 +217,8 @@ export async function runAllEvals(
   }
 
   if (enforceThreshold) {
-    assertEvalOverallScore(overallScore);
+    // Hard canary gates (escalation / onboarding / duplicate) fail closed before soft average.
+    assertEvalReleaseGates(overallScore, scenarioResults);
   }
 
   return {

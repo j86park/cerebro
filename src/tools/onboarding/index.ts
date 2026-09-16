@@ -1,4 +1,5 @@
 import type { VaultService } from "@/lib/db/vault-service";
+import { assertDomainToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildGetOnboardingStatus } from "./getOnboardingStatus";
 import { buildRequestDocument } from "./requestDocument";
 import { buildValidateDocumentReceived } from "./validateDocumentReceived";
@@ -15,8 +16,11 @@ export {
   buildAlertAdvisorStuck,
 };
 
+/**
+ * Builds the onboarding domain toolset and asserts the agent tool allowlist.
+ */
 export function buildOnboardingTools(vault: VaultService) {
-  return {
+  const tools = {
     getOnboardingStatus: buildGetOnboardingStatus(vault),
     requestDocument: buildRequestDocument(vault),
     validateDocumentReceived: buildValidateDocumentReceived(vault),
@@ -24,4 +28,6 @@ export function buildOnboardingTools(vault: VaultService) {
     completeOnboarding: buildCompleteOnboarding(vault),
     alertAdvisorStuck: buildAlertAdvisorStuck(vault),
   };
+  assertDomainToolAllowlist("onboarding", Object.keys(tools));
+  return tools;
 }

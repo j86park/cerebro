@@ -22,7 +22,16 @@ const inputSchema = z.object({
     ])
     .describe("The type of action being logged"),
   trigger: z
-    .enum(["SCHEDULED", "EVENT_UPLOAD", "MANUAL", "SIMULATION"])
+    .enum([
+      "SCHEDULED",
+      "EVENT_UPLOAD",
+      "MANUAL",
+      "SIMULATION",
+      "EVENT_EXPIRY_PROXIMITY",
+      "EVENT_RISK_TIER_CHANGE",
+      "EVENT_PROFILE_MATERIAL_CHANGE",
+      "EVENT_SANCTIONS_PEP",
+    ])
     .describe("What triggered this action"),
   reasoning: z
     .string()

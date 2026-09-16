@@ -8,6 +8,7 @@ import { getOnboardingAgent } from "@/agents/onboarding/agent";
 import { buildSharedTools } from "@/tools/shared";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
+import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 
 export interface SimulationParams {
   clientCount: number;
@@ -166,16 +167,17 @@ export class SimulationOrchestrator {
         // Real Mastra Agents (High Fidelity)
         console.log(`[Orchestrator] Executing REAL agents for client ${client.id} (Day ${currentDay})...`);
         const sharedTools = buildSharedTools(vault);
+        const memory = buildClientMemoryScope(client.id);
 
         // Compliance
         await complianceAgent!.generate(`Process current vault state for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
-          memory: { thread: client.id, resource: client.id },
+          memory,
           toolsets: { shared: sharedTools, compliance: buildComplianceTools(vault) }
         });
 
         // Onboarding
         await onboardingAgent!.generate(`Determine onboarding progress for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
-          memory: { thread: client.id, resource: client.id },
+          memory,
           toolsets: { shared: sharedTools, onboarding: buildOnboardingTools(vault) }
         });
       }

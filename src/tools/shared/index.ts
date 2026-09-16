@@ -1,4 +1,5 @@
 import type { VaultService } from "@/lib/db/vault-service";
+import { SHARED_TOOL_ALLOWLIST } from "@/lib/policy/toolAllowlists";
 import { buildGetClientProfile } from "./getClientProfile";
 import { buildGetActionHistory } from "./getActionHistory";
 import { buildLogAction } from "./logAction";
@@ -11,11 +12,26 @@ export {
   buildSendAdvisorAlert,
 };
 
+/**
+ * Builds shared tools available to both agents; keys must match SHARED_TOOL_ALLOWLIST.
+ */
 export function buildSharedTools(vault: VaultService) {
-  return {
+  const tools = {
     getClientProfile: buildGetClientProfile(vault),
     getActionHistory: buildGetActionHistory(vault),
     logAction: buildLogAction(vault),
     sendAdvisorAlert: buildSendAdvisorAlert(vault),
   };
+  const keys = Object.keys(tools);
+  for (const name of SHARED_TOOL_ALLOWLIST) {
+    if (!keys.includes(name)) {
+      throw new Error(`Shared tool allowlist missing builder for "${name}"`);
+    }
+  }
+  for (const name of keys) {
+    if (!(SHARED_TOOL_ALLOWLIST as readonly string[]).includes(name)) {
+      throw new Error(`Shared tool "${name}" is not on SHARED_TOOL_ALLOWLIST`);
+    }
+  }
+  return tools;
 }

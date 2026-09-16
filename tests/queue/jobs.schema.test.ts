@@ -12,6 +12,43 @@ describe("Queue Job Schemas", () => {
     expect(agentJobSchema.safeParse(invalid).success).toBe(false);
   });
 
+  it("requires documentId for EVENT_UPLOAD", () => {
+    expect(
+      agentJobSchema.safeParse({
+        clientId: "CLT-123",
+        agentType: "ONBOARDING",
+        trigger: "EVENT_UPLOAD",
+      }).success
+    ).toBe(false);
+    expect(
+      agentJobSchema.safeParse({
+        clientId: "CLT-123",
+        agentType: "ONBOARDING",
+        trigger: "EVENT_UPLOAD",
+        documentId: "doc-1",
+      }).success
+    ).toBe(true);
+  });
+
+  it("accepts pKYC-lite trigger payloads with required keys", () => {
+    expect(
+      agentJobSchema.safeParse({
+        clientId: "CLT-123",
+        agentType: "COMPLIANCE",
+        trigger: "EVENT_EXPIRY_PROXIMITY",
+        documentId: "doc-1",
+      }).success
+    ).toBe(true);
+    expect(
+      agentJobSchema.safeParse({
+        clientId: "CLT-123",
+        agentType: "COMPLIANCE",
+        trigger: "EVENT_RISK_TIER_CHANGE",
+        eventKey: "MODERATE-to-AGGRESSIVE",
+      }).success
+    ).toBe(true);
+  });
+
   it("validates valid SimulationJobPayload", () => {
     const valid = { runId: "run-123", batchStart: 0, batchEnd: 50 };
     expect(simulationJobSchema.safeParse(valid).success).toBe(true);
