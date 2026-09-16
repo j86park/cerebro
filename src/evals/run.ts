@@ -11,7 +11,7 @@ import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
-import { assertEvalOverallScore } from "@/evals/threshold";
+import { assertEvalReleaseGates } from "@/evals/threshold";
 import {
   getMutationEnqueueDecision,
   recordMutationEnqueue,
@@ -32,6 +32,8 @@ export type RunEvalsOptions = {
   enforceThreshold?: boolean;
   /** Skip `EvalRun` persistence — used by shadow evals so history stays clean. */
   skipPersist?: boolean;
+  /** When set, only run scenarios whose clientId is in this set (canary pass^k trials). */
+  clientIds?: readonly string[];
 };
 
 function scenarioHasFailure(row: ScenarioEvalRow): boolean {
@@ -52,9 +54,13 @@ export async function runAllEvals(
 }> {
   const enforceThreshold = options?.enforceThreshold ?? false;
   const skipPersist = options?.skipPersist ?? false;
+  const clientIdFilter =
+    options?.clientIds !== undefined ? new Set(options.clientIds) : null;
 
   console.log(`[Cerebro][evals] Starting evaluation suite (batch size: ${batchSize})...`);
-  const scenarios = [...complianceScenarios, ...onboardingScenarios];
+  const scenarios = [...complianceScenarios, ...onboardingScenarios].filter((sc) =>
+    clientIdFilter === null ? true : clientIdFilter.has(sc.clientId)
+  );
   const scenarioResults: Record<string, ScenarioEvalRow> = {};
   const scorerBreakdown: Record<string, { total: number; passed: number }> = {};
   let totalScore = 0;
@@ -211,7 +217,8 @@ export async function runAllEvals(
   }
 
   if (enforceThreshold) {
-    assertEvalOverallScore(overallScore);
+    // Hard canary gates (escalation / onboarding / duplicate) fail closed before soft average.
+    assertEvalReleaseGates(overallScore, scenarioResults);
   }
 
   return {

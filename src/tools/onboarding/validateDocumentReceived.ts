@@ -1,7 +1,8 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
-import { env } from "@/lib/config";
+import { addDemoDays } from "@/lib/dates/demo-date";
+import { validateDocumentDeterministic } from "@/lib/documents/checklist";
 
 const inputSchema = z.object({
   documentId: z
@@ -14,21 +15,32 @@ const outputSchema = z.object({
   documentType: z.string(),
   status: z.string(),
   notes: z.string(),
+  gapReason: z.string().nullable(),
+  daysUntilExpiry: z.number().nullable(),
+  expired: z.boolean(),
+  staleRecency: z.boolean(),
 });
 
+/**
+ * Builds validateDocumentReceived with DEMO_DATE expiry/recency validators.
+ */
 export function buildValidateDocumentReceived(vault: VaultService) {
   return createTool({
     id: "validateDocumentReceived",
     description:
-      "Validates that an uploaded document exists in the vault and checks its current status. Does NOT auto-update the status — the agent decides what to do next based on the result.",
+      "Validates that an uploaded document exists and passes deterministic DEMO_DATE expiry/recency rules. Does NOT auto-update status — the agent decides next steps from the result.",
     inputSchema,
     outputSchema,
     execute: async (inputData) => {
       const { documentId } = inputData;
 
-      const documents = (await vault.getDocuments()) as Array<
-        Record<string, unknown>
-      >;
+      const documents = (await vault.getDocuments()) as Array<{
+        id: string;
+        type: string;
+        status: string;
+        expiryDate?: Date | string | null;
+        uploadedAt?: Date | string | null;
+      }>;
       const doc = documents.find((d) => d.id === documentId);
 
       if (!doc) {
@@ -37,30 +49,41 @@ export function buildValidateDocumentReceived(vault: VaultService) {
           documentType: "UNKNOWN",
           status: "NOT_FOUND",
           notes: `Document ${documentId} not found in this client's vault.`,
+          gapReason: "MISSING",
+          daysUntilExpiry: null,
+          expired: false,
+          staleRecency: false,
         };
       }
 
-      const status = doc.status as string;
-      const isValid =
-        status === "VALID" || status === "PENDING_REVIEW";
+      const result = validateDocumentDeterministic(doc, doc.type);
 
-      // Always log the action
       await vault.logAction({
         agentType: "ONBOARDING",
         actionType: "VALIDATE_DOCUMENT",
         trigger: "EVENT_UPLOAD",
-        reasoning: `Validated document ${doc.type}. Status is ${status}.`,
-        outcome: isValid ? "DOCUMENT_VALID" : "DOCUMENT_INVALID",
-        nextScheduledAt: new Date(new Date(env.DEMO_DATE).getTime() + 1 * 24 * 60 * 60 * 1000), // check again tomorrow if needed
+        reasoning: `Validated document ${doc.type}. Status=${result.status}; expired=${result.expired}; staleRecency=${result.staleRecency}.`,
+        outcome: result.valid ? "DOCUMENT_VALID" : "DOCUMENT_INVALID",
+        nextScheduledAt: addDemoDays(1),
+        documentId,
+        reasonCodes: result.valid
+          ? ["VALIDATOR_PASS"]
+          : ["VALIDATOR_FAIL", result.gapReason ?? "UNKNOWN"],
+        citedFields: {
+          daysUntilExpiry: result.daysUntilExpiry,
+          gapReason: result.gapReason,
+        },
       });
 
       return {
-        valid: isValid,
-        documentType: doc.type as string,
-        status,
-        notes: isValid
-          ? `Document ${doc.type} is present with status ${status}.`
-          : `Document ${doc.type} has status ${status} — may need review.`,
+        valid: result.valid,
+        documentType: result.documentType,
+        status: result.status,
+        notes: result.notes,
+        gapReason: result.gapReason,
+        daysUntilExpiry: result.daysUntilExpiry,
+        expired: result.expired,
+        staleRecency: result.staleRecency,
       };
     },
   });

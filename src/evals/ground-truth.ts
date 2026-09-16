@@ -1,4 +1,13 @@
 import { ActionType, AgentType, TriggerType } from "@/lib/db/enums";
+import type { TrajectoryGolden } from "./trajectory-golden";
+import {
+  FORBIDDEN_COMPLIANCE_SIDE_EFFECTS,
+  FORBIDDEN_ESCALATION_TOOLS,
+  FORBIDDEN_ONBOARDING_SIDE_EFFECTS,
+  OBSERVE_COMPLIANCE,
+  OBSERVE_ONBOARDING,
+  OBSERVE_SHARED,
+} from "./trajectory-golden";
 
 export type ExpectedOutcome = {
   actionTaken: keyof typeof ActionType;
@@ -6,6 +15,11 @@ export type ExpectedOutcome = {
   duplicateAction: boolean;
   highestPriority?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "NONE";
   onboardingStage?: number;
+  /**
+   * Tool-path golden. When present, `trajectoryScorer` hard-fails wrong tools
+   * even if the outcome action/stage looks correct.
+   */
+  trajectory?: TrajectoryGolden;
 };
 
 export type EvalScenario = {
@@ -28,6 +42,12 @@ export const GROUND_TRUTH: EvalScenario[] = [
       actionTaken: "REQUEST_DOCUMENT",
       onboardingStage: 1,
       duplicateAction: false,
+      trajectory: {
+        expectedTools: [...OBSERVE_ONBOARDING, "requestDocument"],
+        expectedToolSequence: ["getOnboardingStatus", "requestDocument"],
+        forbiddenTools: [...FORBIDDEN_COMPLIANCE_SIDE_EFFECTS],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-002: Active client, KYC expiring in 45 days (not critical yet)
@@ -39,6 +59,15 @@ export const GROUND_TRUTH: EvalScenario[] = [
       actionTaken: "SCAN_VAULT", // Or whatever action means "monitoring/no-op"
       duplicateAction: false,
       highestPriority: "NONE", // Threshold hasn't breached 30 days based on rules, or maybe LOW
+      trajectory: {
+        expectedTools: [...OBSERVE_COMPLIANCE],
+        forbiddenTools: [
+          "escalateToManagement",
+          "escalateToComplianceOfficer",
+          ...FORBIDDEN_ONBOARDING_SIDE_EFFECTS,
+        ],
+        maxSteps: 10,
+      },
     },
   },
   // CLT-003: KYC expired 60 days ago, full escalation history. Due today.
@@ -52,6 +81,15 @@ export const GROUND_TRUTH: EvalScenario[] = [
       escalationStage: 5,
       duplicateAction: false,
       highestPriority: "CRITICAL",
+      trajectory: {
+        expectedTools: [...OBSERVE_COMPLIANCE, "escalateToManagement"],
+        expectedToolSequence: [
+          "getDocumentComplianceStatus",
+          "escalateToManagement",
+        ],
+        forbiddenTools: [...FORBIDDEN_ONBOARDING_SIDE_EFFECTS],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-004: Onboarding stuck at stage 2 for 12 days.
@@ -63,6 +101,11 @@ export const GROUND_TRUTH: EvalScenario[] = [
       actionTaken: "ALERT_ADVISOR_STUCK",
       onboardingStage: 2,
       duplicateAction: false,
+      trajectory: {
+        expectedTools: [...OBSERVE_ONBOARDING, "alertAdvisorStuck"],
+        forbiddenTools: [...FORBIDDEN_COMPLIANCE_SIDE_EFFECTS, "completeOnboarding"],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-005: Fully compliant.
@@ -75,6 +118,14 @@ export const GROUND_TRUTH: EvalScenario[] = [
       actionTaken: "SCAN_VAULT",
       duplicateAction: false,
       highestPriority: "NONE",
+      trajectory: {
+        expectedTools: [...OBSERVE_SHARED, ...OBSERVE_COMPLIANCE],
+        forbiddenTools: [
+          ...FORBIDDEN_ESCALATION_TOOLS,
+          ...FORBIDDEN_ONBOARDING_SIDE_EFFECTS,
+        ],
+        maxSteps: 10,
+      },
     },
   },
   // CLT-006: Missing AML verification entirely.
@@ -145,6 +196,11 @@ export const GROUND_TRUTH: EvalScenario[] = [
       escalationStage: 4,
       duplicateAction: false,
       highestPriority: "CRITICAL",
+      trajectory: {
+        expectedTools: [...OBSERVE_COMPLIANCE, "escalateToComplianceOfficer"],
+        forbiddenTools: ["escalateToManagement", ...FORBIDDEN_ONBOARDING_SIDE_EFFECTS],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-012: After upload, mock agent completes onboarding when all requirements are met.
@@ -156,6 +212,11 @@ export const GROUND_TRUTH: EvalScenario[] = [
       actionTaken: "COMPLETE_ONBOARDING",
       onboardingStage: 4,
       duplicateAction: false,
+      trajectory: {
+        expectedTools: [...OBSERVE_ONBOARDING, "completeOnboarding"],
+        forbiddenTools: [...FORBIDDEN_COMPLIANCE_SIDE_EFFECTS],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-013: Risk questionnaire expired -10 days. IPS expired -5 days.

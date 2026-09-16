@@ -6,6 +6,8 @@ import { VaultService } from "@/lib/db/vault-service";
 import { extractDocumentText } from "@/lib/documents/parser";
 import { sanitizeDocumentTextForAgentContext } from "@/lib/documents/injectionHygiene";
 import { queues } from "@/lib/queue/client";
+import { enqueueAgentJob } from "@/lib/queue/enqueue";
+import { agentJobSchema } from "@/lib/queue/jobs";
 import type { DocumentCategory, DocumentType } from "@prisma/client";
 import { DocumentCategory as DocumentCategoryValues, DocumentType as DocumentTypeValues } from "@/lib/db/enums";
 
@@ -66,20 +68,19 @@ export async function POST(
       notes: sanitized.text,
     })) as { id: string };
 
-    // 4. Trigger Priority Agent Run
-    await queues.priority.add(`upload-${document.id}`, {
-      clientId,
-      agentType: "COMPLIANCE",
-      trigger: "EVENT_UPLOAD",
-      documentId: document.id,
-    });
-
-    await queues.priority.add(`onboarding-upload-${document.id}`, {
-      clientId,
-      agentType: "ONBOARDING",
-      trigger: "EVENT_UPLOAD",
-      documentId: document.id,
-    });
+    // 4. Trigger Priority Agent Runs (deterministic upload jobIds)
+    for (const agentType of ["COMPLIANCE", "ONBOARDING"] as const) {
+      await enqueueAgentJob(
+        queues.priority,
+        agentJobSchema.parse({
+          clientId,
+          agentType,
+          trigger: "EVENT_UPLOAD",
+          documentId: document.id,
+        }),
+        { priority: 1 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

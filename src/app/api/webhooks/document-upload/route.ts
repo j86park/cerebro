@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queues } from "@/lib/queue/client";
+import { enqueueAgentJob } from "@/lib/queue/enqueue";
 import { agentJobSchema } from "@/lib/queue/jobs";
 import { env } from "@/lib/config";
 import { z } from "zod";
@@ -20,6 +21,7 @@ const webhookSchema = z.object({
  * POST /api/webhooks/document-upload — Supabase webhook endpoint.
  * Validates webhook secret, parses payload, and enqueues an event-driven
  * agent job to the priority queue. Returns 202 immediately.
+ * Uses deterministic upload:{clientId}:{docId}:{agentType} jobIds for webhook retries.
  */
 export async function POST(req: Request) {
   // SECURITY: Validate webhook secret header
@@ -47,14 +49,14 @@ export async function POST(req: Request) {
         documentId: payload.record.id,
       });
 
-      await queues.priority.add(
-        `webhook-upload-${payload.record.id}`,
+      const { jobId, deduplicated } = await enqueueAgentJob(
+        queues.priority,
         jobPayload,
         { priority: 1 }
       );
 
       return NextResponse.json(
-        { data: { queued: true } },
+        { data: { queued: true, jobId, deduplicated } },
         { status: 202 }
       );
     }

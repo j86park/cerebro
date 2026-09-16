@@ -1,6 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
+import { addDemoDays } from "@/lib/dates/demo-date";
 
 const inputSchema = z.object({
   documentId: z.string().describe("ID of the document to update"),
@@ -46,7 +47,7 @@ export function buildUpdateDocumentStatus(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: `STATUS_UPDATED_TO_${status}`,
-        nextScheduledAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        nextScheduledAt: addDemoDays(7),
         documentId,
       });
 

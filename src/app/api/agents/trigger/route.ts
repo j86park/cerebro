@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queues } from "@/lib/queue/client";
+import { enqueueAgentJob } from "@/lib/queue/enqueue";
 import { agentJobSchema } from "@/lib/queue/jobs";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
@@ -14,6 +15,7 @@ const triggerSchema = z.object({
 /**
  * POST /api/agents/trigger — enqueues a manual agent run to the priority queue.
  * Returns the BullMQ job ID so the dashboard can track it.
+ * Deterministic jobIds prevent double-clicks from spawning parallel runs for the same DEMO_DATE.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -45,9 +47,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Manual triggers go to the priority queue
-    const job = await queues.priority.add(
-      `manual-${payload.agentType}-${payload.clientId}`,
+    const { jobId, deduplicated } = await enqueueAgentJob(
+      queues.priority,
       payload,
       { priority: 1 }
     );
@@ -55,7 +56,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         data: {
-          jobId: job.id,
+          jobId,
+          deduplicated,
           agentType: payload.agentType,
           clientId: payload.clientId,
         },
