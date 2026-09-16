@@ -44,6 +44,8 @@ model Client {
   createdAt        DateTime         @default(now())
   documents        Document[]
   agentActions     AgentAction[]
+  escalationStates EscalationState[]
+  onboardingStageState OnboardingStage?
 }
 
 model Document {
@@ -60,10 +62,13 @@ model Document {
   fileRef           String?
   notes             String?
   agentActions      AgentAction[]
+  escalationStates  EscalationState[]
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 }
 
+/// Append-only ActionLedger (table kept as AgentAction for exporter compatibility).
+/// Idempotent regulated side effects use idempotencyKey; null keys remain audit-only.
 model AgentAction {
   id              String      @id @default(cuid())
   clientId        String
@@ -78,8 +83,53 @@ model AgentAction {
   nextScheduledAt DateTime?
   performedAt     DateTime    @default(now())
 
+  // Ledger control-plane fields (WP-P0.1 ActionLedger)
+  stage           Int?
+  policyVersion   String?
+  promptVersionId String?
+  promptVersion   PromptVersion? @relation(fields: [promptVersionId], references: [id])
+  actor           LedgerActor @default(AGENT)
+  reasonCodes     String[]    @default([])
+  citedFields     Json?
+  /// Unique with clientId when set — prevents duplicate reminders/escalations under retry.
+  idempotencyKey  String?
+
+  @@unique([clientId, idempotencyKey])
   @@index([clientId, performedAt])
   @@index([agentType, actionType])
+}
+
+/// Durable escalation ladder state — authority for open escalations (not Mastra memory).
+model EscalationState {
+  id            String           @id @default(cuid())
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id])
+  documentId    String?
+  document      Document?        @relation(fields: [documentId], references: [id])
+  ladderStage   Int              @default(0)
+  status        EscalationStatus @default(OPEN)
+  /// Set while open-like (OPEN / PENDING_APPROVAL / SAFE_HOLD); cleared on resolve/timeout.
+  openKey       String?
+  reasonCodes   String[]         @default([])
+  policyVersion String?
+  openedAt      DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  resolvedAt    DateTime?
+
+  @@unique([clientId, openKey])
+  @@index([clientId, status])
+}
+
+/// Durable onboarding stage control state (mirrors Client fields; SoR for stage transitions).
+model OnboardingStage {
+  id                String           @id @default(cuid())
+  clientId          String           @unique
+  client            Client           @relation(fields: [clientId], references: [id])
+  stage             Int              @default(0)
+  status            OnboardingStatus @default(NOT_STARTED)
+  stageEnteredAt    DateTime         @default(now())
+  checklistSnapshot Json?
+  updatedAt         DateTime         @updatedAt
 }
 
 model SimulationRun {
@@ -119,6 +169,7 @@ model PromptVersion {
   children PromptVersion[] @relation("PromptLineage")
 
   candidateForJobs PromptMutationJob[] @relation("MutationJobCandidate")
+  agentActions     AgentAction[]
 
   @@index([agentId, isActive])
 }
@@ -279,4 +330,18 @@ enum SimulationStatus {
   RUNNING
   COMPLETED
   FAILED
+}
+
+enum LedgerActor {
+  AGENT
+  ADVISOR
+  SYSTEM
+}
+
+enum EscalationStatus {
+  OPEN
+  PENDING_APPROVAL
+  RESOLVED
+  TIMED_OUT
+  SAFE_HOLD
 }

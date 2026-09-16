@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/client";
 import { runSeed } from "../prisma/seed";
 
@@ -12,6 +13,8 @@ export async function resetDemo(): Promise<void> {
       },
     },
   });
+
+  await prisma.escalationState.deleteMany({});
 
   // Explicitly reset runtime state for documents and clients before re-seeding
   // Strip runtime document state so seed upserts restore canonical demo rows per data-schema.
@@ -29,6 +32,14 @@ export async function resetDemo(): Promise<void> {
 
   await prisma.client.updateMany({
     data: { onboardingStage: 0, onboardingStatus: "NOT_STARTED" },
+  });
+
+  await prisma.onboardingStage.updateMany({
+    data: {
+      stage: 0,
+      status: "NOT_STARTED",
+      checklistSnapshot: Prisma.DbNull,
+    },
   });
 
   await runSeed();
