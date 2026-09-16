@@ -62,6 +62,9 @@ model Document {
   lastNotifiedAt    DateTime?
   fileRef           String?
   notes             String?
+  /// Structured fields + citations from the pluggable extract adapter (WP-P1.2).
+  /// Shape: DocumentExtractResult JSON; Zod policy validation remains in Cerebro checklist.
+  extractedFields   Json?
   agentActions      AgentAction[]
   escalationStates  EscalationState[]
   createdAt         DateTime         @default(now())

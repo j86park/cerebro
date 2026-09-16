@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { addDemoDays } from "@/lib/dates/demo-date";
 import { validateDocumentDeterministic } from "@/lib/documents/checklist";
+import { citedFieldsFromExtract } from "@/lib/documents/extract";
 
 const inputSchema = z.object({
   documentId: z
@@ -19,10 +20,12 @@ const outputSchema = z.object({
   daysUntilExpiry: z.number().nullable(),
   expired: z.boolean(),
   staleRecency: z.boolean(),
+  extractedFieldKeys: z.array(z.string()),
 });
 
 /**
  * Builds validateDocumentReceived with DEMO_DATE expiry/recency validators.
+ * Cites structured extract fields when present (WP-P1.2); policy remains deterministic Zod.
  */
 export function buildValidateDocumentReceived(vault: VaultService) {
   return createTool({
@@ -53,10 +56,14 @@ export function buildValidateDocumentReceived(vault: VaultService) {
           daysUntilExpiry: null,
           expired: false,
           staleRecency: false,
+          extractedFieldKeys: [],
         };
       }
 
       const result = validateDocumentDeterministic(doc, doc.type);
+      const extract = await vault.getDocumentExtractedFields(documentId);
+      const extractCited = extract ? citedFieldsFromExtract(extract) : {};
+      const extractedFieldKeys = extract?.fields.map((f) => f.key) ?? [];
 
       await vault.logAction({
         agentType: "ONBOARDING",
@@ -72,6 +79,7 @@ export function buildValidateDocumentReceived(vault: VaultService) {
         citedFields: {
           daysUntilExpiry: result.daysUntilExpiry,
           gapReason: result.gapReason,
+          ...extractCited,
         },
       });
 
@@ -84,6 +92,7 @@ export function buildValidateDocumentReceived(vault: VaultService) {
         daysUntilExpiry: result.daysUntilExpiry,
         expired: result.expired,
         staleRecency: result.staleRecency,
+        extractedFieldKeys,
       };
     },
   });

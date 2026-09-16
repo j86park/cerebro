@@ -4,6 +4,10 @@ import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
 import { EscalationStatus, LedgerActor, OnboardingStatus } from "@/lib/db/enums";
 import {
+  documentExtractResultSchema,
+  type DocumentExtractResult,
+} from "@/lib/documents/extract";
+import {
   formatUntrustedDocumentBlock,
   sanitizeDocumentTextForAgentContext,
 } from "@/lib/documents/injectionHygiene";
@@ -588,8 +592,29 @@ export class VaultService {
   }
 
   /**
+   * Returns structured extract fields for a vault document (WP-P1.2).
+   * Null when no adapter result has been persisted.
+   */
+  async getDocumentExtractedFields(
+    documentId: string,
+  ): Promise<DocumentExtractResult | null> {
+    const doc = (await this.getDocumentById(documentId)) as {
+      extractedFields?: unknown;
+    };
+    if (doc.extractedFields == null) return null;
+    const parsed = documentExtractResultSchema.safeParse(doc.extractedFields);
+    if (!parsed.success) {
+      throw new Error(
+        `Document ${documentId} has invalid extractedFields JSON: ${parsed.error.message}`,
+      );
+    }
+    return parsed.data;
+  }
+
+  /**
    * Creates a new document row for this vault (upload path).
    * Optional `notes` are stored as provided — callers must sanitize extracted text first.
+   * Optional `extractedFields` must already match DocumentExtractResult (adapter output).
    */
   async createDocument(input: {
     id?: string;
@@ -602,6 +627,7 @@ export class VaultService {
     lastNotifiedAt?: Date;
     fileRef?: string;
     notes?: string;
+    extractedFields?: DocumentExtractResult;
   }) {
     const parsed = z
       .object({
@@ -615,13 +641,19 @@ export class VaultService {
         lastNotifiedAt: z.date().optional(),
         fileRef: z.string().optional(),
         notes: z.string().optional(),
+        extractedFields: documentExtractResultSchema.optional(),
       })
       .parse(input);
 
+    const { extractedFields, ...rest } = parsed;
+
     return this.db.document.create({
       data: {
-        ...parsed,
+        ...rest,
         clientId: this.clientId,
+        ...(extractedFields !== undefined
+          ? { extractedFields: extractedFields as Prisma.InputJsonValue }
+          : {}),
       },
     });
   }
@@ -640,18 +672,61 @@ export class VaultService {
     lastNotifiedAt?: Date;
     fileRef?: string;
     notes?: string;
+    extractedFields?: DocumentExtractResult;
   }) {
-    const id = input.id ?? `${this.clientId}-${input.type}`;
+    const parsed = z
+      .object({
+        id: z.string().min(1).optional(),
+        type: z.string().min(1),
+        category: z.string().min(1),
+        status: z.string().min(1),
+        uploadedAt: z.date().optional(),
+        expiryDate: z.date().optional(),
+        notificationCount: z.number().int().optional(),
+        lastNotifiedAt: z.date().optional(),
+        fileRef: z.string().optional(),
+        notes: z.string().optional(),
+        extractedFields: documentExtractResultSchema.optional(),
+      })
+      .parse(input);
+
+    const id = parsed.id ?? `${this.clientId}-${parsed.type}`;
+    const { extractedFields, id: _omitId, ...rest } = parsed;
+    const jsonFields =
+      extractedFields !== undefined
+        ? { extractedFields: extractedFields as Prisma.InputJsonValue }
+        : {};
+
     return this.db.document.upsert({
       where: { id },
       update: {
-        ...input,
+        ...rest,
+        ...jsonFields,
         clientId: this.clientId,
       },
       create: {
         id,
-        ...input,
+        ...rest,
+        ...jsonFields,
         clientId: this.clientId,
+      },
+    });
+  }
+
+  /**
+   * Persists or replaces structured extract fields on an existing vault document.
+   */
+  async updateDocumentExtractedFields(
+    documentId: string,
+    extractedFields: DocumentExtractResult,
+  ) {
+    const id = z.string().min(1).parse(documentId);
+    await this.requireDocumentInVault(id);
+    const parsed = documentExtractResultSchema.parse(extractedFields);
+    return this.db.document.update({
+      where: { id },
+      data: {
+        extractedFields: parsed as Prisma.InputJsonValue,
       },
     });
   }

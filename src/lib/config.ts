@@ -109,6 +109,13 @@ const envSchema = z.object({
    * All k trials must pass hard gates (incl. trajectory) before promote.
    */
   EVAL_PASS_K: z.coerce.number().int().min(3).max(5).default(3),
+  /**
+   * Document field extract adapter. Policy (Zod checklist / DEMO_DATE) stays in Cerebro.
+   * `heuristic` / `llm-demo` for demo; `textract` / `persona` are stubs until credentials land.
+   */
+  DOCUMENT_EXTRACT_PROVIDER: z
+    .enum(["heuristic", "llm-demo", "textract", "persona"])
+    .default("heuristic"),
 });
 
 export const env = envSchema.parse(process.env);
