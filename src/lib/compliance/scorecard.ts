@@ -2,7 +2,7 @@ import type { Document } from "@prisma/client";
 import { VaultService } from "@/lib/db/vault-service";
 import { DOCUMENT_REGISTRY, getRequiredDocs } from "@/lib/documents/registry";
 import { DocumentStatus } from "@/lib/db/enums";
-import { env } from "@/lib/config";
+import { daysUntilExpiry, demoNow, isExpired } from "@/lib/dates/demo-date";
 
 type RegistryKey = keyof typeof DOCUMENT_REGISTRY;
 
@@ -80,7 +80,7 @@ export function getRegulatoryNote(
 }
 
 export async function getComplianceScorecard(vault: VaultService): Promise<ComplianceScorecard> {
-  const demoDate = new Date(env.DEMO_DATE);
+  const asOf = demoNow();
   const profile = (await vault.getClientProfile()) as {
     accountType: string;
   };
@@ -95,11 +95,14 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
   // 2. Map existing documents
   const mappedDocs = existingDocs.map((doc) => {
     const expiryDate = doc.expiryDate ? new Date(doc.expiryDate) : null;
-    const daysUntilExpiry = expiryDate
-      ? Math.ceil((expiryDate.getTime() - demoDate.getTime()) / (1000 * 60 * 60 * 24))
-      : null;
-    const status = doc.status as string;
-    const urgency = calculateUrgency(status, daysUntilExpiry, doc.type as string);
+    const days =
+      expiryDate !== null ? daysUntilExpiry(expiryDate, asOf) : null;
+    // REGULATORY: treat calendar-expired docs as EXPIRED for urgency even if status lagged.
+    const status =
+      isExpired(expiryDate, asOf) && (doc.status as string) !== DocumentStatus.MISSING
+        ? DocumentStatus.EXPIRED
+        : (doc.status as string);
+    const urgency = calculateUrgency(status, days, doc.type as string);
     const isBlocker =
       registryEntry(doc.type)?.category === "IDENTITY" &&
       (status === DocumentStatus.EXPIRED || status === DocumentStatus.MISSING);
@@ -109,11 +112,11 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
       type: doc.type as string,
       category: doc.category as string,
       status,
-      daysUntilExpiry,
+      daysUntilExpiry: days,
       notificationCount: (doc.notificationCount as number) ?? 0,
       lastNotifiedAt: doc.lastNotifiedAt ? String(doc.lastNotifiedAt) : null,
       urgency,
-      regulatoryNote: getRegulatoryNote(status, daysUntilExpiry, doc.type as string),
+      regulatoryNote: getRegulatoryNote(status, days, doc.type as string),
       isBlocker,
     };
   });

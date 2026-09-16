@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
+import { addDemoDays } from "@/lib/dates/demo-date";
 import { enforceToolPolicy } from "@/lib/policy";
 
 const inputSchema = z.object({
@@ -73,9 +74,7 @@ export function buildAlertAdvisorStuck(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "ADVISOR_ALERTED",
-        nextScheduledAt: new Date(
-          new Date(env.DEMO_DATE).getTime() + 7 * 24 * 60 * 60 * 1000,
-        ),
+        nextScheduledAt: addDemoDays(7),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
         reasonCodes: ["POLICY_ALLOW_AUTO"],
