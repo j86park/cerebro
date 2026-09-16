@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format } from "date-fns";
 import { UserCog, ShieldCheck, Zap, Calendar, History } from "lucide-react";
 import { useAgentActions } from "@/hooks/useAgentActions";
+import { citationRowsFromCitedFields } from "@/lib/documents/citations";
+import { CitedFieldsPanel } from "@/components/vault/CitedFieldsPanel";
 
 export type ActionData = {
   id: string;
@@ -14,6 +16,7 @@ export type ActionData = {
   reasoning: string;
   outcome: string | null;
   performedAt: string;
+  citedFields?: Record<string, unknown> | null;
 };
 
 export function ActionHistoryFeed({ 
@@ -43,6 +46,9 @@ export function ActionHistoryFeed({
               const date = new Date(action.performedAt);
               const isCompliance = action.agentType === "COMPLIANCE";
               const isSeeded = action.outcome === "SEEDED_HISTORY";
+              const citationRows = citationRowsFromCitedFields(
+                action.citedFields ?? null,
+              );
               
               return (
                 <div key={action.id} className={`p-4 flex gap-4 ${isSeeded ? "opacity-70 bg-muted/20" : "bg-card hover:bg-muted/30"} transition-colors`}>
@@ -68,6 +74,14 @@ export function ActionHistoryFeed({
                     <p className="text-sm text-foreground/90 leading-relaxed">
                       {action.reasoning}
                     </p>
+
+                    {citationRows.length > 0 && (
+                      <CitedFieldsPanel
+                        rows={citationRows}
+                        title="Citations"
+                        className="pt-1"
+                      />
+                    )}
                     
                     {isSeeded && (
                       <div className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground mt-2">

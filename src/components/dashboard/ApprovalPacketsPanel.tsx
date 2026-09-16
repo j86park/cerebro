@@ -9,6 +9,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ClipboardCheck, AlertCircle, Check, X } from "lucide-react";
 import type { ApprovalPacket } from "@/lib/ops/schemas";
 import type { SlaMetrics } from "@/lib/ops/schemas";
+import {
+  citationRowsFromCitedFields,
+  citationRowsFromExtract,
+  parseExtractedFieldsJson,
+} from "@/lib/documents/citations";
+import { CitedFieldsPanel } from "@/components/vault/CitedFieldsPanel";
 
 export type ApprovalPacketsPanelProps = {
   packets: ApprovalPacket[];
@@ -130,95 +136,126 @@ export function ApprovalPacketsPanel({
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {visible.map((packet) => (
-              <div key={packet.packetId} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/dashboard/vaults/${packet.clientId}`}
-                      className="text-sm font-medium hover:underline"
-                    >
-                      {packet.clientName}
-                    </Link>
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                      {packet.hitl?.reasoning ??
-                        (packet.reasonCodes.length > 0
-                          ? packet.reasonCodes.join(", ")
-                          : "Pending approval")}
+            {visible.map((packet) => {
+              const docExtractRows = citationRowsFromExtract(
+                parseExtractedFieldsJson(
+                  packet.citedDocument?.extractedFields ?? null,
+                ),
+              );
+              const ledgerCiteRows = citationRowsFromCitedFields(
+                packet.ledgerEvidence[0]?.citedFields ?? null,
+              );
+
+              return (
+                <div key={packet.packetId} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/dashboard/vaults/${packet.clientId}`}
+                        className="text-sm font-medium hover:underline"
+                      >
+                        {packet.clientName}
+                      </Link>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                        {packet.hitl?.reasoning ??
+                          (packet.reasonCodes.length > 0
+                            ? packet.reasonCodes.join(", ")
+                            : "Pending approval")}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <Badge className="text-[10px]">{packet.status}</Badge>
+                      <span className="text-[10px] text-muted-foreground">
+                        stage {packet.ladderStage}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1">
+                    {packet.reasonCodes.map((code) => (
+                      <Badge
+                        key={code}
+                        variant="outline"
+                        className="text-[10px] font-normal"
+                      >
+                        {code}
+                      </Badge>
+                    ))}
+                    {packet.hitl?.toolName && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-normal"
+                      >
+                        {packet.hitl.toolName}
+                      </Badge>
+                    )}
+                    {packet.policyVersion && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-normal"
+                      >
+                        {packet.policyVersion}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {packet.citedDocument && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Doc {packet.citedDocument.type}:{" "}
+                      <span className="text-foreground">
+                        {packet.citedDocument.status}
+                      </span>
                     </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <Badge className="text-[10px]">{packet.status}</Badge>
-                    <span className="text-[10px] text-muted-foreground">
-                      stage {packet.ladderStage}
-                    </span>
-                  </div>
-                </div>
+                  )}
 
-                <div className="flex flex-wrap gap-1">
-                  {packet.reasonCodes.map((code) => (
-                    <Badge
-                      key={code}
-                      variant="outline"
-                      className="text-[10px] font-normal"
+                  {docExtractRows.length > 0 && (
+                    <CitedFieldsPanel
+                      rows={docExtractRows}
+                      title="Document citations"
+                    />
+                  )}
+
+                  {packet.ledgerEvidence[0] && (
+                    <p className="text-[11px] text-muted-foreground line-clamp-2">
+                      Ledger: {packet.ledgerEvidence[0].actionType}
+                      {packet.ledgerEvidence[0].outcome
+                        ? ` → ${packet.ledgerEvidence[0].outcome}`
+                        : ""}
+                      {packet.ledgerEvidence[0].reasonCodes.length > 0
+                        ? ` [${packet.ledgerEvidence[0].reasonCodes.join(", ")}]`
+                        : ""}
+                    </p>
+                  )}
+
+                  {ledgerCiteRows.length > 0 && (
+                    <CitedFieldsPanel
+                      rows={ledgerCiteRows}
+                      title="Ledger cited fields"
+                    />
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={busyKey === packet.packetId}
+                      onClick={() => void decide(packet, "approve")}
                     >
-                      {code}
-                    </Badge>
-                  ))}
-                  {packet.hitl?.toolName && (
-                    <Badge variant="outline" className="text-[10px] font-normal">
-                      {packet.hitl.toolName}
-                    </Badge>
-                  )}
-                  {packet.policyVersion && (
-                    <Badge variant="outline" className="text-[10px] font-normal">
-                      {packet.policyVersion}
-                    </Badge>
-                  )}
+                      <Check className="h-3.5 w-3.5" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={busyKey === packet.packetId}
+                      onClick={() => void decide(packet, "deny")}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Deny
+                    </Button>
+                  </div>
                 </div>
-
-                {packet.citedDocument && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Doc {packet.citedDocument.type}:{" "}
-                    <span className="text-foreground">
-                      {packet.citedDocument.status}
-                    </span>
-                  </p>
-                )}
-
-                {packet.ledgerEvidence[0] && (
-                  <p className="text-[11px] text-muted-foreground line-clamp-2">
-                    Ledger: {packet.ledgerEvidence[0].actionType}
-                    {packet.ledgerEvidence[0].outcome
-                      ? ` → ${packet.ledgerEvidence[0].outcome}`
-                      : ""}
-                    {packet.ledgerEvidence[0].reasonCodes.length > 0
-                      ? ` [${packet.ledgerEvidence[0].reasonCodes.join(", ")}]`
-                      : ""}
-                  </p>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={busyKey === packet.packetId}
-                    onClick={() => void decide(packet, "approve")}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={busyKey === packet.packetId}
-                    onClick={() => void decide(packet, "deny")}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Deny
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardContent>

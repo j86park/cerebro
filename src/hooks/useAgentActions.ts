@@ -16,7 +16,15 @@ type ActionData = {
   reasoning: string;
   outcome: string | null;
   performedAt: string;
+  citedFields?: Record<string, unknown> | null;
 };
+
+function parseCitedFields(raw: unknown): Record<string, unknown> | null {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return null;
+}
 
 export function useAgentActions(clientId: string, initialActions: ActionData[]) {
   const [actions, setActions] = useState<ActionData[]>(initialActions);
@@ -52,6 +60,7 @@ export function useAgentActions(clientId: string, initialActions: ActionData[]) 
             reasoning: String(row.reasoning),
             outcome: row.outcome != null ? String(row.outcome) : null,
             performedAt: new Date(String(row.performedAt)).toISOString(),
+            citedFields: parseCitedFields(row.citedFields),
           } satisfies ActionData;
 
           setActions((prev) => [newAction, ...prev].slice(0, 50));
