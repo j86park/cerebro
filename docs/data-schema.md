@@ -90,6 +90,8 @@ model Document {
   lastNotifiedAt    DateTime?
   fileRef           String?        // mock file reference
   notes             String?
+  /// Structured extract + citations (WP-P1.2 DocumentExtractResult JSON)
+  extractedFields   Json?
   agentActions      AgentAction[]
   escalationStates  EscalationState[]
   createdAt         DateTime       @default(now())

@@ -4,6 +4,7 @@ import path from "path";
 import { env } from "@/lib/config";
 import { VaultService } from "@/lib/db/vault-service";
 import { extractDocumentText } from "@/lib/documents/parser";
+import { runDocumentExtract } from "@/lib/documents/extract";
 import { sanitizeDocumentTextForAgentContext } from "@/lib/documents/injectionHygiene";
 import { queues } from "@/lib/queue/client";
 import { enqueueAgentJob } from "@/lib/queue/enqueue";
@@ -26,7 +27,7 @@ function parseDocumentCategoryField(raw: FormDataEntryValue | null): DocumentCat
 /**
  * POST /api/vaults/[clientId]/upload
  * Handles real file uploads, stores them locally, and triggers agent processing.
- * Extracted text is injection-sanitized before vault write; writes go through VaultService.
+ * Flow: pdf text → injection hygiene → pluggable field extract → VaultService write.
  */
 export async function POST(
   req: NextRequest,
@@ -57,7 +58,15 @@ export async function POST(
     const extractedText = await extractDocumentText(filePath);
     const sanitized = sanitizeDocumentTextForAgentContext(extractedText);
 
-    // 3. Create document via VaultService (clientId-scoped)
+    // 3. Structured fields via pluggable adapter (Zod policy stays in checklist tools)
+    const extractResult = await runDocumentExtract({
+      rawText: sanitized.text,
+      documentType: type,
+      filePath,
+      mimeType: file.type || undefined,
+    });
+
+    // 4. Create document via VaultService (clientId-scoped)
     const vault = new VaultService({ clientId });
     const document = (await vault.createDocument({
       type,
@@ -66,9 +75,10 @@ export async function POST(
       uploadedAt: new Date(env.DEMO_DATE),
       fileRef: filePath,
       notes: sanitized.text,
+      extractedFields: extractResult,
     })) as { id: string };
 
-    // 4. Trigger Priority Agent Runs (deterministic upload jobIds)
+    // 5. Trigger Priority Agent Runs (deterministic upload jobIds)
     for (const agentType of ["COMPLIANCE", "ONBOARDING"] as const) {
       await enqueueAgentJob(
         queues.priority,
@@ -88,6 +98,8 @@ export async function POST(
       fileName,
       extractedPreview: sanitized.text.substring(0, 100) + "...",
       injectionPatternsStripped: sanitized.strippedPatterns,
+      extractProvider: extractResult.provider,
+      extractedFieldCount: extractResult.fields.length,
     });
 
   } catch (error) {

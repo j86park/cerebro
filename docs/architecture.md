@@ -108,6 +108,12 @@ cerebro/
 │   │       ├── completeOnboarding.ts
 │   │       └── alertAdvisorStuck.ts
 │   ├── lib/
+│   │   ├── documents/
+│   │   │   ├── parser.ts        ← PDF text extract
+│   │   │   ├── extract/         ← pluggable field extract adapters (WP-P1.2)
+│   │   │   ├── checklist.ts     ← stage/risk checklists + DEMO_DATE validators
+│   │   │   ├── injectionHygiene.ts
+│   │   │   └── registry.ts
 │   │   ├── db/
 │   │   │   ├── client.ts        ← Prisma client singleton
 │   │   │   └── vault-service.ts ← ALL db access goes through here
