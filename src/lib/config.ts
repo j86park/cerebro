@@ -43,6 +43,11 @@ const envSchema = z.object({
    */
   MODEL_EVAL_JUDGE: z.string().default("moonshotai/kimi-k2"),
   DRY_RUN: z.preprocess((value) => value === "true" || value === true, z.boolean()).default(true),
+  /**
+   * Version id stamped on ActionLedger rows for stage × tool policy decisions.
+   * Matrix defaults live in `src/lib/policy/`; this env value is the logged `policyVersion`.
+   */
+  TOOL_POLICY_VERSION: z.string().min(1).default("tool-policy-v1"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   WEBHOOK_SECRET: z.string().default("dev-webhook-secret"),
   SIM_TIME_SCALE: z.coerce.number().default(1),

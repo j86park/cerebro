@@ -2,24 +2,31 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
+import { enforceToolPolicy } from "@/lib/policy";
 
 const inputSchema = z.object({
   reasoning: z
     .string()
     .min(20)
     .describe(
-      "Detailed reasoning for alerting the advisor, including how long the client has been unresponsive"
+      "Detailed reasoning for alerting the advisor, including how long the client has been unresponsive",
     ),
   daysSinceLastResponse: z
     .number()
-    .describe("Number of days since the client last responded or uploaded a document"),
+    .describe(
+      "Number of days since the client last responded or uploaded a document",
+    ),
 });
 
 const outputSchema = z.object({
   success: z.boolean(),
   dryRun: z.boolean(),
+  policyVersion: z.string(),
 });
 
+/**
+ * Builds alertAdvisorStuck onboarding tool (stage-gated via policy matrix).
+ */
 export function buildAlertAdvisorStuck(vault: VaultService) {
   return createTool({
     id: "alertAdvisorStuck",
@@ -31,6 +38,23 @@ export function buildAlertAdvisorStuck(vault: VaultService) {
       const { reasoning, daysSinceLastResponse } = inputData;
       const { DRY_RUN } = env;
 
+      const client = (await vault.getClientProfile()) as Record<
+        string,
+        unknown
+      >;
+      const stage = client.onboardingStage as number;
+
+      const policy = await enforceToolPolicy({
+        vault,
+        domain: "onboarding",
+        stage,
+        toolName: "alertAdvisorStuck",
+        agentType: "ONBOARDING",
+        actionType: "ALERT_ADVISOR_STUCK",
+        reasoning,
+        args: { daysSinceLastResponse },
+      });
+
       // Enforce 3-day duplicate action cooldown
       await vault.checkActionCooldown("ALERT_ADVISOR_STUCK", 3);
 
@@ -40,14 +64,7 @@ export function buildAlertAdvisorStuck(vault: VaultService) {
       }
 
       // Update onboarding status to STALLED
-      const client = (await vault.getClientProfile()) as Record<
-        string,
-        unknown
-      >;
-      await vault.resetOnboarding(
-        client.onboardingStage as number,
-        "STALLED"
-      );
+      await vault.resetOnboarding(stage, "STALLED");
 
       // Always log the action
       await vault.logAction({
@@ -57,11 +74,18 @@ export function buildAlertAdvisorStuck(vault: VaultService) {
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "ADVISOR_ALERTED",
         nextScheduledAt: new Date(
-          new Date(env.DEMO_DATE).getTime() + 7 * 24 * 60 * 60 * 1000
+          new Date(env.DEMO_DATE).getTime() + 7 * 24 * 60 * 60 * 1000,
         ),
+        stage: policy.stage,
+        policyVersion: policy.policyVersion,
+        reasonCodes: ["POLICY_ALLOW_AUTO"],
       });
 
-      return { success: true, dryRun: DRY_RUN };
+      return {
+        success: true,
+        dryRun: DRY_RUN,
+        policyVersion: policy.policyVersion,
+      };
     },
   });
 }
