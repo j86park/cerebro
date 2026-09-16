@@ -61,9 +61,18 @@ vi.mock("@/lib/db/vault-service", () => ({
     };
   }),
 }));
-vi.mock("@/tools/shared", () => ({ buildSharedTools: vi.fn() }));
-vi.mock("@/tools/compliance", () => ({ buildComplianceTools: vi.fn() }));
-vi.mock("@/tools/onboarding", () => ({ buildOnboardingTools: vi.fn() }));
+vi.mock("@/tools/shared", () => ({ buildSharedTools: vi.fn(() => ({})) }));
+vi.mock("@/tools/compliance", () => ({ buildComplianceTools: vi.fn(() => ({})) }));
+vi.mock("@/tools/onboarding", () => ({ buildOnboardingTools: vi.fn(() => ({})) }));
+vi.mock("@/lib/policy/toolAllowlists", () => ({
+  assertAgentToolAllowlist: vi.fn(),
+}));
+vi.mock("@/lib/queue/clientMemory", () => ({
+  buildClientMemoryScope: vi.fn((clientId: string) => ({
+    resource: clientId,
+    thread: clientId,
+  })),
+}));
 vi.mock("@/lib/db/client", () => ({
   prisma: {
     evalRun: {

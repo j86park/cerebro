@@ -17,6 +17,19 @@ import {
   recordMutationEnqueue,
 } from "@/lib/mutation-circuit";
 import { mutationAnalysisQueue } from "@/workers/queues";
+import { extractToolNamesFromOutput } from "@/evals/scorers/extract-tool-names";
+import { loadApprovedEvalScenarios } from "@/evals/golden/load-approved";
+import { getCanaryClientIdsAsync } from "@/lib/eval-scenario-utils";
+import {
+  escalationStageScorer,
+  duplicateActionScorer,
+  documentPriorityScorer,
+  onboardingStageScorer,
+  reasoningQualityScorer,
+  trajectoryScorer,
+} from "@/evals/scorers";
+import type { AbstractScenario } from "@/evals/scenarios/scenario-types";
+import type { EvalScenario } from "@/evals/ground-truth";
 
 type ScorerResultEntry = { score?: number; reason?: string };
 
@@ -25,7 +38,45 @@ export type ScenarioEvalRow = {
   output?: string;
   error?: string;
   scores: Record<string, ScorerResultEntry>;
+  /** Ordered tool names for failure→golden mining (WP-P1.5). */
+  toolNames?: string[];
 };
+
+/**
+ * Builds AbstractScenario rows for human-approved goldens (ship gate only).
+ */
+function toAbstractFromEvalScenario(g: EvalScenario): AbstractScenario {
+  const input = `You are running for client ${g.clientId}.\nThis run was triggered by: ${g.trigger}.\nStart by calling your observation tools to understand the current state of this client's vault.`;
+  if (g.agentType === "COMPLIANCE") {
+    return {
+      clientId: g.clientId,
+      agentType: "COMPLIANCE",
+      canary: g.canary,
+      input,
+      expected: g.expected,
+      scorers: [
+        escalationStageScorer,
+        duplicateActionScorer,
+        documentPriorityScorer,
+        trajectoryScorer,
+        reasoningQualityScorer,
+      ],
+    };
+  }
+  return {
+    clientId: g.clientId,
+    agentType: "ONBOARDING",
+    canary: g.canary,
+    input,
+    expected: g.expected,
+    scorers: [
+      onboardingStageScorer,
+      duplicateActionScorer,
+      trajectoryScorer,
+      reasoningQualityScorer,
+    ],
+  };
+}
 
 export type RunEvalsOptions = {
   /** When true, throws if overall score is below the milestone threshold (CLI / CI). */
@@ -58,7 +109,15 @@ export async function runAllEvals(
     options?.clientIds !== undefined ? new Set(options.clientIds) : null;
 
   console.log(`[Cerebro][evals] Starting evaluation suite (batch size: ${batchSize})...`);
-  const scenarios = [...complianceScenarios, ...onboardingScenarios].filter((sc) =>
+  // Ship gate = GROUND_TRUTH wrappers + human-approved goldens only (never candidates/).
+  const approvedGoldenScenarios = (await loadApprovedEvalScenarios()).map(
+    toAbstractFromEvalScenario
+  );
+  const scenarios = [
+    ...complianceScenarios,
+    ...onboardingScenarios,
+    ...approvedGoldenScenarios,
+  ].filter((sc) =>
     clientIdFilter === null ? true : clientIdFilter.has(sc.clientId)
   );
   const scenarioResults: Record<string, ScenarioEvalRow> = {};
@@ -134,6 +193,7 @@ export async function runAllEvals(
           scenarioResults[sc.clientId] = {
             agent: sc.agentType,
             output: result.text,
+            toolNames: extractToolNamesFromOutput(result),
             scores,
           };
         } catch (e) {
@@ -217,8 +277,9 @@ export async function runAllEvals(
   }
 
   if (enforceThreshold) {
-    // Hard canary gates (escalation / onboarding / duplicate) fail closed before soft average.
-    assertEvalReleaseGates(overallScore, scenarioResults);
+    // Hard canary gates (incl. approved golden canaries) fail closed before soft average.
+    const canaryClientIds = await getCanaryClientIdsAsync();
+    assertEvalReleaseGates(overallScore, scenarioResults, canaryClientIds);
   }
 
   return {

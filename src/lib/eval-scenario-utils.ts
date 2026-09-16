@@ -1,4 +1,5 @@
 import { CANARY_CLIENT_IDS } from "@/evals/ground-truth";
+import { getApprovedCanaryClientIds } from "@/evals/golden/load-approved";
 
 export type ScenarioScoresRow = Record<string, { score?: number; reason?: string }>;
 
@@ -25,6 +26,18 @@ export function fullyPassingRate(
   return pass / clientIds.length;
 }
 
+/**
+ * Seed canary ids from GROUND_TRUTH only (sync). Prefer `getCanaryClientIdsAsync`
+ * when approved goldens may contribute canaries.
+ */
 export function getCanaryClientIds(): string[] {
   return [...CANARY_CLIENT_IDS];
+}
+
+/**
+ * Canary ids = GROUND_TRUTH canaries ∪ approved golden canaries (ship gate only).
+ */
+export async function getCanaryClientIdsAsync(): Promise<string[]> {
+  const approved = await getApprovedCanaryClientIds();
+  return [...new Set([...CANARY_CLIENT_IDS, ...approved])];
 }

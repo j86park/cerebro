@@ -30,11 +30,13 @@ export function assertEvalOverallScore(overallScore: number): void {
 /**
  * Enforces canary hard gates first, then the overall average threshold.
  * Soft scorers (reasoningQuality) cannot override a hard-gate failure.
+ * Pass `canaryClientIds` to include approved golden canaries (WP-P1.5).
  */
 export function assertEvalReleaseGates(
   overallScore: number,
-  scenarioResults: Record<string, HardGateScenarioRow>
+  scenarioResults: Record<string, HardGateScenarioRow>,
+  canaryClientIds?: readonly string[]
 ): void {
-  assertCanaryHardGates(scenarioResults);
+  assertCanaryHardGates(scenarioResults, canaryClientIds);
   assertEvalOverallScore(overallScore);
 }

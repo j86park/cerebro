@@ -136,10 +136,15 @@ cerebro/
 │   │   │   ├── duplicateAction.ts
 │   │   │   ├── documentPriority.ts
 │   │   │   ├── onboardingStage.ts
+│   │   │   ├── trajectory.ts
 │   │   │   └── reasoningQuality.ts
+│   │   ├── golden/              ← failure→golden export / human promote (WP-P1.5)
 │   │   ├── scenarios/
 │   │   │   ├── compliance.eval.ts
-│   │   │   └── onboarding.eval.ts
+│   │   │   ├── onboarding.eval.ts
+│   │   │   └── goldens/         ← candidates/ (pending) + approved/ (ship gate only)
+│   │   ├── hard-gates.ts
+│   │   ├── pass-k.ts
 │   │   └── ground-truth.ts
 │   └── app/                     ← Next.js App Router
 │       ├── api/
