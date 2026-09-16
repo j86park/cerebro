@@ -4,6 +4,8 @@ import path from "path";
 import { prisma } from "@/lib/db/client";
 import { extractDocumentText } from "@/lib/documents/parser";
 import { queues } from "@/lib/queue/client";
+import { enqueueAgentJob } from "@/lib/queue/enqueue";
+import { agentJobSchema } from "@/lib/queue/jobs";
 import type { DocumentCategory, DocumentType } from "@prisma/client";
 import { DocumentCategory as DocumentCategoryValues, DocumentType as DocumentTypeValues } from "@/lib/db/enums";
 
@@ -64,20 +66,19 @@ export async function POST(
       },
     });
 
-    // 4. Trigger Priority Agent Run
-    await queues.priority.add(`upload-${document.id}`, {
-      clientId,
-      agentType: "COMPLIANCE",
-      trigger: "EVENT_UPLOAD",
-      documentId: document.id,
-    });
-
-    await queues.priority.add(`onboarding-upload-${document.id}`, {
-      clientId,
-      agentType: "ONBOARDING",
-      trigger: "EVENT_UPLOAD",
-      documentId: document.id,
-    });
+    // 4. Trigger Priority Agent Runs (deterministic upload jobIds)
+    for (const agentType of ["COMPLIANCE", "ONBOARDING"] as const) {
+      await enqueueAgentJob(
+        queues.priority,
+        agentJobSchema.parse({
+          clientId,
+          agentType,
+          trigger: "EVENT_UPLOAD",
+          documentId: document.id,
+        }),
+        { priority: 1 }
+      );
+    }
 
     return NextResponse.json({ 
       success: true, 

@@ -118,6 +118,7 @@ cerebro/
 │   │   │   └── jobs.ts          ← job type definitions
 │   │   ├── email/
 │   │   │   └── resend.ts
+│   │   ├── policy/              ← stage × tool × auto|approve|block matrix
 │   │   └── config.ts            ← MODEL, DEMO_DATE, all env vars
 │   ├── workers/                 ← BullMQ: mutation-analysis, shadow-run (self-correcting prompts)
 │   ├── workflows/               ← Meta-agent async pipeline (taxonomy + mutate; not Mastra Workflow)

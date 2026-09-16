@@ -37,8 +37,17 @@ const envSchema = z.object({
   /** OpenRouter model ids — see https://openrouter.ai/models */
   MODEL_DEV: z.string().default("moonshotai/kimi-k2"),
   MODEL_DEMO: z.string().default("moonshotai/kimi-k2"),
+  /**
+   * Pinned eval-judge model id. Soft scorers must call `getModel("evalJudge")` only —
+   * never hardcode this string outside this file.
+   */
   MODEL_EVAL_JUDGE: z.string().default("moonshotai/kimi-k2"),
   DRY_RUN: z.preprocess((value) => value === "true" || value === true, z.boolean()).default(true),
+  /**
+   * Version id stamped on ActionLedger rows for stage × tool policy decisions.
+   * Matrix defaults live in `src/lib/policy/`; this env value is the logged `policyVersion`.
+   */
+  TOOL_POLICY_VERSION: z.string().min(1).default("tool-policy-v1"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   WEBHOOK_SECRET: z.string().default("dev-webhook-secret"),
   SIM_TIME_SCALE: z.coerce.number().default(1),
@@ -85,6 +94,11 @@ const envSchema = z.object({
    * (Postgres DecisionRecord remains the examiner system of record).
    */
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  /**
+   * Canary `pass^k` trial count for mutation/shadow promote (τ-bench style).
+   * All k trials must pass hard gates (incl. trajectory) before promote.
+   */
+  EVAL_PASS_K: z.coerce.number().int().min(3).max(5).default(3),
 });
 
 export const env = envSchema.parse(process.env);

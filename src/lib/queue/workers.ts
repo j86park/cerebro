@@ -8,7 +8,12 @@ import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildSharedTools } from "@/tools/shared";
 import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
-import { agentJobSchema } from "./jobs";
+import {
+  AGENT_JOB_COMPLETED_OUTCOME,
+  AGENT_JOB_SKIPPED_OUTCOME,
+  agentJobSchema,
+  demoDateKey,
+} from "./jobs";
 
 import { connection } from "./client";
 import { emitAgentRunComplete } from "@/lib/events/emit";
@@ -87,10 +92,12 @@ function extractToolNames(result: unknown): string[] {
 /**
  * Processes an agent job: instantiates VaultService, builds scoped tools,
  * fetches the correct agent, and runs it with proper memory scoping + AI Tracing tags.
+ * Skips re-execution when a successful completion marker already exists for this
+ * logical job (queue jobId dedupe + processor-level idempotency).
  */
-async function processAgentJob(job: Job<AgentJobPayload>) {
+export async function processAgentJob(job: Job<AgentJobPayload>) {
   const parsed = agentJobSchema.parse(job.data);
-  const { clientId, agentType, trigger } = parsed;
+  const { clientId, agentType, trigger, documentId } = parsed;
   const jobId = String(job.id ?? `unknown-${clientId}-${trigger}`);
 
   console.log(
@@ -99,6 +106,50 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
 
   // 1. Build VaultService scoped to this client
   const vault = new VaultService({ clientId });
+
+  // Skip if this logical job already completed successfully (replay / leftover retention miss).
+  const since = new Date(`${demoDateKey()}T00:00:00.000Z`);
+  const alreadyDone = await vault.hasCompletedAgentJob({
+    agentType,
+    trigger,
+    documentId,
+    completedOutcome: AGENT_JOB_COMPLETED_OUTCOME,
+    since,
+  });
+
+  if (alreadyDone) {
+    console.log(
+      `[Worker] Skipping ${agentType} job ${job.id} for client ${clientId} — already completed`
+    );
+    try {
+      await vault.logAction({
+        documentId,
+        agentType,
+        actionType: "SCAN_VAULT",
+        trigger,
+        reasoning: `Idempotent skip: prior AGENT_RUN_COMPLETED exists for job ${String(job.id ?? "unknown")}`,
+        outcome: AGENT_JOB_SKIPPED_OUTCOME,
+      });
+    } catch (logError) {
+      console.error(
+        `[Worker] Failed to log idempotent skip for job ${job.id}:`,
+        logError
+      );
+    }
+
+    try {
+      await emitAgentRunComplete({
+        clientId,
+        agentType,
+        jobId: String(job.id ?? "unknown"),
+        success: true,
+      });
+    } catch (emitErr) {
+      console.error("[Worker] emitAgentRunComplete failed:", emitErr);
+    }
+
+    return { success: true, skipped: true };
+  }
 
   // 2. Build tools — shared + agent-specific, grouped for Mastra toolsets
   const sharedTools = buildSharedTools(vault);
@@ -178,6 +229,25 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
     );
 
     try {
+      await vault.logAction({
+        documentId,
+        agentType,
+        actionType: "SCAN_VAULT",
+        trigger,
+        reasoning: `Agent run completed successfully for job ${String(job.id ?? "unknown")}`,
+        outcome: AGENT_JOB_COMPLETED_OUTCOME,
+        nextScheduledAt: new Date(
+          new Date(env.DEMO_DATE).getTime() + 1 * 24 * 60 * 60 * 1000
+        ),
+      });
+    } catch (logError) {
+      console.error(
+        `[Worker] Failed to log completion for job ${job.id}:`,
+        logError
+      );
+    }
+
+    try {
       await emitAgentRunComplete({
         clientId,
         agentType,
@@ -204,6 +274,7 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
         metadata: { trigger },
       });
       await vault.logAction({
+        documentId,
         agentType,
         actionType: "SCAN_VAULT",
         trigger,

@@ -414,6 +414,41 @@ export class VaultService {
   }
 
   /**
+   * Returns true when this vault already has a successful agent-job completion marker
+   * for the same agent/trigger/(document) within the given window.
+   * Used by BullMQ processors so retries/replays do not re-run side effects.
+   * Integrates with ActionLedger unique keys when WP-P0.1 lands — AgentAction is the interim SoR.
+   */
+  async hasCompletedAgentJob(input: {
+    agentType: string;
+    trigger: string;
+    documentId?: string;
+    completedOutcome: string;
+    since: Date;
+  }): Promise<boolean> {
+    const history = (await this.getActionHistory()) as Array<{
+      agentType: string;
+      trigger: string;
+      documentId: string | null;
+      outcome: string | null;
+      performedAt: Date;
+      actionType: string;
+    }>;
+
+    return history.some((row) => {
+      if (row.outcome !== input.completedOutcome) return false;
+      if (row.agentType !== input.agentType) return false;
+      if (row.trigger !== input.trigger) return false;
+      if (row.actionType !== "SCAN_VAULT") return false;
+      if (row.performedAt.getTime() < input.since.getTime()) return false;
+      if (input.documentId) {
+        return row.documentId === input.documentId;
+      }
+      return true;
+    });
+  }
+
+  /**
    * Checks if a duplicate action is being attempted within the cooldown period.
    * Throws an error if the cooldown has not expired.
    */
