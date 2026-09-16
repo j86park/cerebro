@@ -7,7 +7,7 @@ import { enqueueExpiryProximityTriggers } from "@/lib/queue/pkycTriggers";
 /**
  * Enqueues scheduled full scans for every client: one COMPLIANCE and one ONBOARDING job each,
  * all on `cerebro-scheduled` (architecture §Queue Separation).
- * Uses deterministic jobIds (`scan:{clientId}:{demoDate}:{agentType}`) so cron retries do not
+ * Uses deterministic jobIds (`scan:{clientId}:{demoDate}_{agentType}`) so cron retries do not
  * double-enqueue the same logical scan.
  */
 export async function enqueueScheduledAgentScansForAllClients(): Promise<{

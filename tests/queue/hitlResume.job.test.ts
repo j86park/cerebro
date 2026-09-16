@@ -43,7 +43,10 @@ describe("HITL queue job schemas", () => {
     expect(hitlTimeoutJobSchema.safeParse(payload).success).toBe(true);
     expect(isHitlQueueJob(payload)).toBe(true);
     expect(buildHitlTimeoutJobId(payload.workflowRunId)).toBe(
-      "hitl-timeout:run-abc",
+      "hitl-timeout:run-abc:timeout",
+    );
+    expect(buildHitlTimeoutJobId(payload.workflowRunId).split(":")).toHaveLength(
+      3,
     );
   });
 

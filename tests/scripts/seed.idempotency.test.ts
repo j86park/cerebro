@@ -11,6 +11,7 @@ vi.mock("@/lib/db/client", () => ({
     client: { upsert: vi.fn().mockResolvedValue({}) },
     document: { upsert: vi.fn().mockResolvedValue({}) },
     agentAction: { upsert: vi.fn().mockResolvedValue({}) },
+    onboardingStage: { upsert: vi.fn().mockResolvedValue({}) },
   },
 }));
 
@@ -28,8 +29,9 @@ describe("Seed idempotency", () => {
     expect(prisma.client.upsert).toHaveBeenCalled();
     expect(prisma.document.upsert).toHaveBeenCalled();
     expect(prisma.agentAction.upsert).toHaveBeenCalled();
-    
+    expect(prisma.onboardingStage.upsert).toHaveBeenCalled();
+
     // Check that create was not called (it's not even mocked above, so it would throw if called)
-    expect((prisma.firm as any).create).toBeUndefined();
+    expect((prisma.firm as { create?: unknown }).create).toBeUndefined();
   });
 });

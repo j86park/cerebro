@@ -1,15 +1,19 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const deleteMany = vi.fn().mockResolvedValue({});
+const deleteManyEscalation = vi.fn().mockResolvedValue({});
 const updateManyDoc = vi.fn().mockResolvedValue({});
 const updateManyClient = vi.fn().mockResolvedValue({});
+const updateManyOnboardingStage = vi.fn().mockResolvedValue({});
 const disconnect = vi.fn();
 
 vi.mock("@/lib/db/client", () => ({
   prisma: {
     agentAction: { deleteMany },
+    escalationState: { deleteMany: deleteManyEscalation },
     document: { updateMany: updateManyDoc },
     client: { updateMany: updateManyClient },
+    onboardingStage: { updateMany: updateManyOnboardingStage },
     $disconnect: disconnect,
   },
 }));
@@ -31,6 +35,7 @@ describe("reset-demo script contract", () => {
     expect(deleteMany).toHaveBeenCalledWith({
       where: { NOT: { outcome: "SEEDED_HISTORY" } },
     });
+    expect(deleteManyEscalation).toHaveBeenCalledWith({});
 
     expect(updateManyDoc).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -42,6 +47,7 @@ describe("reset-demo script contract", () => {
     );
 
     expect(updateManyClient).toHaveBeenCalled();
+    expect(updateManyOnboardingStage).toHaveBeenCalled();
     expect(runSeed).toHaveBeenCalled();
   });
 });

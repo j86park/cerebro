@@ -18,7 +18,7 @@ describe("buildAgentJobId", () => {
         agentType: "COMPLIANCE",
         trigger: "SCHEDULED",
       })
-    ).toBe("scan:CLT-001:2026-09-16:COMPLIANCE");
+    ).toBe("scan:CLT-001:2026-09-16_COMPLIANCE");
   });
 
   it("builds upload jobIds from clientId + documentId + agentType", async () => {
@@ -30,7 +30,7 @@ describe("buildAgentJobId", () => {
         trigger: "EVENT_UPLOAD",
         documentId: "doc-42",
       })
-    ).toBe("upload:CLT-001:doc-42:ONBOARDING");
+    ).toBe("upload:CLT-001:doc-42_ONBOARDING");
   });
 
   it("builds manual jobIds from clientId + DEMO_DATE + agentType", async () => {
@@ -41,7 +41,59 @@ describe("buildAgentJobId", () => {
         agentType: "COMPLIANCE",
         trigger: "MANUAL",
       })
-    ).toBe("manual:CLT-002:2026-09-16:COMPLIANCE");
+    ).toBe("manual:CLT-002:2026-09-16_COMPLIANCE");
+  });
+
+  it("emits BullMQ-legal 3-segment jobIds for every trigger", async () => {
+    const { buildAgentJobId, assertBullMqCompatibleJobId } = await import(
+      "@/lib/queue/jobs"
+    );
+    const samples = [
+      buildAgentJobId({
+        clientId: "CLT-001",
+        agentType: "COMPLIANCE",
+        trigger: "SCHEDULED",
+      }),
+      buildAgentJobId({
+        clientId: "CLT-001",
+        agentType: "ONBOARDING",
+        trigger: "EVENT_UPLOAD",
+        documentId: "doc-42",
+      }),
+      buildAgentJobId({
+        clientId: "CLT-002",
+        agentType: "COMPLIANCE",
+        trigger: "MANUAL",
+      }),
+      buildAgentJobId({
+        clientId: "CLT-001",
+        agentType: "COMPLIANCE",
+        trigger: "EVENT_EXPIRY_PROXIMITY",
+        documentId: "doc-9",
+      }),
+      buildAgentJobId({
+        clientId: "CLT-001",
+        agentType: "COMPLIANCE",
+        trigger: "EVENT_RISK_TIER_CHANGE",
+        eventKey: "MODERATE-to-AGGRESSIVE",
+      }),
+      buildAgentJobId({
+        clientId: "CLT-002",
+        agentType: "ONBOARDING",
+        trigger: "EVENT_PROFILE_MATERIAL_CHANGE",
+        eventKey: "email-name",
+      }),
+      buildAgentJobId({
+        clientId: "CLT-003",
+        agentType: "COMPLIANCE",
+        trigger: "EVENT_SANCTIONS_PEP",
+        eventKey: "hit_abc",
+      }),
+    ];
+    for (const jobId of samples) {
+      expect(jobId.split(":")).toHaveLength(3);
+      expect(assertBullMqCompatibleJobId(jobId)).toBe(jobId);
+    }
   });
 
   it("rejects EVENT_UPLOAD without documentId", async () => {
@@ -106,7 +158,7 @@ describe("enqueueAgentJob idempotency", () => {
   });
 
   it("passes deterministic jobId and skips add when job already exists", async () => {
-    const jobId = "scan:CLT-001:2026-09-16:COMPLIANCE";
+    const jobId = "scan:CLT-001:2026-09-16_COMPLIANCE";
     const add = vi.fn().mockResolvedValue({ id: jobId });
     const getJob = vi
       .fn()
@@ -133,7 +185,9 @@ describe("enqueueAgentJob idempotency", () => {
   it("treats thrown already-exists errors as deduplicated", async () => {
     const add = vi
       .fn()
-      .mockRejectedValue(new Error("Job scan:CLT-001:2026-09-16:COMPLIANCE already exists"));
+      .mockRejectedValue(
+        new Error("Job scan:CLT-001:2026-09-16_COMPLIANCE already exists"),
+      );
     const getJob = vi.fn().mockResolvedValue(null);
 
     const { enqueueAgentJob } = await import("@/lib/queue/enqueue");
@@ -147,7 +201,7 @@ describe("enqueueAgentJob idempotency", () => {
     );
 
     expect(result).toEqual({
-      jobId: "scan:CLT-001:2026-09-16:COMPLIANCE",
+      jobId: "scan:CLT-001:2026-09-16_COMPLIANCE",
       deduplicated: true,
     });
   });
@@ -198,7 +252,7 @@ describe("processAgentJob processor idempotency", () => {
     const { AGENT_JOB_SKIPPED_OUTCOME } = await import("@/lib/queue/jobs");
 
     const result = await processAgentJob({
-      id: "scan:CLT-001:2026-09-16:COMPLIANCE",
+      id: "scan:CLT-001:2026-09-16_COMPLIANCE",
       data: {
         clientId: "CLT-001",
         agentType: "COMPLIANCE",
@@ -281,7 +335,7 @@ describe("processAgentJob processor idempotency", () => {
     const { AGENT_JOB_COMPLETED_OUTCOME } = await import("@/lib/queue/jobs");
 
     const result = await processAgentJob({
-      id: "upload:CLT-001:doc-1:ONBOARDING",
+      id: "upload:CLT-001:doc-1_ONBOARDING",
       data: {
         clientId: "CLT-001",
         agentType: "ONBOARDING",

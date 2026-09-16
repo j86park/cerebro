@@ -66,7 +66,7 @@ describe("buildAgentJobId pKYC patterns", () => {
         trigger: "EVENT_EXPIRY_PROXIMITY",
         documentId: "doc-9",
       })
-    ).toBe("expiry:CLT-001:doc-9:2026-09-16:COMPLIANCE");
+    ).toBe("expiry:CLT-001:doc-9_2026-09-16_COMPLIANCE");
 
     expect(
       buildAgentJobId({
@@ -75,7 +75,7 @@ describe("buildAgentJobId pKYC patterns", () => {
         trigger: "EVENT_RISK_TIER_CHANGE",
         eventKey: "MODERATE-to-AGGRESSIVE",
       })
-    ).toBe("risk:CLT-001:MODERATE-to-AGGRESSIVE:2026-09-16:COMPLIANCE");
+    ).toBe("risk:CLT-001:MODERATE-to-AGGRESSIVE_2026-09-16_COMPLIANCE");
 
     expect(
       buildAgentJobId({
@@ -84,7 +84,7 @@ describe("buildAgentJobId pKYC patterns", () => {
         trigger: "EVENT_PROFILE_MATERIAL_CHANGE",
         eventKey: "email-name",
       })
-    ).toBe("profile:CLT-002:email-name:2026-09-16:ONBOARDING");
+    ).toBe("profile:CLT-002:email-name_2026-09-16_ONBOARDING");
 
     expect(
       buildAgentJobId({
@@ -93,7 +93,7 @@ describe("buildAgentJobId pKYC patterns", () => {
         trigger: "EVENT_SANCTIONS_PEP",
         eventKey: "hit_abc",
       })
-    ).toBe("sanctions:CLT-003:hit_abc:2026-09-16:COMPLIANCE");
+    ).toBe("sanctions:CLT-003:hit_abc_2026-09-16_COMPLIANCE");
   });
 
   it("rejects pKYC payloads missing required keys", async () => {
@@ -202,8 +202,8 @@ describe("enqueueExpiryProximityTriggers", () => {
     }
 
     const jobIds = add.mock.calls.map((c) => c[2]?.jobId as string);
-    expect(jobIds).toContain("expiry:CLT-001:doc-near:2026-09-16:COMPLIANCE");
-    expect(jobIds).toContain("expiry:CLT-002:doc-near-2:2026-09-16:COMPLIANCE");
+    expect(jobIds).toContain("expiry:CLT-001:doc-near_2026-09-16_COMPLIANCE");
+    expect(jobIds).toContain("expiry:CLT-002:doc-near-2_2026-09-16_COMPLIANCE");
 
     // Prisma query must pin the window to DEMO_DATE (not wall clock).
     const where = findMany.mock.calls[0]?.[0]?.where;
@@ -351,7 +351,7 @@ describe("enqueueSanctionsPepStub", () => {
       agentType: "COMPLIANCE",
     });
     expect(add.mock.calls[0]?.[2]?.jobId).toBe(
-      "sanctions:CLT-020:vendor-hit-1:2026-09-16:COMPLIANCE"
+      "sanctions:CLT-020:vendor-hit-1_2026-09-16_COMPLIANCE"
     );
   });
 });

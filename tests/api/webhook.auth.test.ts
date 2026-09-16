@@ -6,7 +6,7 @@ vi.mock("@/lib/config", () => ({
 }));
 
 const enqueueAgentJob = vi.fn().mockResolvedValue({
-  jobId: "upload:CLT-001:doc1:ONBOARDING",
+  jobId: "upload:CLT-001:doc1_ONBOARDING",
   deduplicated: false,
 });
 
