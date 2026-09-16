@@ -8,6 +8,7 @@ import { RegressionTracker } from "@/components/testing/RegressionTracker";
 import { ScorerBreakdown } from "@/components/testing/ScorerBreakdown";
 import { ScenarioMatrix } from "@/components/testing/ScenarioMatrix";
 import { MutationHistory } from "@/components/testing/MutationHistory";
+import { PromptOpsPanel } from "@/components/testing/PromptOpsPanel";
 import { FailureInspector } from "@/components/testing/FailureInspector";
 import { GROUND_TRUTH } from "@/evals/ground-truth";
 
@@ -155,6 +156,8 @@ export default function TestingPage({
           </div>
 
           <MutationHistory key={mutationHistoryKey} />
+
+          <PromptOpsPanel />
 
           <FailureInspector
             isOpen={!!selectedCell}

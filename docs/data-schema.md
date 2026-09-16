@@ -72,6 +72,7 @@ model Client {
   createdAt        DateTime        @default(now())
   documents        Document[]
   agentActions     AgentAction[]
+  decisionRecords  DecisionRecord[]
   escalationStates EscalationState[]
   onboardingStageState OnboardingStage?
 }
@@ -120,6 +121,34 @@ model AgentAction {
   @@unique([clientId, idempotencyKey])
   @@index([clientId, performedAt])
   @@index([agentType, actionType])
+}
+
+/// Examiner decision log (WP-P0.6). Correlated to Mastra AI Tracing via `traceId`; one logical trace per BullMQ `jobId`.
+model DecisionRecord {
+  id              String   @id @default(cuid())
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id])
+  jobId           String
+  agentName       String
+  stage           Int?
+  traceId         String
+  policyVersion   String?
+  policyFired     String?
+  toolProposed    String[] @default([])
+  toolExecuted    String[] @default([])
+  refusalCodes    String[] @default([])
+  reviewer        String?
+  outcome         String
+  reason          String
+  promptVersionId String?
+  contentCaptured Boolean  @default(false)
+  metadata        Json?
+  decidedAt       DateTime @default(now())
+
+  @@index([clientId, decidedAt])
+  @@index([jobId])
+  @@index([traceId])
+  @@index([clientId, jobId])
 }
 
 model EscalationState {

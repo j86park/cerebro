@@ -3,6 +3,7 @@ import {
   onboardingStageScorer,
   duplicateActionScorer,
   reasoningQualityScorer,
+  trajectoryScorer,
 } from "../scorers";
 import type { AbstractScenario } from "./scenario-types";
 
@@ -17,6 +18,7 @@ export const onboardingScenarios: AbstractScenario[] = GROUND_TRUTH.filter(
   scorers: [
     onboardingStageScorer,
     duplicateActionScorer,
+    trajectoryScorer,
     reasoningQualityScorer,
   ],
 }));

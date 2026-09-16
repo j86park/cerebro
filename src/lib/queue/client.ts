@@ -1,7 +1,12 @@
 import { Queue } from "bullmq";
 import Redis from "ioredis";
 import { env } from "@/lib/config";
-import type { AgentJobPayload, SimulationJobPayload, PriorityJobPayload } from "./jobs";
+import {
+  agentJobRetentionOptions,
+  type AgentJobPayload,
+  type PriorityJobPayload,
+  type SimulationJobPayload,
+} from "./jobs";
 
 // BullMQ requires maxRetriesPerRequest to be null
 const isTls = env.REDIS_URL.startsWith("rediss://");
@@ -43,12 +48,15 @@ connection.on("error", (err) => {
   console.error("[Redis] Connection: ERROR", err);
 });
 
-/** Standard retry config per database.mdc §Job Retry Configuration */
+/**
+ * Standard retry + retention for live agent queues.
+ * Age-based removeOnComplete keeps deterministic jobIds around for dedupe
+ * (count-only or removeOnComplete:true empties Redis too fast for daily scans).
+ */
 const defaultJobOptions = {
   attempts: 3,
   backoff: { type: "exponential" as const, delay: 2000 },
-  removeOnComplete: { count: 1000 },
-  removeOnFail: { count: 500 },
+  ...agentJobRetentionOptions,
 };
 
 /**

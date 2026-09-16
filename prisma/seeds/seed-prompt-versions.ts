@@ -1,5 +1,5 @@
 /**
- * One-time / manual seed: inserts active PromptVersion rows from hardcoded prompts.
+ * One-time / manual seed: inserts PromptVersion rows and staging/production pointers.
  *
  * Run: node --env-file=.env.local --import tsx prisma/seeds/seed-prompt-versions.ts
  */
@@ -14,7 +14,7 @@ async function seedAgent(agentId: string, content: string): Promise<void> {
     where: { agentId },
     data: { isActive: false },
   });
-  await prisma.promptVersion.create({
+  const version = await prisma.promptVersion.create({
     data: {
       agentId,
       content,
@@ -22,12 +22,33 @@ async function seedAgent(agentId: string, content: string): Promise<void> {
       mutationReason: "initial_seed",
     },
   });
+
+  // REGULATORY: seed both env pointers to the same immutable version; promote/rollback move pointers only.
+  for (const environment of ["STAGING", "PRODUCTION"] as const) {
+    await prisma.promptEnvironmentPointer.upsert({
+      where: {
+        agentId_environment: { agentId, environment },
+      },
+      create: {
+        agentId,
+        environment,
+        promptVersionId: version.id,
+        previousPromptVersionId: null,
+      },
+      update: {
+        promptVersionId: version.id,
+        previousPromptVersionId: null,
+      },
+    });
+  }
 }
 
 async function main(): Promise<void> {
   await seedAgent("compliance", COMPLIANCE_SYSTEM_PROMPT);
   await seedAgent("onboarding", ONBOARDING_SYSTEM_PROMPT);
-  console.log("PromptVersion seed complete for compliance + onboarding.");
+  console.log(
+    "PromptVersion + staging/production pointers seeded for compliance + onboarding.",
+  );
 }
 
 main()
