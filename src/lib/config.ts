@@ -37,6 +37,10 @@ const envSchema = z.object({
   /** OpenRouter model ids — see https://openrouter.ai/models */
   MODEL_DEV: z.string().default("moonshotai/kimi-k2"),
   MODEL_DEMO: z.string().default("moonshotai/kimi-k2"),
+  /**
+   * Pinned eval-judge model id. Soft scorers must call `getModel("evalJudge")` only —
+   * never hardcode this string outside this file.
+   */
   MODEL_EVAL_JUDGE: z.string().default("moonshotai/kimi-k2"),
   DRY_RUN: z.preprocess((value) => value === "true" || value === true, z.boolean()).default(true),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
