@@ -3,6 +3,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
 import { EscalationStatus, LedgerActor, OnboardingStatus } from "@/lib/db/enums";
+import {
+  formatUntrustedDocumentBlock,
+  sanitizeDocumentTextForAgentContext,
+} from "@/lib/documents/injectionHygiene";
 
 const vaultContextSchema = z.object({
   clientId: z.string().min(1),
@@ -79,6 +83,7 @@ type PrismaLike = {
   };
   document: {
     findMany: (args: unknown) => Promise<unknown[]>;
+    create: (args: unknown) => Promise<unknown>;
     update: (args: unknown) => Promise<unknown>;
     upsert: (args: unknown) => Promise<unknown>;
   };
@@ -154,6 +159,44 @@ export class VaultService {
       where: { clientId: this.clientId },
       orderBy: [{ category: "asc" }, { type: "asc" }],
     });
+  }
+
+  /**
+   * Returns a single document by id, fail-closed to this vault.
+   * Cross-client attempts are audited then thrown.
+   */
+  async getDocumentById(documentId: string) {
+    const id = z.string().min(1).parse(documentId);
+    return this.requireDocumentInVault(id);
+  }
+
+  /**
+   * Loads document body text for agent context: scoped retrieval + injection hygiene.
+   */
+  async getDocumentContentForAgent(documentId: string): Promise<{
+    documentId: string;
+    type: string | null;
+    text: string;
+    strippedPatterns: string[];
+    agentContextBlock: string;
+  }> {
+    const doc = (await this.getDocumentById(documentId)) as {
+      id: string;
+      type?: string | null;
+      notes?: string | null;
+    };
+    const raw = typeof doc.notes === "string" ? doc.notes : "";
+    const sanitized = sanitizeDocumentTextForAgentContext(raw);
+    return {
+      documentId: doc.id,
+      type: typeof doc.type === "string" ? doc.type : null,
+      text: sanitized.text,
+      strippedPatterns: sanitized.strippedPatterns,
+      agentContextBlock: formatUntrustedDocumentBlock({
+        documentId: doc.id,
+        text: sanitized.text,
+      }),
+    };
   }
 
   /**
@@ -389,21 +432,55 @@ export class VaultService {
    * Updates a document status scoped to this vault.
    */
   async updateDocumentStatus(documentId: string, status: string, notes?: string) {
-    const docs = await this.db.document.findMany({
-      where: { id: documentId, clientId: this.clientId },
-    });
-
-    if (docs.length === 0) {
-      throw new Error(`Document ${documentId} not found in client vault ${this.clientId}`);
-    }
+    const id = z.string().min(1).parse(documentId);
+    await this.requireDocumentInVault(id);
 
     return this.db.document.update({
       where: {
-        id: documentId,
+        id,
       },
       data: {
         status,
         notes,
+      },
+    });
+  }
+
+  /**
+   * Creates a new document row for this vault (upload path).
+   * Optional `notes` are stored as provided — callers must sanitize extracted text first.
+   */
+  async createDocument(input: {
+    id?: string;
+    type: string;
+    category: string;
+    status: string;
+    uploadedAt?: Date;
+    expiryDate?: Date;
+    notificationCount?: number;
+    lastNotifiedAt?: Date;
+    fileRef?: string;
+    notes?: string;
+  }) {
+    const parsed = z
+      .object({
+        id: z.string().min(1).optional(),
+        type: z.string().min(1),
+        category: z.string().min(1),
+        status: z.string().min(1),
+        uploadedAt: z.date().optional(),
+        expiryDate: z.date().optional(),
+        notificationCount: z.number().int().optional(),
+        lastNotifiedAt: z.date().optional(),
+        fileRef: z.string().optional(),
+        notes: z.string().optional(),
+      })
+      .parse(input);
+
+    return this.db.document.create({
+      data: {
+        ...parsed,
+        clientId: this.clientId,
       },
     });
   }
@@ -434,6 +511,52 @@ export class VaultService {
         id,
         ...input,
         clientId: this.clientId,
+      },
+    });
+  }
+
+  /**
+   * Ensures documentId belongs to this vault; audits and throws on cross-client probe.
+   */
+  private async requireDocumentInVault(documentId: string): Promise<unknown> {
+    const scoped = await this.db.document.findMany({
+      where: { id: documentId, clientId: this.clientId },
+    });
+    if (scoped.length > 0) {
+      return scoped[0];
+    }
+
+    const anyMatch = await this.db.document.findMany({
+      where: { id: documentId },
+    });
+    if (anyMatch.length > 0) {
+      await this.auditCrossClientDocumentAccess(documentId);
+      throw new Error(
+        `Cross-client document access denied: document ${documentId} is not in vault ${this.clientId}`,
+      );
+    }
+
+    throw new Error(
+      `Document ${documentId} not found in client vault ${this.clientId}`,
+    );
+  }
+
+  /**
+   * Writes ActionLedger evidence when a cross-client document access is attempted.
+   */
+  private async auditCrossClientDocumentAccess(documentId: string): Promise<void> {
+    await this.logAction({
+      documentId,
+      agentType: "SYSTEM",
+      actionType: "DOCUMENT_ACCESS_DENIED",
+      trigger: "MANUAL",
+      reasoning: `Blocked cross-client document retrieval for ${documentId} against vault ${this.clientId}`,
+      outcome: "DENIED",
+      actor: LedgerActor.SYSTEM,
+      reasonCodes: ["CROSS_CLIENT_ACCESS_DENIED"],
+      citedFields: {
+        documentId,
+        vaultClientId: this.clientId,
       },
     });
   }

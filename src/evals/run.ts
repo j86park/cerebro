@@ -7,6 +7,8 @@ import { VaultService } from "@/lib/db/vault-service";
 import { buildSharedTools } from "@/tools/shared";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
+import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
+import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
 import { assertEvalOverallScore } from "@/evals/threshold";
@@ -79,16 +81,26 @@ export async function runAllEvals(
           );
           const vault = new VaultService({ clientId: sc.clientId });
           const sharedTools = buildSharedTools(vault);
+          const domainTools =
+            sc.agentType === "COMPLIANCE"
+              ? buildComplianceTools(vault)
+              : buildOnboardingTools(vault);
+          const domain =
+            sc.agentType === "COMPLIANCE" ? "compliance" : "onboarding";
+          assertAgentToolAllowlist(domain, [
+            ...Object.keys(sharedTools),
+            ...Object.keys(domainTools),
+          ]);
 
           const agent =
             sc.agentType === "COMPLIANCE" ? complianceAgent : onboardingAgent;
           const toolsets =
             sc.agentType === "COMPLIANCE"
-              ? { shared: sharedTools, compliance: buildComplianceTools(vault) }
-              : { shared: sharedTools, onboarding: buildOnboardingTools(vault) };
+              ? { shared: sharedTools, compliance: domainTools }
+              : { shared: sharedTools, onboarding: domainTools };
 
           const result = await agent.generate(sc.input, {
-            memory: { thread: sc.clientId, resource: sc.clientId },
+            memory: buildClientMemoryScope(sc.clientId),
             toolsets: toolsets as never,
           });
 

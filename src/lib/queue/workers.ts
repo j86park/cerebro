@@ -7,6 +7,8 @@ import { VaultService } from "@/lib/db/vault-service";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildSharedTools } from "@/tools/shared";
+import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
+import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
 import { agentJobSchema } from "./jobs";
 
@@ -21,8 +23,12 @@ import {
 /**
  * Builds the initial context prompt for an agent run, describing what
  * triggered the run and any specific document context.
+ * Document body text is loaded via VaultService (client-scoped) and sanitized first.
  */
-function buildInitialPrompt(payload: AgentJobPayload): string {
+async function buildInitialPrompt(
+  payload: AgentJobPayload,
+  vault: VaultService,
+): Promise<string> {
   const parts = [
     `You are running for client ${payload.clientId}.`,
     `This run was triggered by: ${payload.trigger}.`,
@@ -31,15 +37,27 @@ function buildInitialPrompt(payload: AgentJobPayload): string {
   if (payload.trigger === "EVENT_UPLOAD" && payload.documentId) {
     parts.push(
       `A new document was just uploaded: ${payload.documentId}. ` +
-        `Handle this document event first, then proceed with your normal observation and decision flow.`
+        `Handle this document event first, then proceed with your normal observation and decision flow.`,
     );
+    try {
+      const content = await vault.getDocumentContentForAgent(payload.documentId);
+      parts.push(content.agentContextBlock);
+    } catch (error) {
+      console.error(
+        `[Worker] Failed to load document content for ${payload.documentId}:`,
+        error instanceof Error ? error.message : error,
+      );
+      parts.push(
+        `Document content was unavailable for ${payload.documentId}; use observation tools only.`,
+      );
+    }
   } else {
     parts.push(
-      `Start by calling your observation tools to understand the current state of this client's vault.`
+      `Start by calling your observation tools to understand the current state of this client's vault.`,
     );
   }
 
-  return parts.join(" ");
+  return parts.join("\n\n");
 }
 
 /**
@@ -70,6 +88,12 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
       ? buildComplianceTools(vault)
       : buildOnboardingTools(vault);
 
+  const domain = agentType === "COMPLIANCE" ? "compliance" : "onboarding";
+  assertAgentToolAllowlist(domain, [
+    ...Object.keys(sharedTools),
+    ...Object.keys(agentSpecificTools),
+  ]);
+
   // Mastra expects toolsets as Record<string, Record<string, Tool>>
   const toolsets = {
     shared: sharedTools,
@@ -79,14 +103,12 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
   };
 
   // 3. Run the agent with scoped memory
-  const prompt = buildInitialPrompt(parsed);
+  const prompt = await buildInitialPrompt(parsed, vault);
+  const memory = buildClientMemoryScope(clientId);
 
   try {
     const result = await agent.generate(prompt, {
-      memory: {
-        resource: clientId,
-        thread: clientId,
-      },
+      memory,
       toolsets,
     });
 

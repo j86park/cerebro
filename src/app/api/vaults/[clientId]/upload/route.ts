@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
-import { prisma } from "@/lib/db/client";
+import { env } from "@/lib/config";
+import { VaultService } from "@/lib/db/vault-service";
 import { extractDocumentText } from "@/lib/documents/parser";
+import { sanitizeDocumentTextForAgentContext } from "@/lib/documents/injectionHygiene";
 import { queues } from "@/lib/queue/client";
 import type { DocumentCategory, DocumentType } from "@prisma/client";
 import { DocumentCategory as DocumentCategoryValues, DocumentType as DocumentTypeValues } from "@/lib/db/enums";
@@ -22,6 +24,7 @@ function parseDocumentCategoryField(raw: FormDataEntryValue | null): DocumentCat
 /**
  * POST /api/vaults/[clientId]/upload
  * Handles real file uploads, stores them locally, and triggers agent processing.
+ * Extracted text is injection-sanitized before vault write; writes go through VaultService.
  */
 export async function POST(
   req: NextRequest,
@@ -48,21 +51,20 @@ export async function POST(
     await fs.mkdir(clientDir, { recursive: true });
     await fs.writeFile(filePath, buffer);
 
-    // 2. Extract Text
+    // 2. Extract text and strip obvious injection wrappers before vault storage
     const extractedText = await extractDocumentText(filePath);
+    const sanitized = sanitizeDocumentTextForAgentContext(extractedText);
 
-    // 3. Create or Sync Document Record
-    const document = await prisma.document.create({
-      data: {
-        clientId,
-        type,
-        category,
-        status: "PENDING_REVIEW",
-        uploadedAt: new Date(),
-        fileRef: filePath,
-        notes: extractedText, 
-      },
-    });
+    // 3. Create document via VaultService (clientId-scoped)
+    const vault = new VaultService({ clientId });
+    const document = (await vault.createDocument({
+      type,
+      category,
+      status: "PENDING_REVIEW",
+      uploadedAt: new Date(env.DEMO_DATE),
+      fileRef: filePath,
+      notes: sanitized.text,
+    })) as { id: string };
 
     // 4. Trigger Priority Agent Run
     await queues.priority.add(`upload-${document.id}`, {
@@ -79,11 +81,12 @@ export async function POST(
       documentId: document.id,
     });
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       documentId: document.id,
       fileName,
-      extractedPreview: extractedText.substring(0, 100) + "..."
+      extractedPreview: sanitized.text.substring(0, 100) + "...",
+      injectionPatternsStripped: sanitized.strippedPatterns,
     });
 
   } catch (error) {
