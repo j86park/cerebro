@@ -109,6 +109,9 @@ cerebro/
 │   │   ├── db/
 │   │   │   ├── client.ts        ← Prisma client singleton
 │   │   │   └── vault-service.ts ← ALL db access goes through here
+│   │   ├── observability/
+│   │   │   ├── decision-log.ts  ← DecisionRecord Zod schemas (examiner SoR)
+│   │   │   └── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
 │   │   ├── queue/
 │   │   │   ├── client.ts        ← BullMQ + Redis (`REDIS_URL`) setup
 │   │   │   ├── workers.ts       ← queue worker definitions

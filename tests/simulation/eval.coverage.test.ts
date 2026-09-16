@@ -13,6 +13,7 @@ const { mockScorers } = vi.hoisted(() => {
       documentPriorityScorer: factory("documentPriorityScorer"),
       onboardingStageScorer: factory("onboardingStageScorer"),
       reasoningQualityScorer: factory("reasoningQualityScorer"),
+      trajectoryScorer: factory("trajectoryScorer"),
     }
   };
 });
