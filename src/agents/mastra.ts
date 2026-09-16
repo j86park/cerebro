@@ -1,6 +1,7 @@
 import { Mastra } from "@mastra/core";
 import { getComplianceAgent } from "./compliance/agent";
 import { getOnboardingAgent } from "./onboarding/agent";
+import { complianceHitlApprovalWorkflow } from "./workflows/complianceHitl.workflow";
 import { mastraPostgres } from "@/lib/mastra-postgres";
 import { registerCerebroMemoClear } from "@/lib/agent-runtime-registry";
 
@@ -9,6 +10,7 @@ let _initPromise: Promise<Mastra> | null = null;
 
 /**
  * Lazily constructs the shared `Mastra` instance after async prompt load for both agents.
+ * Registers the compliance HITL suspend/resume workflow for durable advisor approvals.
  */
 export async function getCerebro(): Promise<Mastra> {
   if (_cerebro) return _cerebro;
@@ -22,6 +24,9 @@ export async function getCerebro(): Promise<Mastra> {
         agents: {
           complianceAgent,
           onboardingAgent,
+        },
+        workflows: {
+          complianceHitlApproval: complianceHitlApprovalWorkflow,
         },
         storage: mastraPostgres.mainStore,
       });

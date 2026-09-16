@@ -1,7 +1,7 @@
 import { Queue } from "bullmq";
 import Redis from "ioredis";
 import { env } from "@/lib/config";
-import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
+import type { AgentJobPayload, SimulationJobPayload, PriorityJobPayload } from "./jobs";
 
 // BullMQ requires maxRetriesPerRequest to be null
 const isTls = env.REDIS_URL.startsWith("rediss://");
@@ -54,12 +54,12 @@ const defaultJobOptions = {
 /**
  * The three canonical BullMQ queues per architecture.md §Queue Separation.
  *
- * - `priority` — event-driven uploads, manual dashboard triggers
+ * - `priority` — event-driven uploads, manual dashboard triggers, HITL resume/timeout
  * - `scheduled` — cron-based full vault scans
  * - `simulation` — simulation batch jobs only
  */
 export const queues = {
-  priority: new Queue<AgentJobPayload>("cerebro-priority", {
+  priority: new Queue<PriorityJobPayload>("cerebro-priority", {
     connection: connection as never,
     defaultJobOptions,
   }),

@@ -7,8 +7,20 @@ import { VaultService } from "@/lib/db/vault-service";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildSharedTools } from "@/tools/shared";
-import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
-import { agentJobSchema } from "./jobs";
+import type {
+  AgentJobPayload,
+  HitlResumeJobPayload,
+  HitlTimeoutJobPayload,
+  PriorityJobPayload,
+  SimulationJobPayload,
+} from "./jobs";
+import {
+  agentJobSchema,
+  hitlResumeJobSchema,
+  hitlTimeoutJobSchema,
+  isHitlQueueJob,
+} from "./jobs";
+import { processHitlResumeFromEscalation } from "@/lib/hitl/resume";
 
 import { connection } from "./client";
 import { emitAgentRunComplete } from "@/lib/events/emit";
@@ -43,8 +55,48 @@ function buildInitialPrompt(payload: AgentJobPayload): string {
 }
 
 /**
+ * Processes HITL resume/timeout jobs: resumes Mastra snapshot without holding a wait loop.
+ * REGULATORY: timeout maps to SAFE_HOLD — never silent regulated auto-approve.
+ */
+export async function processHitlJob(
+  job: Job<HitlResumeJobPayload | HitlTimeoutJobPayload>,
+) {
+  const kind = (job.data as { kind?: string }).kind;
+  if (kind === "hitl_timeout") {
+    const parsed = hitlTimeoutJobSchema.parse(job.data);
+    console.log(
+      `[Worker] HITL timeout job ${job.id} for client ${parsed.clientId} run=${parsed.workflowRunId}`,
+    );
+    const vault = new VaultService({ clientId: parsed.clientId });
+    const result = await processHitlResumeFromEscalation({
+      vault,
+      clientId: parsed.clientId,
+      openKey: parsed.openKey,
+      decision: "timeout",
+    });
+    return { success: true, ...result };
+  }
+
+  const parsed = hitlResumeJobSchema.parse(job.data);
+  console.log(
+    `[Worker] HITL resume job ${job.id} decision=${parsed.decision} client=${parsed.clientId}`,
+  );
+  const vault = new VaultService({ clientId: parsed.clientId });
+  const result = await processHitlResumeFromEscalation({
+    vault,
+    clientId: parsed.clientId,
+    openKey: parsed.openKey,
+    decision: parsed.decision,
+    editedReasoning: parsed.editedReasoning,
+    advisorId: parsed.advisorId,
+  });
+  return { success: true, ...result };
+}
+
+/**
  * Processes an agent job: instantiates VaultService, builds scoped tools,
  * fetches the correct agent, and runs it with proper memory scoping.
+ * Approve-class tools suspend via HITL workflow — this job completes without blocking.
  */
 async function processAgentJob(job: Job<AgentJobPayload>) {
   const parsed = agentJobSchema.parse(job.data);
@@ -54,10 +106,7 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
     `[Worker] Processing ${agentType} job ${job.id} for client ${clientId} (trigger: ${trigger})`
   );
 
-  // 1. Build VaultService scoped to this client
   const vault = new VaultService({ clientId });
-
-  // 2. Build tools — shared + agent-specific, grouped for Mastra toolsets
   const sharedTools = buildSharedTools(vault);
 
   const agentName =
@@ -70,7 +119,6 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
       ? buildComplianceTools(vault)
       : buildOnboardingTools(vault);
 
-  // Mastra expects toolsets as Record<string, Record<string, Tool>>
   const toolsets = {
     shared: sharedTools,
     ...(agentType === "COMPLIANCE"
@@ -78,7 +126,6 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
       : { onboarding: agentSpecificTools }),
   };
 
-  // 3. Run the agent with scoped memory
   const prompt = buildInitialPrompt(parsed);
 
   try {
@@ -107,7 +154,6 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
 
     return { success: true, text: result.text };
   } catch (error) {
-    // Always log failure to audit trail so the dashboard can see it
     try {
       await vault.logAction({
         agentType,
@@ -126,57 +172,71 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
       );
     }
 
-    // Re-throw so BullMQ handles retries
     throw error;
   }
+}
+
+/**
+ * Priority queue processor: routes HITL resume/timeout vs agent runs.
+ */
+async function processPriorityJob(job: Job<PriorityJobPayload>) {
+  if (isHitlQueueJob(job.data)) {
+    return processHitlJob(
+      job as Job<HitlResumeJobPayload | HitlTimeoutJobPayload>,
+    );
+  }
+  return processAgentJob(job as Job<AgentJobPayload>);
 }
 
 import { SimulationOrchestrator } from "@/lib/simulation/orchestrator";
 
 /**
  * Processes a simulation batch job.
- * Each batch represents a set of days to process for all clients in the simulation.
  */
 export async function processSimulationJob(job: Job<SimulationJobPayload>) {
   const { runId, batchStart, batchEnd, clientStart, clientEnd } = job.data;
   const startTime = Date.now();
-  
+
   console.log(
     `[Worker] Processing simulation batch days ${batchStart}-${batchEnd} for run ${runId}` +
-    (clientStart !== undefined ? ` (clients ${clientStart}-${clientEnd})` : "")
+      (clientStart !== undefined
+        ? ` (clients ${clientStart}-${clientEnd})`
+        : "")
   );
 
   const orchestrator = new SimulationOrchestrator();
-  const clientRange = (clientStart !== undefined && clientEnd !== undefined) 
-    ? { start: clientStart, end: clientEnd } 
-    : undefined;
+  const clientRange =
+    clientStart !== undefined && clientEnd !== undefined
+      ? { start: clientStart, end: clientEnd }
+      : undefined;
 
   try {
     const totalDays = batchEnd - batchStart + 1;
-    
+
     for (let day = batchStart; day <= batchEnd; day++) {
       await orchestrator.tick(runId, day, clientRange);
-      
-      // Log memory and throughput at intervals
+
       const elapsedSec = (Date.now() - startTime) / 1000;
       const daysProcessed = day - batchStart + 1;
       const throughput = (daysProcessed / elapsedSec).toFixed(2);
-      
+
       if (daysProcessed % Math.max(1, Math.floor(totalDays / 10)) === 0) {
         const memUsage = process.memoryUsage().heapUsed / 1024 / 1024;
-        console.log(`[Worker] Run ${runId} Progress: ${daysProcessed}/${totalDays} days | Throughput: ${throughput} days/sec | Memory: ${memUsage.toFixed(2)} MB`);
+        console.log(
+          `[Worker] Run ${runId} Progress: ${daysProcessed}/${totalDays} days | Throughput: ${throughput} days/sec | Memory: ${memUsage.toFixed(2)} MB`
+        );
       }
     }
-    
-    // Update progress ONLY after the entire batch is finished
+
     await orchestrator.incrementProgress(runId);
 
     const totalElapsed = (Date.now() - startTime) / 1000;
-    console.log(`[Worker] Simulation batch ${batchStart}-${batchEnd} completed for run ${runId} in ${totalElapsed.toFixed(2)}s`);
-    
-    // Aggregating metrics after batch completion ensures the dashboard shows fresh action counts
+    console.log(
+      `[Worker] Simulation batch ${batchStart}-${batchEnd} completed for run ${runId} in ${totalElapsed.toFixed(2)}s`
+    );
+
     await orchestrator.aggregateMetrics(runId);
-    
+
     return { success: true, duration: totalElapsed };
   } catch (error) {
     console.error(`[Worker] Simulation job ${job.id} failed:`, error);
@@ -185,21 +245,19 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
 }
 
 type WorkerBundle = {
-  priority: Worker<AgentJobPayload>;
+  priority: Worker<PriorityJobPayload>;
   scheduled: Worker<AgentJobPayload>;
   simulation: Worker<SimulationJobPayload>;
 };
 
 const isVitest = process.env.VITEST === "true";
 
-// Workers with concurrency limits per database.mdc §Worker Concurrency.
-// Skip construction under Vitest so importing `processSimulationJob` does not open Redis connections.
 export const workers: WorkerBundle = isVitest
   ? ({} as WorkerBundle)
   : {
-      priority: new Worker<AgentJobPayload>(
+      priority: new Worker<PriorityJobPayload>(
         "cerebro-priority",
-        processAgentJob,
+        processPriorityJob,
         {
           connection: connection as never,
           concurrency: 5,
@@ -227,7 +285,6 @@ export const workers: WorkerBundle = isVitest
       ),
     };
 
-// Generic error/completion logging + metrics for all workers
 if (!isVitest) {
   Object.values(workers).forEach((worker) => {
     const queueName = worker.name as QueueName;

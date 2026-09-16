@@ -29,6 +29,8 @@ const logActionInputSchema = z.object({
   idempotencyKey: z.string().min(1).optional(),
 });
 
+const hitlContextSchema = z.record(z.unknown()).optional();
+
 const upsertEscalationInputSchema = z.object({
   openKey: z.string().min(1),
   ladderStage: z.number().int().min(0),
@@ -40,6 +42,7 @@ const upsertEscalationInputSchema = z.object({
   documentId: z.string().optional(),
   reasonCodes: z.array(z.string().min(1)).optional(),
   policyVersion: z.string().optional(),
+  hitlContext: hitlContextSchema,
 });
 
 const resolveEscalationInputSchema = z.object({
@@ -123,6 +126,13 @@ export class VaultService {
 
   getNow(): Date {
     return this.now;
+  }
+
+  /**
+   * Returns the vault's fixed clientId (for HITL / enqueue payloads — never for cross-client queries).
+   */
+  getClientId(): string {
+    return this.clientId;
   }
 
   /**
@@ -276,6 +286,7 @@ export class VaultService {
         documentId: parsed.documentId,
         reasonCodes: parsed.reasonCodes ?? [],
         policyVersion: parsed.policyVersion,
+        hitlContext: parsed.hitlContext ?? undefined,
         openedAt: this.now,
       },
       update: {
@@ -284,7 +295,21 @@ export class VaultService {
         documentId: parsed.documentId,
         reasonCodes: parsed.reasonCodes ?? [],
         policyVersion: parsed.policyVersion,
+        hitlContext: parsed.hitlContext ?? undefined,
         resolvedAt: null,
+      },
+    });
+  }
+
+  /**
+   * Finds an open-like escalation by openKey for this vault (HITL resume lookups).
+   */
+  async getEscalationStateByOpenKey(openKey: string) {
+    const parsed = z.string().min(1).parse(openKey);
+    return this.db.escalationState.findFirst({
+      where: {
+        clientId: this.clientId,
+        openKey: parsed,
       },
     });
   }
@@ -310,6 +335,7 @@ export class VaultService {
       data: {
         status: parsed.status,
         openKey: null,
+        hitlContext: null,
         resolvedAt: this.now,
         reasonCodes: parsed.reasonCodes,
       },

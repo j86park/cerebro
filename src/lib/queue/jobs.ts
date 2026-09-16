@@ -1,4 +1,12 @@
 import { z } from "zod";
+import {
+  hitlResumeJobSchema,
+  hitlTimeoutJobSchema,
+  buildHitlResumeJobId,
+  buildHitlTimeoutJobId,
+  type HitlResumeJobPayload,
+  type HitlTimeoutJobPayload,
+} from "@/lib/hitl/schemas";
 
 /**
  * Payload for all live agent jobs (priority + scheduled queues).
@@ -25,3 +33,31 @@ export const simulationJobSchema = z.object({
 });
 
 export type SimulationJobPayload = z.infer<typeof simulationJobSchema>;
+
+export {
+  hitlResumeJobSchema,
+  hitlTimeoutJobSchema,
+  buildHitlResumeJobId,
+  buildHitlTimeoutJobId,
+};
+export type { HitlResumeJobPayload, HitlTimeoutJobPayload };
+
+/** Priority-queue payloads: agent runs or HITL resume/timeout. */
+export const priorityJobSchema = z.union([
+  agentJobSchema,
+  hitlResumeJobSchema,
+  hitlTimeoutJobSchema,
+]);
+
+export type PriorityJobPayload = z.infer<typeof priorityJobSchema>;
+
+/**
+ * Returns true when a priority-queue payload is a HITL resume or timeout job.
+ */
+export function isHitlQueueJob(
+  data: unknown,
+): data is HitlResumeJobPayload | HitlTimeoutJobPayload {
+  if (!data || typeof data !== "object") return false;
+  const kind = (data as { kind?: unknown }).kind;
+  return kind === "hitl_resume" || kind === "hitl_timeout";
+}
