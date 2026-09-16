@@ -3,6 +3,8 @@ import { getComplianceAgent } from "@/agents/compliance/agent";
 import { getOnboardingAgent } from "@/agents/onboarding/agent";
 import { prisma } from "@/lib/db/client";
 import { isFullyPassingScores } from "@/lib/eval-scenario-utils";
+import { assertRegulatorySectionsPreserved } from "@/workflows/regulatory-freeze";
+import { assertTaxonomyQualityBars } from "@/workflows/taxonomy-quality";
 import { taxonomyReportSchema, type TaxonomyReport } from "./types";
 
 type ScenarioEvalJson = {
@@ -55,6 +57,7 @@ async function getAgentForMeta(agentId: "compliance" | "onboarding") {
 
 /**
  * Runs LLM taxonomy classification over the failed eval; output must match `TaxonomyReport`.
+ * WP-P1.6: enforces scorer+evidence quality bars before mutate.
  */
 export async function buildTaxonomy(
   evalRun: EvalRun,
@@ -79,9 +82,12 @@ export async function buildTaxonomy(
     `Identify all failing scenarios (any scorer score < 1). Classify each into a FailureType ` +
     `(tool_selection | reasoning_truncation | context_misinterpretation | over_hedging | format_noncompliance). ` +
     `Find the dominant failure type. Write one imperative instruction sentence that would prevent it. ` +
+    `QUALITY BARS (required): each finding MUST include failingScorerId (exact scorer key that failed) ` +
+    `and evidenceSpan (verbatim quote or concrete tool/DB evidence ≥8 chars). Do not invent scorers. ` +
     `Respond ONLY with a valid JSON object matching this shape: ` +
     `{"agentId":"compliance"|"onboarding","evalRunId":string,"findings":` +
-    `[{"scenarioId":string,"agentId":string,"failureType":string,"triggerPattern":string,"scorerReasoning":string,"proposedInstruction":string}],` +
+    `[{"scenarioId":string,"agentId":string,"failureType":string,"triggerPattern":string,` +
+    `"scorerReasoning":string,"failingScorerId":string,"evidenceSpan":string,"proposedInstruction":string}],` +
     `"dominantFailureType":string,"recommendedMutation":string} — no prose, no markdown.`;
 
   const gen = await agent.generate(userPrompt, {
@@ -96,20 +102,26 @@ export async function buildTaxonomy(
     );
   }
 
-  if (parsed.data.evalRunId !== evalRun.id) {
-    return { ...parsed.data, evalRunId: evalRun.id };
-  }
-  return parsed.data;
+  const report =
+    parsed.data.evalRunId !== evalRun.id
+      ? { ...parsed.data, evalRunId: evalRun.id }
+      : parsed.data;
+
+  assertTaxonomyQualityBars(report);
+  return report;
 }
 
 /**
  * Persists three inactive prompt candidates and links them to a `PromptMutationJob`.
+ * REGULATORY: mutated content must preserve REGULATORY-marked sections verbatim (additive-only).
  */
 export async function mutatePrompt(taxonomy: TaxonomyReport): Promise<{
   candidateVersionIds: string[];
   mutationJobId: string;
   taxonomy: TaxonomyReport;
 }> {
+  assertTaxonomyQualityBars(taxonomy);
+
   if (taxonomy.findings.length === 0) {
     throw new Error("mutatePrompt: taxonomy has no findings; aborting");
   }
@@ -143,8 +155,11 @@ export async function mutatePrompt(taxonomy: TaxonomyReport): Promise<{
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const instruction =
       `You are editing a system prompt. Append the following new rule to the prompt. ` +
-      `Do NOT restructure, reorder, or remove anything. Find the most relevant existing section ` +
-      `and add it there as a new list item. If no relevant section exists, add a new section titled '## Additional rules'. ` +
+      `Do NOT restructure, reorder, or remove anything. ` +
+      `REGULATORY FREEZE: any line or block containing "REGULATORY:" must be copied verbatim — ` +
+      `do not rewrite, delete, or paraphrase REGULATORY sections; only add additive rules elsewhere. ` +
+      `Find the most relevant existing non-REGULATORY section ` +
+      `and add the new rule there as a list item. If no relevant section exists, add a new section titled '## Additional rules'. ` +
       `Vary the phrasing slightly from previous attempts (this is attempt ${attempt} of 3).\n\n` +
       `New rule to integrate:\n${taxonomy.recommendedMutation}\n\n` +
       `Full current prompt:\n${active.content}\n\n` +
@@ -161,6 +176,9 @@ export async function mutatePrompt(taxonomy: TaxonomyReport): Promise<{
     if (!mutated) {
       throw new Error(`mutatePrompt: empty mutation on attempt ${attempt}`);
     }
+
+    // REGULATORY: reject candidates that drop or rewrite marked sections (no unsupervised autodrift).
+    assertRegulatorySectionsPreserved(active.content, mutated);
 
     const version = await prisma.promptVersion.create({
       data: {
