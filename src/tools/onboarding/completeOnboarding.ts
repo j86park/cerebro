@@ -3,21 +3,26 @@ import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { ONBOARDING_STAGES } from "@/lib/documents/onboarding-stages";
 import { env } from "@/lib/config";
+import { enforceToolPolicy } from "@/lib/policy";
 
 const inputSchema = z.object({
   reasoning: z
     .string()
     .min(20)
     .describe(
-      "Detailed reasoning for completing onboarding, confirming all stages and documents are verified"
+      "Detailed reasoning for completing onboarding, confirming all stages and documents are verified",
     ),
 });
 
 const outputSchema = z.object({
   success: z.boolean(),
   completedAt: z.string(),
+  policyVersion: z.string(),
 });
 
+/**
+ * Builds completeOnboarding (stage-gated via policy matrix).
+ */
 export function buildCompleteOnboarding(vault: VaultService) {
   return createTool({
     id: "completeOnboarding",
@@ -35,10 +40,20 @@ export function buildCompleteOnboarding(vault: VaultService) {
       const currentStage = client.onboardingStage as number;
       const totalStages = Object.keys(ONBOARDING_STAGES).length;
 
+      const policy = await enforceToolPolicy({
+        vault,
+        domain: "onboarding",
+        stage: currentStage,
+        toolName: "completeOnboarding",
+        agentType: "ONBOARDING",
+        actionType: "COMPLETE_ONBOARDING",
+        reasoning,
+      });
+
       if (currentStage < totalStages) {
         throw new Error(
           `Cannot complete onboarding: client is at stage ${currentStage} but must be at stage ${totalStages}. ` +
-            `Advance through all stages first.`
+            `Advance through all stages first.`,
         );
       }
 
@@ -53,12 +68,12 @@ export function buildCompleteOnboarding(vault: VaultService) {
           (docType) => {
             const doc = documents.find((d) => d.type === docType);
             return !doc || (doc.status as string) !== "VALID";
-          }
+          },
         );
 
         if (missingOrInvalid.length > 0) {
           throw new Error(
-            `Cannot complete onboarding: the following Stage ${totalStages} documents are not VALID: ${missingOrInvalid.join(", ")}.`
+            `Cannot complete onboarding: the following Stage ${totalStages} documents are not VALID: ${missingOrInvalid.join(", ")}.`,
           );
         }
       }
@@ -74,10 +89,19 @@ export function buildCompleteOnboarding(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: "ONBOARDING_COMPLETED",
-        nextScheduledAt: new Date(new Date(env.DEMO_DATE).getTime() + 30 * 24 * 60 * 60 * 1000),
+        nextScheduledAt: new Date(
+          new Date(env.DEMO_DATE).getTime() + 30 * 24 * 60 * 60 * 1000,
+        ),
+        stage: policy.stage,
+        policyVersion: policy.policyVersion,
+        reasonCodes: ["POLICY_ALLOW_AUTO"],
       });
 
-      return { success: true, completedAt };
+      return {
+        success: true,
+        completedAt,
+        policyVersion: policy.policyVersion,
+      };
     },
   });
 }

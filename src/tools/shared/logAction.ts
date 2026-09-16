@@ -38,11 +38,44 @@ const inputSchema = z.object({
     .string()
     .optional()
     .describe("Related document ID, if applicable"),
+  stage: z
+    .number()
+    .int()
+    .optional()
+    .describe("Escalation or onboarding stage at decision time"),
+  policyVersion: z
+    .string()
+    .optional()
+    .describe("Policy matrix version that authorized this action"),
+  promptVersionId: z
+    .string()
+    .optional()
+    .describe("PromptVersion id active when this action was taken"),
+  actor: z
+    .enum(["AGENT", "ADVISOR", "SYSTEM"])
+    .optional()
+    .describe("Who performed the action"),
+  reasonCodes: z
+    .array(z.string().min(1))
+    .optional()
+    .describe("Structured reason codes for examiner reconstruction"),
+  citedFields: z
+    .record(z.unknown())
+    .optional()
+    .describe("Cited vault/document fields supporting the decision"),
+  idempotencyKey: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Deterministic key so retries cannot double-send the same regulated action",
+    ),
 });
 
 const outputSchema = z.object({
   success: z.boolean(),
   actionId: z.string(),
+  duplicate: z.boolean(),
 });
 
 export function buildLogAction(vault: VaultService) {
@@ -53,6 +86,7 @@ export function buildLogAction(vault: VaultService) {
     inputSchema,
     outputSchema,
     execute: async (inputData) => {
+      // REGULATORY: all consequential actions persist via VaultService ActionLedger only.
       const result = (await vault.logAction({
         agentType: inputData.agentType,
         actionType: inputData.actionType,
@@ -61,11 +95,19 @@ export function buildLogAction(vault: VaultService) {
         outcome: inputData.outcome,
         nextScheduledAt: new Date(inputData.nextScheduledAt),
         documentId: inputData.documentId,
+        stage: inputData.stage,
+        policyVersion: inputData.policyVersion,
+        promptVersionId: inputData.promptVersionId,
+        actor: inputData.actor,
+        reasonCodes: inputData.reasonCodes,
+        citedFields: inputData.citedFields,
+        idempotencyKey: inputData.idempotencyKey,
       })) as Record<string, unknown>;
 
       return {
         success: true,
         actionId: result.id as string,
+        duplicate: Boolean(result.duplicate),
       };
     },
   });

@@ -431,6 +431,26 @@ async function seedActionHistory() {
   }
 }
 
+async function seedOnboardingStages() {
+  for (const client of MOCK_CLIENTS) {
+    await prisma.onboardingStage.upsert({
+      where: { clientId: client.id },
+      update: {
+        stage: client.onboardingStage,
+        status: client.onboardingStatus,
+        stageEnteredAt: addDaysFromDemo(0),
+      },
+      create: {
+        id: `OBS-${client.id}`,
+        clientId: client.id,
+        stage: client.onboardingStage,
+        status: client.onboardingStatus,
+        stageEnteredAt: addDaysFromDemo(0),
+      },
+    });
+  }
+}
+
 /**
  * Seeds the full Cerebro baseline dataset using idempotent upserts.
  */
@@ -441,6 +461,7 @@ export async function runSeed() {
   await seedClients();
   await seedDocuments();
   await seedActionHistory();
+  await seedOnboardingStages();
 
   console.log(`
 --- Seed Summary ---
@@ -449,6 +470,7 @@ export async function runSeed() {
 ✓ Clients: ${MOCK_CLIENTS.length}
 ✓ Documents: ${MOCK_CLIENTS.length * Object.keys(DOCUMENT_REGISTRY).length}
 ✓ Actions: 5 (Pre-populated)
+✓ OnboardingStage: ${MOCK_CLIENTS.length}
 --------------------
 `);
 }
