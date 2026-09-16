@@ -10,6 +10,8 @@ export const approvalPacketDocumentSchema = z.object({
   status: z.string().min(1),
   expiryDate: z.string().datetime().nullable(),
   notes: z.string().nullable().optional(),
+  /** DocumentExtractResult JSON when extract adapter has run (WP-P1.2/1.3). */
+  extractedFields: z.unknown().nullable().optional(),
 });
 
 /** Ledger evidence row included in an approval packet. */

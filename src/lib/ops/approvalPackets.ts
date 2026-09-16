@@ -34,6 +34,7 @@ const documentRowSchema = z.object({
   status: z.string().min(1),
   expiryDate: z.coerce.date().nullable().optional(),
   notes: z.string().nullable().optional(),
+  extractedFields: z.unknown().nullable().optional(),
 });
 
 const ledgerRowSchema = z.object({
@@ -68,6 +69,7 @@ function toDocumentEvidence(
     status: doc.status,
     expiryDate: doc.expiryDate ? doc.expiryDate.toISOString() : null,
     notes: doc.notes ?? null,
+    extractedFields: doc.extractedFields ?? null,
   };
 }
 

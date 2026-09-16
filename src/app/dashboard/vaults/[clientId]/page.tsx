@@ -61,6 +61,7 @@ export default async function VaultDetailPage({
       expiryDate: d.expiryDate?.toISOString() ?? null,
       uploadedAt: d.uploadedAt?.toISOString() ?? null,
       notificationCount: d.notificationCount ?? 0,
+      extractedFields: d.extractedFields ?? null,
     }));
 
     const safeActions: ActionData[] = actions.slice(0, 50).map((a) => ({
@@ -71,6 +72,12 @@ export default async function VaultDetailPage({
       trigger: a.trigger,
       reasoning: a.reasoning,
       outcome: a.outcome,
+      citedFields:
+        a.citedFields &&
+        typeof a.citedFields === "object" &&
+        !Array.isArray(a.citedFields)
+          ? (a.citedFields as Record<string, unknown>)
+          : null,
     }));
 
     return (

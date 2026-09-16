@@ -12,6 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui-extensions/StatusBadge";
 import { format } from "date-fns";
 import { DOCUMENT_REGISTRY } from "@/lib/documents/registry";
+import {
+  citationRowsFromExtract,
+  parseExtractedFieldsJson,
+} from "@/lib/documents/citations";
+import { CitedFieldsPanel } from "@/components/vault/CitedFieldsPanel";
 
 export type DocumentData = {
   id: string;
@@ -21,6 +26,8 @@ export type DocumentData = {
   expiryDate: string | null;
   uploadedAt: string | null;
   notificationCount: number;
+  /** DocumentExtractResult JSON from VaultService, when present. */
+  extractedFields?: unknown;
 };
 
 export function DocumentsTable({ documents }: { documents: DocumentData[] }) {
@@ -41,6 +48,7 @@ export function DocumentsTable({ documents }: { documents: DocumentData[] }) {
             <TableHead>Category</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Expiry Date</TableHead>
+            <TableHead>Extracted citations</TableHead>
             <TableHead className="text-right">Notifications</TableHead>
           </TableRow>
         </TableHeader>
@@ -49,24 +57,33 @@ export function DocumentsTable({ documents }: { documents: DocumentData[] }) {
             const meta = DOCUMENT_REGISTRY[doc.type as keyof typeof DOCUMENT_REGISTRY];
             const isRed = doc.status === "EXPIRED";
             const isYellow = doc.status === "EXPIRING_SOON";
+            const extract = parseExtractedFieldsJson(doc.extractedFields);
+            const citationRows = citationRowsFromExtract(extract);
             
             return (
               <TableRow key={doc.id}>
-                <TableCell className="font-medium">
+                <TableCell className="font-medium align-top">
                   {meta?.label || doc.type}
                 </TableCell>
-                <TableCell>
+                <TableCell className="align-top">
                   <Badge variant="outline" className="text-xs bg-secondary">
                     {doc.category.replace(/_/g, " ")}
                   </Badge>
                 </TableCell>
-                <TableCell>
+                <TableCell className="align-top">
                   <StatusBadge status={doc.status} />
                 </TableCell>
-                <TableCell className={isRed ? "text-red-500 font-medium" : isYellow ? "text-amber-500 font-medium" : "text-muted-foreground"}>
+                <TableCell className={`align-top ${isRed ? "text-red-500 font-medium" : isYellow ? "text-amber-500 font-medium" : "text-muted-foreground"}`}>
                   {doc.expiryDate ? format(new Date(doc.expiryDate), "MMM d, yyyy") : "N/A"}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="align-top max-w-[280px]">
+                  <CitedFieldsPanel
+                    rows={citationRows}
+                    title=""
+                    emptyLabel="—"
+                  />
+                </TableCell>
+                <TableCell className="text-right align-top">
                   {doc.notificationCount > 0 ? (
                     <Badge variant="secondary" className="font-mono">{doc.notificationCount}</Badge>
                   ) : (
@@ -78,7 +95,7 @@ export function DocumentsTable({ documents }: { documents: DocumentData[] }) {
           })}
           {sortedDocs.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+              <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                 No documents found in vault.
               </TableCell>
             </TableRow>
