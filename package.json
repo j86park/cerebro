@@ -20,6 +20,8 @@
     "reset-demo": "tsx scripts/reset-demo.ts",
     "eval": "node --env-file=.env.local --import tsx src/evals/run.ts --enforce-threshold",
     "eval:dev": "node --env-file=.env.local --import tsx src/evals/run.ts",
+    "golden:export": "node --env-file=.env.local --import tsx scripts/export-eval-failure.ts",
+    "golden:promote": "node --env-file=.env.local --import tsx scripts/promote-golden.ts",
     "benchmark-report": "tsx scripts/benchmark-report.ts",
     "bootstrap": "tsx scripts/bootstrap.ts",
     "simulation:smoke": "tsx scripts/smoke-simulation.ts",
