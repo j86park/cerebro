@@ -14,4 +14,12 @@ describe("prisma migrations (smoke)", () => {
     );
     expect(existsSync(migrationFile)).toBe(true);
   });
+
+  it("has committed ActionLedger control-state migration SQL", () => {
+    const migrationFile = resolve(
+      process.cwd(),
+      "prisma/migrations/20260316180000_action_ledger_control_state/migration.sql"
+    );
+    expect(existsSync(migrationFile)).toBe(true);
+  });
 });
