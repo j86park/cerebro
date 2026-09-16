@@ -2,6 +2,10 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
+import {
+  enforceToolPolicy,
+  resolveComplianceLadderStage,
+} from "@/lib/policy";
 
 const inputSchema = z.object({
   subject: z.string().describe("Email subject line"),
@@ -15,8 +19,12 @@ const inputSchema = z.object({
 const outputSchema = z.object({
   success: z.boolean(),
   dryRun: z.boolean(),
+  policyVersion: z.string(),
 });
 
+/**
+ * Builds the sendAdvisorAlert tool (stage-gated via policy matrix).
+ */
 export function buildSendAdvisorAlert(vault: VaultService) {
   return createTool({
     id: "sendAdvisorAlert",
@@ -27,6 +35,22 @@ export function buildSendAdvisorAlert(vault: VaultService) {
     execute: async (inputData) => {
       const { subject, body, reasoning } = inputData;
       const { DRY_RUN } = env;
+
+      const history = (await vault.getActionHistory()) as Array<{
+        actionType: string;
+      }>;
+      const stage = resolveComplianceLadderStage(history);
+
+      const policy = await enforceToolPolicy({
+        vault,
+        domain: "compliance",
+        stage,
+        toolName: "sendAdvisorAlert",
+        agentType: "COMPLIANCE",
+        actionType: "NOTIFY_ADVISOR",
+        reasoning,
+        args: { subject },
+      });
 
       // Get advisor email for future Resend integration
       const client = (await vault.getClientProfile()) as Record<
@@ -52,11 +76,18 @@ export function buildSendAdvisorAlert(vault: VaultService) {
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "EMAIL_SENT",
         nextScheduledAt: new Date(
-          new Date(env.DEMO_DATE).getTime() + 5 * 24 * 60 * 60 * 1000
+          new Date(env.DEMO_DATE).getTime() + 5 * 24 * 60 * 60 * 1000,
         ),
+        stage: policy.stage,
+        policyVersion: policy.policyVersion,
+        reasonCodes: ["POLICY_ALLOW_AUTO"],
       });
 
-      return { success: true, dryRun: DRY_RUN };
+      return {
+        success: true,
+        dryRun: DRY_RUN,
+        policyVersion: policy.policyVersion,
+      };
     },
   });
 }
