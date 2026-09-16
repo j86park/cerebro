@@ -2,13 +2,14 @@ import { getCanaryClientIds } from "@/lib/eval-scenario-utils";
 
 /**
  * Deterministic scorers that must score exactly 1.0 on every canary scenario.
- * REGULATORY: wrong escalation/onboarding stage or duplicate action must never be
- * papered over by a soft LLM judge (reasoningQuality).
+ * REGULATORY: wrong escalation/onboarding stage, duplicate action, or forbidden
+ * tool path must never be papered over by a soft LLM judge (reasoningQuality).
  */
 export const HARD_GATE_SCORER_IDS = [
   "escalationStageScorer",
   "onboardingStageScorer",
   "duplicateActionScorer",
+  "trajectoryScorer",
 ] as const;
 
 export type HardGateScorerId = (typeof HARD_GATE_SCORER_IDS)[number];

@@ -5,12 +5,56 @@ import {
   recordMutationRejected,
 } from "@/lib/mutation-circuit";
 import { taxonomyReportSchema, type TaxonomyReport } from "@/workflows/types";
+import { z } from "zod";
 
-type GateDecision =
+export type GateDecision =
   | "promoted"
   | "rejected_canary"
+  | "rejected_pass_k"
   | "rejected_regression"
   | "rejected_no_improvement";
+
+const shadowBreakdownSchema = z
+  .object({
+    canaryPassK: z.boolean().optional(),
+    passK: z.number().int().optional(),
+  })
+  .passthrough();
+
+export type ShadowGateInputs = {
+  canaryDelta: number;
+  corpusDelta: number;
+  targetDelta: number;
+  /** From scoreBreakdown — must be true to promote (fail closed if missing). */
+  canaryPassK?: boolean;
+};
+
+/**
+ * Pure promotion decision for mutation shadow results.
+ * REGULATORY: canary regression or failed `pass^k` blocks promote.
+ */
+export function decideShadowGate(input: ShadowGateInputs): GateDecision {
+  // Fail closed: missing canaryPassK means the shadow runner did not prove reliability.
+  if (input.canaryPassK !== true) {
+    return "rejected_pass_k";
+  }
+  if (input.canaryDelta < 0) {
+    return "rejected_canary";
+  }
+  if (input.corpusDelta < 0) {
+    return "rejected_regression";
+  }
+  if (input.targetDelta <= 0) {
+    return "rejected_no_improvement";
+  }
+  return "promoted";
+}
+
+function readCanaryPassK(scoreBreakdown: unknown): boolean | undefined {
+  const parsed = shadowBreakdownSchema.safeParse(scoreBreakdown);
+  if (!parsed.success) return undefined;
+  return parsed.data.canaryPassK;
+}
 
 /**
  * After all shadow runs for a mutation job complete, picks the best candidate and applies promote / reject rules.
@@ -35,14 +79,12 @@ export async function evaluateGate(mutationJobId: string): Promise<void> {
 
   const best = pending.reduce((a, b) => (a.overallDelta >= b.overallDelta ? a : b));
 
-  let decision: GateDecision = "promoted";
-  if (best.canaryDelta < 0) {
-    decision = "rejected_canary";
-  } else if (best.corpusDelta < 0) {
-    decision = "rejected_regression";
-  } else if (best.targetDelta <= 0) {
-    decision = "rejected_no_improvement";
-  }
+  const decision = decideShadowGate({
+    canaryDelta: best.canaryDelta,
+    corpusDelta: best.corpusDelta,
+    targetDelta: best.targetDelta,
+    canaryPassK: readCanaryPassK(best.scoreBreakdown),
+  });
 
   const finalLabel = decision === "promoted" ? "promoted" : decision;
 
