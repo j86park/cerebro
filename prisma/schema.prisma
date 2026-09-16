@@ -195,6 +195,7 @@ model PromptVersion {
   agentId         String
   content         String
   parentVersionId String?
+  /// Runtime active flag used by shadow eval swaps; production pointer is the product SoR.
   isActive        Boolean  @default(false)
   mutationReason  String?
   createdAt       DateTime @default(now())
@@ -204,8 +205,28 @@ model PromptVersion {
 
   candidateForJobs PromptMutationJob[] @relation("MutationJobCandidate")
   agentActions     AgentAction[]
+  environmentPointers PromptEnvironmentPointer[] @relation("PointerCurrent")
+  previousEnvironmentPointers PromptEnvironmentPointer[] @relation("PointerPrevious")
 
   @@index([agentId, isActive])
+}
+
+/// Movable env label (staging / production) per agent — immutable PromptVersion rows stay append-only.
+model PromptEnvironmentPointer {
+  id                      String            @id @default(cuid())
+  agentId                 String
+  environment             PromptEnvironment
+  promptVersionId         String
+  /// Prior production/staging target for one-step rollback without redeploy.
+  previousPromptVersionId String?
+  updatedAt               DateTime          @updatedAt
+  createdAt               DateTime          @default(now())
+
+  promptVersion         PromptVersion  @relation("PointerCurrent", fields: [promptVersionId], references: [id])
+  previousPromptVersion PromptVersion? @relation("PointerPrevious", fields: [previousPromptVersionId], references: [id])
+
+  @@unique([agentId, environment])
+  @@index([promptVersionId])
 }
 
 model PromptMutationJob {
@@ -378,4 +399,10 @@ enum EscalationStatus {
   RESOLVED
   TIMED_OUT
   SAFE_HOLD
+}
+
+/// Movable prompt release labels — versions are immutable; pointers move.
+enum PromptEnvironment {
+  STAGING
+  PRODUCTION
 }

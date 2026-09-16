@@ -30,4 +30,12 @@ describe("prisma migrations (smoke)", () => {
     );
     expect(existsSync(migrationFile)).toBe(true);
   });
+
+  it("has committed prompt environment pointer migration SQL", () => {
+    const migrationFile = resolve(
+      process.cwd(),
+      "prisma/migrations/20260316200000_prompt_environment_pointers/migration.sql"
+    );
+    expect(existsSync(migrationFile)).toBe(true);
+  });
 });

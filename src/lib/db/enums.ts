@@ -108,3 +108,8 @@ export const EscalationStatus = {
   TIMED_OUT: "TIMED_OUT",
   SAFE_HOLD: "SAFE_HOLD",
 } as const;
+
+export const PromptEnvironment = {
+  STAGING: "STAGING",
+  PRODUCTION: "PRODUCTION",
+} as const;
