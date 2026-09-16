@@ -69,6 +69,11 @@ const envSchema = z.object({
    * REGULATORY: prevents runaway LLM spend while humans inspect prompts.
    */
   MUTATION_CIRCUIT_PAUSE_HOURS: z.coerce.number().int().min(0).max(8760).default(24),
+  /**
+   * Canary `pass^k` trial count for mutation/shadow promote (τ-bench style).
+   * All k trials must pass hard gates (incl. trajectory) before promote.
+   */
+  EVAL_PASS_K: z.coerce.number().int().min(3).max(5).default(3),
 });
 
 export const env = envSchema.parse(process.env);

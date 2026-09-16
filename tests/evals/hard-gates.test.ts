@@ -15,15 +15,17 @@ import {
 } from "@/evals/threshold";
 
 describe("canary hard gates", () => {
-  it("lists escalation, onboarding, and duplicate as hard-gate scorers", () => {
+  it("lists escalation, onboarding, duplicate, and trajectory as hard-gate scorers", () => {
     expect([...HARD_GATE_SCORER_IDS].sort()).toEqual(
       [
         "duplicateActionScorer",
         "escalationStageScorer",
         "onboardingStageScorer",
+        "trajectoryScorer",
       ].sort()
     );
     expect(isHardGateScorerId("reasoningQualityScorer")).toBe(false);
+    expect(isHardGateScorerId("trajectoryScorer")).toBe(true);
   });
 
   it("fails when a canary has wrong escalation stage even if reasoningQuality is perfect", () => {
@@ -35,6 +37,7 @@ describe("canary hard gates", () => {
             reason: "Expected ESCALATE_MANAGEMENT, got NOTIFY_ADVISOR",
           },
           duplicateActionScorer: { score: 1 },
+          trajectoryScorer: { score: 1 },
           documentPriorityScorer: { score: 1 },
           // Soft judge cannot paper over the hard fail
           reasoningQualityScorer: { score: 1, reason: "Excellent prose" },
@@ -44,6 +47,7 @@ describe("canary hard gates", () => {
         scores: {
           onboardingStageScorer: { score: 1 },
           duplicateActionScorer: { score: 1 },
+          trajectoryScorer: { score: 1 },
           reasoningQualityScorer: { score: 1 },
         },
       },
@@ -51,6 +55,7 @@ describe("canary hard gates", () => {
         scores: {
           escalationStageScorer: { score: 1 },
           duplicateActionScorer: { score: 1 },
+          trajectoryScorer: { score: 1 },
           documentPriorityScorer: { score: 1 },
           reasoningQualityScorer: { score: 1 },
         },
@@ -74,6 +79,34 @@ describe("canary hard gates", () => {
     expect(() =>
       assertCanaryHardGates(scenarioResults, ["CLT-001", "CLT-003", "CLT-005"])
     ).toThrow(EvalHardGateError);
+  });
+
+  it("fails when canary trajectory is wrong even if stage/action scorers pass", () => {
+    const scenarioResults = {
+      "CLT-003": {
+        scores: {
+          escalationStageScorer: { score: 1 },
+          duplicateActionScorer: { score: 1 },
+          trajectoryScorer: {
+            score: 0,
+            reason: "Forbidden tool(s) used: completeOnboarding",
+          },
+          reasoningQualityScorer: { score: 1 },
+        },
+      },
+    };
+
+    const failures = collectCanaryHardGateFailures(scenarioResults, ["CLT-003"]);
+    expect(failures).toEqual([
+      expect.objectContaining({
+        clientId: "CLT-003",
+        scorerId: "trajectoryScorer",
+        score: 0,
+      }),
+    ]);
+    expect(() => assertCanaryHardGates(scenarioResults, ["CLT-003"])).toThrow(
+      EvalHardGateError
+    );
   });
 
   it("fails when a canary onboarding stage is wrong", () => {
