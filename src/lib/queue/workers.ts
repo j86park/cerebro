@@ -38,6 +38,29 @@ function buildInitialPrompt(payload: AgentJobPayload): string {
       `A new document was just uploaded: ${payload.documentId}. ` +
         `Handle this document event first, then proceed with your normal observation and decision flow.`
     );
+  } else if (
+    payload.trigger === "EVENT_EXPIRY_PROXIMITY" &&
+    payload.documentId
+  ) {
+    parts.push(
+      `Document ${payload.documentId} is inside the expiry-proximity window relative to DEMO_DATE. ` +
+        `Prioritize renewal / reminder decisions for this document, then complete your normal observation flow.`
+    );
+  } else if (payload.trigger === "EVENT_RISK_TIER_CHANGE") {
+    parts.push(
+      `Client risk tier changed (eventKey=${payload.eventKey ?? "unknown"}). ` +
+        `Re-evaluate compliance obligations for the new risk tier.`
+    );
+  } else if (payload.trigger === "EVENT_PROFILE_MATERIAL_CHANGE") {
+    parts.push(
+      `Material profile fields changed (eventKey=${payload.eventKey ?? "unknown"}). ` +
+        `Re-check KYC completeness and any documents impacted by the change.`
+    );
+  } else if (payload.trigger === "EVENT_SANCTIONS_PEP") {
+    parts.push(
+      `Sanctions/PEP stub signal received (eventKey=${payload.eventKey ?? "unknown"}). ` +
+        `Treat as a compliance event; do not invent vendor data — escalate if evidence is thin.`
+    );
   } else {
     parts.push(
       `Start by calling your observation tools to understand the current state of this client's vault.`

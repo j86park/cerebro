@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/config";
-import { enqueueScheduledAgentScansForAllClients } from "@/lib/queue/scheduler";
+import { enqueueScheduledScansAndPkycTriggers } from "@/lib/queue/scheduler";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/cron/scheduled-scans — Vercel Cron / external scheduler entrypoint.
  * Secured with Authorization: Bearer <CRON_SECRET> or x-cron-secret header.
+ * Enqueues calendar scans plus pKYC expiry-proximity jobs.
  */
 export async function GET(request: NextRequest) {
   if (!env.CRON_SECRET) {
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await enqueueScheduledAgentScansForAllClients();
+    const result = await enqueueScheduledScansAndPkycTriggers();
     return NextResponse.json({ data: result });
   } catch (error) {
     console.error("[cron] scheduled-scans failed:", error);
