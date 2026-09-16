@@ -98,3 +98,22 @@ export const SimulationStatus = {
   COMPLETED: "COMPLETED",
   FAILED: "FAILED",
 } as const;
+
+export const LedgerActor = {
+  AGENT: "AGENT",
+  ADVISOR: "ADVISOR",
+  SYSTEM: "SYSTEM",
+} as const;
+
+export const EscalationStatus = {
+  OPEN: "OPEN",
+  PENDING_APPROVAL: "PENDING_APPROVAL",
+  RESOLVED: "RESOLVED",
+  TIMED_OUT: "TIMED_OUT",
+  SAFE_HOLD: "SAFE_HOLD",
+} as const;
+
+export const PromptEnvironment = {
+  STAGING: "STAGING",
+  PRODUCTION: "PRODUCTION",
+} as const;

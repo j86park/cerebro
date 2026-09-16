@@ -7,12 +7,24 @@ import { VaultService } from "@/lib/db/vault-service";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildSharedTools } from "@/tools/shared";
-import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
+import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
+import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
+import { processHitlResumeFromEscalation } from "@/lib/hitl/resume";
+import type {
+  AgentJobPayload,
+  HitlResumeJobPayload,
+  HitlTimeoutJobPayload,
+  PriorityJobPayload,
+  SimulationJobPayload,
+} from "./jobs";
 import {
   AGENT_JOB_COMPLETED_OUTCOME,
   AGENT_JOB_SKIPPED_OUTCOME,
   agentJobSchema,
   demoDateKey,
+  hitlResumeJobSchema,
+  hitlTimeoutJobSchema,
+  isHitlQueueJob,
 } from "./jobs";
 
 import { connection } from "./client";
@@ -22,12 +34,17 @@ import {
   recordJobFailed,
   type QueueName,
 } from "@/lib/queue/metrics";
+import { buildJobTracingContext } from "@/lib/observability/mastra-tracing";
 
 /**
  * Builds the initial context prompt for an agent run, describing what
  * triggered the run and any specific document context.
+ * Document body text is loaded via VaultService (client-scoped) and sanitized first.
  */
-function buildInitialPrompt(payload: AgentJobPayload): string {
+async function buildInitialPrompt(
+  payload: AgentJobPayload,
+  vault: VaultService,
+): Promise<string> {
   const parts = [
     `You are running for client ${payload.clientId}.`,
     `This run was triggered by: ${payload.trigger}.`,
@@ -36,52 +53,157 @@ function buildInitialPrompt(payload: AgentJobPayload): string {
   if (payload.trigger === "EVENT_UPLOAD" && payload.documentId) {
     parts.push(
       `A new document was just uploaded: ${payload.documentId}. ` +
-        `Handle this document event first, then proceed with your normal observation and decision flow.`
+        `Handle this document event first, then proceed with your normal observation and decision flow.`,
     );
+    try {
+      const content = await vault.getDocumentContentForAgent(payload.documentId);
+      parts.push(content.agentContextBlock);
+    } catch (error) {
+      console.error(
+        `[Worker] Failed to load document content for ${payload.documentId}:`,
+        error instanceof Error ? error.message : error,
+      );
+      parts.push(
+        `Document content was unavailable for ${payload.documentId}; use observation tools only.`,
+      );
+    }
   } else if (
     payload.trigger === "EVENT_EXPIRY_PROXIMITY" &&
     payload.documentId
   ) {
     parts.push(
       `Document ${payload.documentId} is inside the expiry-proximity window relative to DEMO_DATE. ` +
-        `Prioritize renewal / reminder decisions for this document, then complete your normal observation flow.`
+        `Prioritize renewal / reminder decisions for this document, then complete your normal observation flow.`,
     );
   } else if (payload.trigger === "EVENT_RISK_TIER_CHANGE") {
     parts.push(
       `Client risk tier changed (eventKey=${payload.eventKey ?? "unknown"}). ` +
-        `Re-evaluate compliance obligations for the new risk tier.`
+        `Re-evaluate compliance obligations for the new risk tier.`,
     );
   } else if (payload.trigger === "EVENT_PROFILE_MATERIAL_CHANGE") {
     parts.push(
       `Material profile fields changed (eventKey=${payload.eventKey ?? "unknown"}). ` +
-        `Re-check KYC completeness and any documents impacted by the change.`
+        `Re-check KYC completeness and any documents impacted by the change.`,
     );
   } else if (payload.trigger === "EVENT_SANCTIONS_PEP") {
     parts.push(
       `Sanctions/PEP stub signal received (eventKey=${payload.eventKey ?? "unknown"}). ` +
-        `Treat as a compliance event; do not invent vendor data — escalate if evidence is thin.`
+        `Treat as a compliance event; do not invent vendor data — escalate if evidence is thin.`,
     );
   } else {
     parts.push(
-      `Start by calling your observation tools to understand the current state of this client's vault.`
+      `Start by calling your observation tools to understand the current state of this client's vault.`,
     );
   }
 
-  return parts.join(" ");
+  return parts.join("\n\n");
+}
+
+/**
+ * Resolves the control-plane stage for tracing tags (onboarding SoR, else client profile stage).
+ */
+async function resolveRunStage(vault: VaultService): Promise<number> {
+  const stageState = await vault.getOnboardingStageState();
+  if (
+    stageState &&
+    typeof stageState === "object" &&
+    "stage" in stageState &&
+    typeof (stageState as { stage: unknown }).stage === "number"
+  ) {
+    return (stageState as { stage: number }).stage;
+  }
+  const profile = (await vault.getClientProfile()) as {
+    onboardingStage?: number;
+  };
+  return typeof profile.onboardingStage === "number"
+    ? profile.onboardingStage
+    : 0;
+}
+
+/**
+ * Extracts tool names from a Mastra generate result when present.
+ */
+function extractToolNames(result: unknown): string[] {
+  if (!result || typeof result !== "object") return [];
+  const toolCalls = (result as { toolCalls?: unknown }).toolCalls;
+  if (!Array.isArray(toolCalls)) return [];
+  const names: string[] = [];
+  for (const call of toolCalls) {
+    if (!call || typeof call !== "object") continue;
+    const payload = call as { payload?: { toolName?: string }; toolName?: string; name?: string };
+    const name =
+      payload.payload?.toolName ?? payload.toolName ?? payload.name;
+    if (typeof name === "string" && name.length > 0) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+/**
+ * Processes HITL resume or timeout jobs for durable advisor approvals.
+ */
+export async function processHitlJob(
+  job: Job<HitlResumeJobPayload | HitlTimeoutJobPayload>,
+) {
+  const kind = (job.data as { kind?: string }).kind;
+  if (kind === "hitl_timeout") {
+    const parsed = hitlTimeoutJobSchema.parse(job.data);
+    console.log(
+      `[Worker] HITL timeout job ${job.id} for client ${parsed.clientId} run=${parsed.workflowRunId}`,
+    );
+    const vault = new VaultService({ clientId: parsed.clientId });
+    const result = await processHitlResumeFromEscalation({
+      vault,
+      clientId: parsed.clientId,
+      openKey: parsed.openKey,
+      decision: "timeout",
+    });
+    return { success: true, ...result };
+  }
+
+  const parsed = hitlResumeJobSchema.parse(job.data);
+  console.log(
+    `[Worker] HITL resume job ${job.id} decision=${parsed.decision} client=${parsed.clientId}`,
+  );
+  const vault = new VaultService({ clientId: parsed.clientId });
+  const result = await processHitlResumeFromEscalation({
+    vault,
+    clientId: parsed.clientId,
+    openKey: parsed.openKey,
+    decision: parsed.decision,
+    editedReasoning: parsed.editedReasoning,
+    advisorId: parsed.advisorId,
+  });
+  return { success: true, ...result };
+}
+
+/**
+ * Priority queue processor: routes HITL resume/timeout vs agent runs.
+ */
+async function processPriorityJob(job: Job<PriorityJobPayload>) {
+  if (isHitlQueueJob(job.data)) {
+    return processHitlJob(
+      job as Job<HitlResumeJobPayload | HitlTimeoutJobPayload>,
+    );
+  }
+  return processAgentJob(job as Job<AgentJobPayload>);
 }
 
 /**
  * Processes an agent job: instantiates VaultService, builds scoped tools,
- * fetches the correct agent, and runs it with proper memory scoping.
+ * fetches the correct agent, and runs it with proper memory scoping + AI Tracing tags.
  * Skips re-execution when a successful completion marker already exists for this
  * logical job (queue jobId dedupe + processor-level idempotency).
+ * Approve-class tools suspend via HITL workflow — this job completes without blocking.
  */
 export async function processAgentJob(job: Job<AgentJobPayload>) {
   const parsed = agentJobSchema.parse(job.data);
   const { clientId, agentType, trigger, documentId } = parsed;
+  const jobId = String(job.id ?? `unknown-${clientId}-${trigger}`);
 
   console.log(
-    `[Worker] Processing ${agentType} job ${job.id} for client ${clientId} (trigger: ${trigger})`
+    `[Worker] Processing ${agentType} job ${jobId} for client ${clientId} (trigger: ${trigger})`
   );
 
   // 1. Build VaultService scoped to this client
@@ -144,6 +266,12 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       ? buildComplianceTools(vault)
       : buildOnboardingTools(vault);
 
+  const domain = agentType === "COMPLIANCE" ? "compliance" : "onboarding";
+  assertAgentToolAllowlist(domain, [
+    ...Object.keys(sharedTools),
+    ...Object.keys(agentSpecificTools),
+  ]);
+
   // Mastra expects toolsets as Record<string, Record<string, Tool>>
   const toolsets = {
     shared: sharedTools,
@@ -152,20 +280,58 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       : { onboarding: agentSpecificTools }),
   };
 
-  // 3. Run the agent with scoped memory
-  const prompt = buildInitialPrompt(parsed);
+  const stage = await resolveRunStage(vault);
+  const { requestContext, tracingOptions, traceId, contentCaptured } =
+    buildJobTracingContext({
+      clientId,
+      agentName,
+      stage,
+      jobId,
+    });
+
+  // Examiner SoR: job start is reconstructible from Postgres without model logs.
+  await vault.logDecision({
+    jobId,
+    agentName,
+    stage,
+    traceId,
+    outcome: "RUN_STARTED",
+    reason: `Agent run started (trigger=${trigger})`,
+    contentCaptured,
+    metadata: { trigger, dryRun: env.DRY_RUN },
+  });
+
+  // 3. Run the agent with scoped memory + one logical trace per job
+  const prompt = await buildInitialPrompt(parsed, vault);
+  const memory = buildClientMemoryScope(clientId);
 
   try {
     const result = await agent.generate(prompt, {
-      memory: {
-        resource: clientId,
-        thread: clientId,
-      },
+      memory,
       toolsets,
+      requestContext,
+      tracingOptions,
+    });
+
+    const tools = extractToolNames(result);
+
+    await vault.logDecision({
+      jobId,
+      agentName,
+      stage,
+      traceId,
+      toolProposed: tools,
+      toolExecuted: tools,
+      outcome: env.DRY_RUN ? "DRY_RUN" : "RUN_SUCCEEDED",
+      reason: env.DRY_RUN
+        ? "Agent run completed under DRY_RUN (externals suppressed)"
+        : "Agent run completed successfully",
+      contentCaptured,
+      metadata: { trigger, textLength: result.text?.length ?? 0 },
     });
 
     console.log(
-      `[Worker] ${agentType} job ${job.id} completed for client ${clientId}`
+      `[Worker] ${agentType} job ${jobId} completed for client ${clientId}`
     );
 
     try {
@@ -191,17 +357,28 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       await emitAgentRunComplete({
         clientId,
         agentType,
-        jobId: String(job.id ?? "unknown"),
+        jobId,
         success: true,
       });
     } catch (emitErr) {
       console.error("[Worker] emitAgentRunComplete failed:", emitErr);
     }
 
-    return { success: true, text: result.text };
+    return { success: true, text: result.text, traceId };
   } catch (error) {
     // Always log failure to audit trail so the dashboard can see it
     try {
+      await vault.logDecision({
+        jobId,
+        agentName,
+        stage,
+        traceId,
+        outcome: "RUN_FAILED",
+        refusalCodes: ["AGENT_RUN_FAILED"],
+        reason: `Agent run failed: ${error instanceof Error ? error.message : String(error)}`,
+        contentCaptured,
+        metadata: { trigger },
+      });
       await vault.logAction({
         documentId,
         agentType,
@@ -215,7 +392,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       });
     } catch (logError) {
       console.error(
-        `[Worker] Failed to log audit trail for failed job ${job.id}:`,
+        `[Worker] Failed to log audit trail for failed job ${jobId}:`,
         logError
       );
     }
@@ -279,7 +456,7 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
 }
 
 type WorkerBundle = {
-  priority: Worker<AgentJobPayload>;
+  priority: Worker<PriorityJobPayload>;
   scheduled: Worker<AgentJobPayload>;
   simulation: Worker<SimulationJobPayload>;
 };
@@ -291,9 +468,9 @@ const isVitest = process.env.VITEST === "true";
 export const workers: WorkerBundle = isVitest
   ? ({} as WorkerBundle)
   : {
-      priority: new Worker<AgentJobPayload>(
+      priority: new Worker<PriorityJobPayload>(
         "cerebro-priority",
-        processAgentJob,
+        processPriorityJob,
         {
           connection: connection as never,
           concurrency: 5,

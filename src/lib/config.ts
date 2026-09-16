@@ -37,8 +37,27 @@ const envSchema = z.object({
   /** OpenRouter model ids — see https://openrouter.ai/models */
   MODEL_DEV: z.string().default("moonshotai/kimi-k2"),
   MODEL_DEMO: z.string().default("moonshotai/kimi-k2"),
+  /**
+   * Pinned eval-judge model id. Soft scorers must call `getModel("evalJudge")` only —
+   * never hardcode this string outside this file.
+   */
   MODEL_EVAL_JUDGE: z.string().default("moonshotai/kimi-k2"),
   DRY_RUN: z.preprocess((value) => value === "true" || value === true, z.boolean()).default(true),
+  /**
+   * Version id stamped on ActionLedger rows for stage × tool policy decisions.
+   * Matrix defaults live in `src/lib/policy/`; this env value is the logged `policyVersion`.
+   */
+  TOOL_POLICY_VERSION: z.string().min(1).default("tool-policy-v1"),
+  /**
+   * Advisor HITL approval wait before timeout → SAFE_HOLD (never silent regulated auto-approve).
+   * Milliseconds; defaults to 72h. Tests may set a small value.
+   */
+  HITL_APPROVAL_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(1000 * 60 * 60 * 24 * 30)
+    .default(1000 * 60 * 60 * 72),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   WEBHOOK_SECRET: z.string().default("dev-webhook-secret"),
   SIM_TIME_SCALE: z.coerce.number().default(1),
@@ -65,6 +84,31 @@ const envSchema = z.object({
    * REGULATORY: prevents runaway LLM spend while humans inspect prompts.
    */
   MUTATION_CIRCUIT_PAUSE_HOURS: z.coerce.number().int().min(0).max(8760).default(24),
+  /**
+   * When true, Mastra AI Tracing is enabled (DefaultExporter → configured storage).
+   * OTLP/external exporters stay opt-in via OTEL_EXPORTER_OTLP_ENDPOINT (deferred until credentials exist).
+   */
+  MASTRA_TRACING_ENABLED: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .default(true),
+  /**
+   * Opt-in capture of prompt/completion content on GenAI spans.
+   * Default false — non-demo / production paths keep content redacted (hideInput/hideOutput).
+   * Only honored when NODE_ENV is not "production".
+   */
+  TRACE_CONTENT_CAPTURE: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .default(false),
+  /**
+   * Optional OTLP collector endpoint. When unset, exporters that need network credentials are skipped
+   * (Postgres DecisionRecord remains the examiner system of record).
+   */
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  /**
+   * Canary `pass^k` trial count for mutation/shadow promote (τ-bench style).
+   * All k trials must pass hard gates (incl. trajectory) before promote.
+   */
+  EVAL_PASS_K: z.coerce.number().int().min(3).max(5).default(3),
 });
 
 export const env = envSchema.parse(process.env);

@@ -72,6 +72,9 @@ model Client {
   createdAt        DateTime        @default(now())
   documents        Document[]
   agentActions     AgentAction[]
+  decisionRecords  DecisionRecord[]
+  escalationStates EscalationState[]
+  onboardingStageState OnboardingStage?
 }
 
 model Document {
@@ -88,10 +91,12 @@ model Document {
   fileRef           String?        // mock file reference
   notes             String?
   agentActions      AgentAction[]
+  escalationStates  EscalationState[]
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 }
 
+/// ActionLedger (table name AgentAction retained for exporters). Append-only audit + idempotent keys.
 model AgentAction {
   id              String      @id @default(cuid())
   clientId        String
@@ -105,9 +110,76 @@ model AgentAction {
   outcome         String?     // result after the action
   nextScheduledAt DateTime?   // when agent should check this client again
   performedAt     DateTime    @default(now())
+  stage           Int?
+  policyVersion   String?
+  promptVersionId String?
+  actor           LedgerActor @default(AGENT)
+  reasonCodes     String[]    @default([])
+  citedFields     Json?
+  idempotencyKey  String?
 
+  @@unique([clientId, idempotencyKey])
   @@index([clientId, performedAt])
   @@index([agentType, actionType])
+}
+
+/// Examiner decision log (WP-P0.6). Correlated to Mastra AI Tracing via `traceId`; one logical trace per BullMQ `jobId`.
+model DecisionRecord {
+  id              String   @id @default(cuid())
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id])
+  jobId           String
+  agentName       String
+  stage           Int?
+  traceId         String
+  policyVersion   String?
+  policyFired     String?
+  toolProposed    String[] @default([])
+  toolExecuted    String[] @default([])
+  refusalCodes    String[] @default([])
+  reviewer        String?
+  outcome         String
+  reason          String
+  promptVersionId String?
+  contentCaptured Boolean  @default(false)
+  metadata        Json?
+  decidedAt       DateTime @default(now())
+
+  @@index([clientId, decidedAt])
+  @@index([jobId])
+  @@index([traceId])
+  @@index([clientId, jobId])
+}
+
+model EscalationState {
+  id            String           @id @default(cuid())
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id])
+  documentId    String?
+  document      Document?        @relation(fields: [documentId], references: [id])
+  ladderStage   Int              @default(0)
+  status        EscalationStatus @default(OPEN)
+  openKey       String?
+  reasonCodes   String[]         @default([])
+  policyVersion String?
+  hitlContext   Json?
+  openedAt      DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  resolvedAt    DateTime?
+
+  @@unique([clientId, openKey])
+  @@index([clientId, status])
+}
+
+model OnboardingStage {
+  id                String           @id @default(cuid())
+  clientId          String           @unique
+  client            Client           @relation(fields: [clientId], references: [id])
+  stage             Int              @default(0)
+  status            OnboardingStatus @default(NOT_STARTED)
+  stageEnteredAt    DateTime         @default(now())
+  checklistSnapshot Json?
+  updatedAt         DateTime         @updatedAt
 }
 
 model SimulationRun {
@@ -220,6 +292,20 @@ export const SimulationStatus = {
   RUNNING:    "RUNNING",
   COMPLETED:  "COMPLETED",
   FAILED:     "FAILED",
+} as const
+
+export const LedgerActor = {
+  AGENT:   "AGENT",
+  ADVISOR: "ADVISOR",
+  SYSTEM:  "SYSTEM",
+} as const
+
+export const EscalationStatus = {
+  OPEN:             "OPEN",
+  PENDING_APPROVAL: "PENDING_APPROVAL",
+  RESOLVED:         "RESOLVED",
+  TIMED_OUT:        "TIMED_OUT",
+  SAFE_HOLD:        "SAFE_HOLD",
 } as const
 ```
 

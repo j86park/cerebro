@@ -2,6 +2,15 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
+import { addDemoDays } from "@/lib/dates/demo-date";
+import {
+  accountTypeSchema,
+  categoryForDocumentType,
+  documentTypeSchema,
+  isDocumentOnStageChecklist,
+  riskProfileSchema,
+} from "@/lib/documents/checklist";
+import { enforceToolPolicy } from "@/lib/policy";
 
 const inputSchema = z.object({
   documentType: z
@@ -10,7 +19,7 @@ const inputSchema = z.object({
   message: z
     .string()
     .describe(
-      "The message to send to the client explaining what the document is and why it is needed"
+      "The message to send to the client explaining what the document is and why it is needed",
     ),
   reasoning: z
     .string()
@@ -21,47 +30,87 @@ const inputSchema = z.object({
 const outputSchema = z.object({
   success: z.boolean(),
   dryRun: z.boolean(),
+  policyVersion: z.string(),
+  onChecklist: z.boolean(),
 });
 
+/**
+ * Builds requestDocument — gap-driven follow-up gated by policy matrix.
+ */
 export function buildRequestDocument(vault: VaultService) {
   return createTool({
     id: "requestDocument",
     description:
-      "Sends a document request to the client and creates/updates the document record with REQUESTED status. Used during onboarding to collect required documents stage by stage.",
+      "Sends a document request to the client and creates/updates the document record with REQUESTED status. Prefer requesting documents that appear as checklist gaps for the current stage.",
     inputSchema,
     outputSchema,
     execute: async (inputData) => {
       const { documentType, message, reasoning } = inputData;
       const { DRY_RUN } = env;
 
-      // Enforce 3-day duplicate action cooldown
+      const parsedType = documentTypeSchema.parse(documentType);
+
+      const client = (await vault.getClientProfile()) as Record<
+        string,
+        unknown
+      >;
+      const stage = client.onboardingStage as number;
+      const accountType = accountTypeSchema.parse(client.accountType);
+      const riskProfile =
+        client.riskProfile == null
+          ? null
+          : riskProfileSchema.parse(client.riskProfile);
+
+      const policy = await enforceToolPolicy({
+        vault,
+        domain: "onboarding",
+        stage,
+        toolName: "requestDocument",
+        agentType: "ONBOARDING",
+        actionType: "REQUEST_DOCUMENT",
+        reasoning,
+        args: { documentType: parsedType },
+      });
+
       await vault.checkActionCooldown("REQUEST_DOCUMENT", 3);
+
+      const onChecklist = isDocumentOnStageChecklist(
+        { stage, accountType, riskProfile },
+        parsedType,
+      );
 
       if (!DRY_RUN) {
         // TODO: Send document request email via Resend
         void message;
       }
 
-      // Create or update document record to REQUESTED
       await vault.upsertDocument({
-        type: documentType,
-        category: "IDENTITY", // Will be determined by document type mapping
+        type: parsedType,
+        category: categoryForDocumentType(parsedType),
         status: "REQUESTED",
       });
 
-      // Always log the action
       await vault.logAction({
         agentType: "ONBOARDING",
         actionType: "REQUEST_DOCUMENT",
         trigger: "SCHEDULED",
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "REQUEST_SENT",
-        nextScheduledAt: new Date(
-          new Date(env.DEMO_DATE).getTime() + 3 * 24 * 60 * 60 * 1000
-        ),
+        nextScheduledAt: addDemoDays(3),
+        stage: policy.stage,
+        policyVersion: policy.policyVersion,
+        reasonCodes: onChecklist
+          ? ["POLICY_ALLOW_AUTO", "CHECKLIST_GAP_FOLLOWUP"]
+          : ["POLICY_ALLOW_AUTO", "OFF_CHECKLIST_REQUEST"],
+        citedFields: { documentType: parsedType, onChecklist },
       });
 
-      return { success: true, dryRun: DRY_RUN };
+      return {
+        success: true,
+        dryRun: DRY_RUN,
+        policyVersion: policy.policyVersion,
+        onChecklist,
+      };
     },
   });
 }
