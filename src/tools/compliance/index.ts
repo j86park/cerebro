@@ -1,4 +1,5 @@
 import type { VaultService } from "@/lib/db/vault-service";
+import { assertDomainToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildGetDocumentComplianceStatus } from "./getDocumentComplianceStatus";
 import { buildSendClientReminder } from "./sendClientReminder";
 import { buildEscalateToComplianceOfficer } from "./escalateToComplianceOfficer";
@@ -13,12 +14,17 @@ export {
   buildUpdateDocumentStatus,
 };
 
+/**
+ * Builds the compliance domain toolset and asserts the agent tool allowlist.
+ */
 export function buildComplianceTools(vault: VaultService) {
-  return {
+  const tools = {
     getDocumentComplianceStatus: buildGetDocumentComplianceStatus(vault),
     sendClientReminder: buildSendClientReminder(vault),
     escalateToComplianceOfficer: buildEscalateToComplianceOfficer(vault),
     escalateToManagement: buildEscalateToManagement(vault),
     updateDocumentStatus: buildUpdateDocumentStatus(vault),
   };
+  assertDomainToolAllowlist("compliance", Object.keys(tools));
+  return tools;
 }
