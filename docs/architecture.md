@@ -441,6 +441,9 @@ POST /api/vaults/[clientId]/upload        → mock document upload (triggers eve
 POST /api/agents/trigger                  → manually trigger agent run from dashboard (canonical trigger)
 GET  /api/agents/status                   → current queue depth and active runs
 POST /api/approvals/decide                → advisor HITL approve / edit / deny (enqueues resume job)
+GET  /api/approvals/packets               → pending approval packets (ledger + vault evidence)
+GET  /api/approvals/packets/[openKey]     → single packet (`?clientId=` required)
+GET  /api/approvals/metrics               → firm escalation_rate / timeout_rate SLA metrics
 
 GET  /api/cron/scheduled-scans            → enqueue scheduled scans (secured with `CRON_SECRET`)
 
