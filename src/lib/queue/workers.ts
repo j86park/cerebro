@@ -3,6 +3,7 @@ import { env } from "@/lib/config";
 import { getCerebro } from "@/agents/mastra";
 import "@/workers/mutation-analysis.worker";
 import "@/workers/shadow-runner.worker";
+import "@/workers/online-judge.worker";
 import { VaultService } from "@/lib/db/vault-service";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
@@ -10,6 +11,7 @@ import { buildSharedTools } from "@/tools/shared";
 import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { processHitlResumeFromEscalation } from "@/lib/hitl/resume";
+import { maybeEnqueueOnlineJudgeSample } from "@/lib/evals/enqueue-online-judge";
 import type {
   AgentJobPayload,
   HitlResumeJobPayload,
@@ -363,6 +365,18 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
     } catch (emitErr) {
       console.error("[Worker] emitAgentRunComplete failed:", emitErr);
     }
+
+    // WP-P1.7: optional 1–5% async online judge sample (never blocks; DRY_RUN-safe in worker).
+    void maybeEnqueueOnlineJudgeSample({
+      clientId,
+      agentType,
+      sourceJobId: jobId,
+      traceId,
+      agentName,
+      stage,
+      reasoningText: typeof result.text === "string" ? result.text : "",
+      toolNames: tools,
+    });
 
     return { success: true, text: result.text, traceId };
   } catch (error) {

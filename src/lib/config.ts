@@ -116,6 +116,11 @@ const envSchema = z.object({
   DOCUMENT_EXTRACT_PROVIDER: z
     .enum(["heuristic", "llm-demo", "textract", "persona"])
     .default("heuristic"),
+  /**
+   * Fraction of completed agent jobs to sample for async online judge (WP-P1.7).
+   * Cap 5%; 0 disables. Sampling never blocks the agent worker; DRY_RUN skips LLM calls.
+   */
+  ONLINE_JUDGE_SAMPLE_RATE: z.coerce.number().min(0).max(0.05).default(0.02),
 });
 
 export const env = envSchema.parse(process.env);
