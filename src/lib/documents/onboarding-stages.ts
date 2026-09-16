@@ -1,33 +1,35 @@
+import {
+  ONBOARDING_STAGE_CHECKLIST,
+  STAGE_STUCK_THRESHOLD_DAYS,
+  type OnboardingStageConfig,
+} from "@/lib/documents/checklist";
 import type { DocumentType } from "@/lib/documents/registry";
 
+/**
+ * Back-compat stage map used by older imports.
+ * Prefer `resolveStageChecklist` for account/risk-aware requirements.
+ */
 export const ONBOARDING_STAGES: Record<
   number,
   { label: string; requiredDocuments: DocumentType[]; description: string }
-> = {
-  1: {
-    label: "Identity Verification",
-    requiredDocuments: ["GOVERNMENT_ID", "PROOF_OF_ADDRESS", "SIN_SSN_FORM"],
-    description: "Verify client identity and address",
-  },
-  2: {
-    label: "Account Setup",
-    requiredDocuments: ["NAAF", "RISK_QUESTIONNAIRE", "CLIENT_AGREEMENT"],
-    description: "Create account and suitability baseline",
-  },
-  3: {
-    label: "Compliance & Estate",
-    requiredDocuments: ["BENEFICIARY_DESIGNATION", "FEE_DISCLOSURE"],
-    description: "Complete compliance and estate documents",
-  },
-  4: {
-    label: "Account Funding",
-    requiredDocuments: ["BANKING_INFORMATION", "DEPOSIT_CONFIRMATION"],
-    description: "Fund and activate account",
-  },
-};
+> = Object.fromEntries(
+  Object.entries(ONBOARDING_STAGE_CHECKLIST).map(([stage, cfg]) => [
+    Number(stage),
+    {
+      label: cfg.label,
+      description: cfg.description,
+      requiredDocuments: cfg.requiredDocuments,
+    },
+  ]),
+);
 
-export const STAGE_STUCK_THRESHOLD_DAYS = 7;
+export { STAGE_STUCK_THRESHOLD_DAYS };
+export type { OnboardingStageConfig };
 
+/**
+ * @deprecated Prefer resolveStageChecklist account/risk extras.
+ * Kept for data-schema parity; stage-2 extras now live in checklist.ts.
+ */
 export const CORPORATE_ADDITIONAL_DOCS: DocumentType[] = [
   "ACCREDITED_INVESTOR_FORM",
   "INVESTMENT_POLICY_STATEMENT",
