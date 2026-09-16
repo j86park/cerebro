@@ -22,4 +22,12 @@ describe("prisma migrations (smoke)", () => {
     );
     expect(existsSync(migrationFile)).toBe(true);
   });
+
+  it("has committed DecisionRecord tracing migration SQL", () => {
+    const migrationFile = resolve(
+      process.cwd(),
+      "prisma/migrations/20260316190000_decision_record_tracing/migration.sql"
+    );
+    expect(existsSync(migrationFile)).toBe(true);
+  });
 });
