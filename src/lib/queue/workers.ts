@@ -8,7 +8,12 @@ import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildSharedTools } from "@/tools/shared";
 import type { AgentJobPayload, SimulationJobPayload } from "./jobs";
-import { agentJobSchema } from "./jobs";
+import {
+  AGENT_JOB_COMPLETED_OUTCOME,
+  AGENT_JOB_SKIPPED_OUTCOME,
+  agentJobSchema,
+  demoDateKey,
+} from "./jobs";
 
 import { connection } from "./client";
 import { emitAgentRunComplete } from "@/lib/events/emit";
@@ -17,6 +22,7 @@ import {
   recordJobFailed,
   type QueueName,
 } from "@/lib/queue/metrics";
+import { buildJobTracingContext } from "@/lib/observability/mastra-tracing";
 
 /**
  * Builds the initial context prompt for an agent run, describing what
@@ -43,19 +49,107 @@ function buildInitialPrompt(payload: AgentJobPayload): string {
 }
 
 /**
- * Processes an agent job: instantiates VaultService, builds scoped tools,
- * fetches the correct agent, and runs it with proper memory scoping.
+ * Resolves the control-plane stage for tracing tags (onboarding SoR, else client profile stage).
  */
-async function processAgentJob(job: Job<AgentJobPayload>) {
+async function resolveRunStage(vault: VaultService): Promise<number> {
+  const stageState = await vault.getOnboardingStageState();
+  if (
+    stageState &&
+    typeof stageState === "object" &&
+    "stage" in stageState &&
+    typeof (stageState as { stage: unknown }).stage === "number"
+  ) {
+    return (stageState as { stage: number }).stage;
+  }
+  const profile = (await vault.getClientProfile()) as {
+    onboardingStage?: number;
+  };
+  return typeof profile.onboardingStage === "number"
+    ? profile.onboardingStage
+    : 0;
+}
+
+/**
+ * Extracts tool names from a Mastra generate result when present.
+ */
+function extractToolNames(result: unknown): string[] {
+  if (!result || typeof result !== "object") return [];
+  const toolCalls = (result as { toolCalls?: unknown }).toolCalls;
+  if (!Array.isArray(toolCalls)) return [];
+  const names: string[] = [];
+  for (const call of toolCalls) {
+    if (!call || typeof call !== "object") continue;
+    const payload = call as { payload?: { toolName?: string }; toolName?: string; name?: string };
+    const name =
+      payload.payload?.toolName ?? payload.toolName ?? payload.name;
+    if (typeof name === "string" && name.length > 0) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+/**
+ * Processes an agent job: instantiates VaultService, builds scoped tools,
+ * fetches the correct agent, and runs it with proper memory scoping + AI Tracing tags.
+ * Skips re-execution when a successful completion marker already exists for this
+ * logical job (queue jobId dedupe + processor-level idempotency).
+ */
+export async function processAgentJob(job: Job<AgentJobPayload>) {
   const parsed = agentJobSchema.parse(job.data);
-  const { clientId, agentType, trigger } = parsed;
+  const { clientId, agentType, trigger, documentId } = parsed;
+  const jobId = String(job.id ?? `unknown-${clientId}-${trigger}`);
 
   console.log(
-    `[Worker] Processing ${agentType} job ${job.id} for client ${clientId} (trigger: ${trigger})`
+    `[Worker] Processing ${agentType} job ${jobId} for client ${clientId} (trigger: ${trigger})`
   );
 
   // 1. Build VaultService scoped to this client
   const vault = new VaultService({ clientId });
+
+  // Skip if this logical job already completed successfully (replay / leftover retention miss).
+  const since = new Date(`${demoDateKey()}T00:00:00.000Z`);
+  const alreadyDone = await vault.hasCompletedAgentJob({
+    agentType,
+    trigger,
+    documentId,
+    completedOutcome: AGENT_JOB_COMPLETED_OUTCOME,
+    since,
+  });
+
+  if (alreadyDone) {
+    console.log(
+      `[Worker] Skipping ${agentType} job ${job.id} for client ${clientId} — already completed`
+    );
+    try {
+      await vault.logAction({
+        documentId,
+        agentType,
+        actionType: "SCAN_VAULT",
+        trigger,
+        reasoning: `Idempotent skip: prior AGENT_RUN_COMPLETED exists for job ${String(job.id ?? "unknown")}`,
+        outcome: AGENT_JOB_SKIPPED_OUTCOME,
+      });
+    } catch (logError) {
+      console.error(
+        `[Worker] Failed to log idempotent skip for job ${job.id}:`,
+        logError
+      );
+    }
+
+    try {
+      await emitAgentRunComplete({
+        clientId,
+        agentType,
+        jobId: String(job.id ?? "unknown"),
+        success: true,
+      });
+    } catch (emitErr) {
+      console.error("[Worker] emitAgentRunComplete failed:", emitErr);
+    }
+
+    return { success: true, skipped: true };
+  }
 
   // 2. Build tools — shared + agent-specific, grouped for Mastra toolsets
   const sharedTools = buildSharedTools(vault);
@@ -78,7 +172,28 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
       : { onboarding: agentSpecificTools }),
   };
 
-  // 3. Run the agent with scoped memory
+  const stage = await resolveRunStage(vault);
+  const { requestContext, tracingOptions, traceId, contentCaptured } =
+    buildJobTracingContext({
+      clientId,
+      agentName,
+      stage,
+      jobId,
+    });
+
+  // Examiner SoR: job start is reconstructible from Postgres without model logs.
+  await vault.logDecision({
+    jobId,
+    agentName,
+    stage,
+    traceId,
+    outcome: "RUN_STARTED",
+    reason: `Agent run started (trigger=${trigger})`,
+    contentCaptured,
+    metadata: { trigger, dryRun: env.DRY_RUN },
+  });
+
+  // 3. Run the agent with scoped memory + one logical trace per job
   const prompt = buildInitialPrompt(parsed);
 
   try {
@@ -88,28 +203,78 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
         thread: clientId,
       },
       toolsets,
+      requestContext,
+      tracingOptions,
+    });
+
+    const tools = extractToolNames(result);
+
+    await vault.logDecision({
+      jobId,
+      agentName,
+      stage,
+      traceId,
+      toolProposed: tools,
+      toolExecuted: tools,
+      outcome: env.DRY_RUN ? "DRY_RUN" : "RUN_SUCCEEDED",
+      reason: env.DRY_RUN
+        ? "Agent run completed under DRY_RUN (externals suppressed)"
+        : "Agent run completed successfully",
+      contentCaptured,
+      metadata: { trigger, textLength: result.text?.length ?? 0 },
     });
 
     console.log(
-      `[Worker] ${agentType} job ${job.id} completed for client ${clientId}`
+      `[Worker] ${agentType} job ${jobId} completed for client ${clientId}`
     );
+
+    try {
+      await vault.logAction({
+        documentId,
+        agentType,
+        actionType: "SCAN_VAULT",
+        trigger,
+        reasoning: `Agent run completed successfully for job ${String(job.id ?? "unknown")}`,
+        outcome: AGENT_JOB_COMPLETED_OUTCOME,
+        nextScheduledAt: new Date(
+          new Date(env.DEMO_DATE).getTime() + 1 * 24 * 60 * 60 * 1000
+        ),
+      });
+    } catch (logError) {
+      console.error(
+        `[Worker] Failed to log completion for job ${job.id}:`,
+        logError
+      );
+    }
 
     try {
       await emitAgentRunComplete({
         clientId,
         agentType,
-        jobId: String(job.id ?? "unknown"),
+        jobId,
         success: true,
       });
     } catch (emitErr) {
       console.error("[Worker] emitAgentRunComplete failed:", emitErr);
     }
 
-    return { success: true, text: result.text };
+    return { success: true, text: result.text, traceId };
   } catch (error) {
     // Always log failure to audit trail so the dashboard can see it
     try {
+      await vault.logDecision({
+        jobId,
+        agentName,
+        stage,
+        traceId,
+        outcome: "RUN_FAILED",
+        refusalCodes: ["AGENT_RUN_FAILED"],
+        reason: `Agent run failed: ${error instanceof Error ? error.message : String(error)}`,
+        contentCaptured,
+        metadata: { trigger },
+      });
       await vault.logAction({
+        documentId,
         agentType,
         actionType: "SCAN_VAULT",
         trigger,
@@ -121,7 +286,7 @@ async function processAgentJob(job: Job<AgentJobPayload>) {
       });
     } catch (logError) {
       console.error(
-        `[Worker] Failed to log audit trail for failed job ${job.id}:`,
+        `[Worker] Failed to log audit trail for failed job ${jobId}:`,
         logError
       );
     }

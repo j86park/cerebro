@@ -4,6 +4,7 @@ import {
   duplicateActionScorer,
   documentPriorityScorer,
   reasoningQualityScorer,
+  trajectoryScorer,
 } from "../scorers";
 import type { AbstractScenario } from "./scenario-types";
 
@@ -19,6 +20,7 @@ export const complianceScenarios: AbstractScenario[] = GROUND_TRUTH.filter(
     escalationStageScorer,
     duplicateActionScorer,
     documentPriorityScorer,
+    trajectoryScorer,
     reasoningQualityScorer,
   ],
 }));

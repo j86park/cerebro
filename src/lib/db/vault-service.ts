@@ -7,6 +7,10 @@ import {
   agentTypeToPromptAgentId,
   resolveProductionPromptVersionId,
 } from "@/lib/prompt-ops";
+import {
+  logDecisionInputSchema,
+  type LogDecisionInput,
+} from "@/lib/observability/decision-log";
 
 const vaultContextSchema = z.object({
   clientId: z.string().min(1),
@@ -74,6 +78,7 @@ export type ResolveEscalationInput = z.infer<typeof resolveEscalationInputSchema
 export type UpsertOnboardingStageInput = z.infer<
   typeof upsertOnboardingStageInputSchema
 >;
+export type { LogDecisionInput };
 
 type PrismaLike = {
   client: {
@@ -101,6 +106,10 @@ type PrismaLike = {
   onboardingStage: {
     findUnique: (args: unknown) => Promise<unknown | null>;
     upsert: (args: unknown) => Promise<unknown>;
+  };
+  decisionRecord: {
+    findMany: (args: unknown) => Promise<unknown[]>;
+    create: (args: unknown) => Promise<Record<string, unknown>>;
   };
 };
 
@@ -167,6 +176,53 @@ export class VaultService {
     return this.db.agentAction.findMany({
       where: { clientId: this.clientId },
       orderBy: { performedAt: "desc" },
+    });
+  }
+
+  /**
+   * Writes an append-only examiner DecisionRecord correlated to a Mastra trace / BullMQ job.
+   */
+  async logDecision(
+    input: LogDecisionInput,
+  ): Promise<Record<string, unknown> & { id: string }> {
+    const parsed = logDecisionInputSchema.parse(input);
+    const created = await this.db.decisionRecord.create({
+      data: {
+        clientId: this.clientId,
+        jobId: parsed.jobId,
+        agentName: parsed.agentName,
+        stage: parsed.stage,
+        traceId: parsed.traceId.toLowerCase(),
+        policyVersion: parsed.policyVersion,
+        policyFired: parsed.policyFired,
+        toolProposed: parsed.toolProposed ?? [],
+        toolExecuted: parsed.toolExecuted ?? [],
+        refusalCodes: parsed.refusalCodes ?? [],
+        reviewer: parsed.reviewer,
+        outcome: parsed.outcome,
+        reason: parsed.reason,
+        promptVersionId: parsed.promptVersionId,
+        contentCaptured: parsed.contentCaptured ?? false,
+        metadata: parsed.metadata,
+      },
+    });
+    return {
+      ...created,
+      id: String(created.id),
+    };
+  }
+
+  /**
+   * Returns decision history for this vault, newest first when unsorted callers sort;
+   * default order is chronological (asc) so a job run reconstructs in decision order.
+   */
+  async getDecisionHistory(options?: { jobId?: string }) {
+    return this.db.decisionRecord.findMany({
+      where: {
+        clientId: this.clientId,
+        ...(options?.jobId ? { jobId: options.jobId } : {}),
+      },
+      orderBy: { decidedAt: "asc" },
     });
   }
 
@@ -379,6 +435,41 @@ export class VaultService {
       },
     });
     return stageRow;
+  }
+
+  /**
+   * Returns true when this vault already has a successful agent-job completion marker
+   * for the same agent/trigger/(document) within the given window.
+   * Used by BullMQ processors so retries/replays do not re-run side effects.
+   * Integrates with ActionLedger unique keys when WP-P0.1 lands — AgentAction is the interim SoR.
+   */
+  async hasCompletedAgentJob(input: {
+    agentType: string;
+    trigger: string;
+    documentId?: string;
+    completedOutcome: string;
+    since: Date;
+  }): Promise<boolean> {
+    const history = (await this.getActionHistory()) as Array<{
+      agentType: string;
+      trigger: string;
+      documentId: string | null;
+      outcome: string | null;
+      performedAt: Date;
+      actionType: string;
+    }>;
+
+    return history.some((row) => {
+      if (row.outcome !== input.completedOutcome) return false;
+      if (row.agentType !== input.agentType) return false;
+      if (row.trigger !== input.trigger) return false;
+      if (row.actionType !== "SCAN_VAULT") return false;
+      if (row.performedAt.getTime() < input.since.getTime()) return false;
+      if (input.documentId) {
+        return row.documentId === input.documentId;
+      }
+      return true;
+    });
   }
 
   /**
