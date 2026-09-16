@@ -3,6 +3,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
 import { EscalationStatus, LedgerActor, OnboardingStatus } from "@/lib/db/enums";
+import {
+  logDecisionInputSchema,
+  type LogDecisionInput,
+} from "@/lib/observability/decision-log";
 
 const vaultContextSchema = z.object({
   clientId: z.string().min(1),
@@ -70,6 +74,7 @@ export type ResolveEscalationInput = z.infer<typeof resolveEscalationInputSchema
 export type UpsertOnboardingStageInput = z.infer<
   typeof upsertOnboardingStageInputSchema
 >;
+export type { LogDecisionInput };
 
 type PrismaLike = {
   client: {
@@ -97,6 +102,10 @@ type PrismaLike = {
   onboardingStage: {
     findUnique: (args: unknown) => Promise<unknown | null>;
     upsert: (args: unknown) => Promise<unknown>;
+  };
+  decisionRecord: {
+    findMany: (args: unknown) => Promise<unknown[]>;
+    create: (args: unknown) => Promise<Record<string, unknown>>;
   };
 };
 
@@ -163,6 +172,53 @@ export class VaultService {
     return this.db.agentAction.findMany({
       where: { clientId: this.clientId },
       orderBy: { performedAt: "desc" },
+    });
+  }
+
+  /**
+   * Writes an append-only examiner DecisionRecord correlated to a Mastra trace / BullMQ job.
+   */
+  async logDecision(
+    input: LogDecisionInput,
+  ): Promise<Record<string, unknown> & { id: string }> {
+    const parsed = logDecisionInputSchema.parse(input);
+    const created = await this.db.decisionRecord.create({
+      data: {
+        clientId: this.clientId,
+        jobId: parsed.jobId,
+        agentName: parsed.agentName,
+        stage: parsed.stage,
+        traceId: parsed.traceId.toLowerCase(),
+        policyVersion: parsed.policyVersion,
+        policyFired: parsed.policyFired,
+        toolProposed: parsed.toolProposed ?? [],
+        toolExecuted: parsed.toolExecuted ?? [],
+        refusalCodes: parsed.refusalCodes ?? [],
+        reviewer: parsed.reviewer,
+        outcome: parsed.outcome,
+        reason: parsed.reason,
+        promptVersionId: parsed.promptVersionId,
+        contentCaptured: parsed.contentCaptured ?? false,
+        metadata: parsed.metadata,
+      },
+    });
+    return {
+      ...created,
+      id: String(created.id),
+    };
+  }
+
+  /**
+   * Returns decision history for this vault, newest first when unsorted callers sort;
+   * default order is chronological (asc) so a job run reconstructs in decision order.
+   */
+  async getDecisionHistory(options?: { jobId?: string }) {
+    return this.db.decisionRecord.findMany({
+      where: {
+        clientId: this.clientId,
+        ...(options?.jobId ? { jobId: options.jobId } : {}),
+      },
+      orderBy: { decidedAt: "asc" },
     });
   }
 
