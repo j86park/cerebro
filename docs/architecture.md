@@ -129,8 +129,8 @@ cerebro/
 │   │   │   └── resend.ts
 │   │   ├── policy/              ← stage × tool × auto|approve|block matrix
 │   │   └── config.ts            ← MODEL, DEMO_DATE, all env vars
-│   ├── workers/                 ← BullMQ: mutation-analysis, shadow-run (self-correcting prompts)
-│   ├── workflows/               ← Meta-agent async pipeline (taxonomy + mutate; not Mastra Workflow)
+│   ├── workers/                 ← BullMQ: mutation-analysis, shadow-run, online-judge (WP-P1.7)
+│   ├── workflows/               ← Meta-agent async pipeline (taxonomy + mutate; REGULATORY freeze)
 │   ├── simulation/
 │   │   ├── engine.ts
 │   │   ├── generator.ts         ← synthetic client generator

@@ -12,6 +12,8 @@ export const decisionOutcomeSchema = z.enum([
   "REFUSED",
   "PENDING_REVIEW",
   "DRY_RUN",
+  /** Async online judge sample completed (WP-P1.7). */
+  "ONLINE_JUDGED",
 ]);
 
 export type DecisionOutcome = z.infer<typeof decisionOutcomeSchema>;

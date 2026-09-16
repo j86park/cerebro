@@ -1,6 +1,7 @@
 import { Queue } from "bullmq";
 import { z } from "zod";
 import { connection } from "@/lib/queue/client";
+import type { OnlineJudgeJobPayload } from "@/lib/evals/online-judge-sample";
 
 export const mutationAnalysisJobSchema = z.object({
   evalRunId: z.string().min(1),
@@ -35,3 +36,12 @@ export const shadowRunQueue = new Queue<ShadowRunJobPayload>("shadow-run", {
   connection: connection as never,
   defaultJobOptions,
 });
+
+/** Async online judge samples (WP-P1.7) — never the primary ship gate. */
+export const onlineJudgeQueue = new Queue<OnlineJudgeJobPayload>(
+  "online-judge",
+  {
+    connection: connection as never,
+    defaultJobOptions,
+  },
+);

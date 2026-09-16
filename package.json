@@ -33,9 +33,10 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "db:validate": "node --env-file=.env.local ./node_modules/prisma/build/index.js validate",
-    "workers": "concurrently \"tsx src/workers/mutation-analysis.worker.ts\" \"tsx src/workers/shadow-runner.worker.ts\"",
+    "workers": "concurrently \"tsx src/workers/mutation-analysis.worker.ts\" \"tsx src/workers/shadow-runner.worker.ts\" \"tsx src/workers/online-judge.worker.ts\"",
     "workers:mutation": "tsx src/workers/mutation-analysis.worker.ts",
     "workers:shadow": "tsx src/workers/shadow-runner.worker.ts",
+    "workers:online-judge": "tsx src/workers/online-judge.worker.ts",
     "setup": "npm install && npx prisma generate && npx prisma migrate dev && npm run db:seed",
     "self-correcting:prep": "node --env-file=.env.local --import tsx scripts/self-correcting-pipeline.ts",
     "self-correcting:test": "node --env-file=.env.local --import tsx scripts/self-correcting-pipeline.ts --trigger-eval"

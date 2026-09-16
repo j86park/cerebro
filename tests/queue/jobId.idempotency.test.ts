@@ -247,6 +247,13 @@ describe("processAgentJob processor idempotency", () => {
     }));
     vi.doMock("@/workers/mutation-analysis.worker", () => ({}));
     vi.doMock("@/workers/shadow-runner.worker", () => ({}));
+    vi.doMock("@/workers/online-judge.worker", () => ({}));
+    vi.doMock("@/lib/evals/enqueue-online-judge", () => ({
+      maybeEnqueueOnlineJudgeSample: vi.fn().mockResolvedValue({
+        enqueued: false,
+        reason: "rate_miss",
+      }),
+    }));
 
     const { processAgentJob } = await import("@/lib/queue/workers");
     const { AGENT_JOB_SKIPPED_OUTCOME } = await import("@/lib/queue/jobs");
@@ -330,6 +337,13 @@ describe("processAgentJob processor idempotency", () => {
     }));
     vi.doMock("@/workers/mutation-analysis.worker", () => ({}));
     vi.doMock("@/workers/shadow-runner.worker", () => ({}));
+    vi.doMock("@/workers/online-judge.worker", () => ({}));
+    vi.doMock("@/lib/evals/enqueue-online-judge", () => ({
+      maybeEnqueueOnlineJudgeSample: vi.fn().mockResolvedValue({
+        enqueued: false,
+        reason: "rate_miss",
+      }),
+    }));
 
     const { processAgentJob } = await import("@/lib/queue/workers");
     const { AGENT_JOB_COMPLETED_OUTCOME } = await import("@/lib/queue/jobs");
