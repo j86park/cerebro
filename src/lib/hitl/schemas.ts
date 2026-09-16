@@ -66,18 +66,53 @@ export function buildHitlOpenKey(toolName: string, stage: number): string {
 }
 
 /**
+ * Joins kind/scope/detail into a BullMQ-legal 3-segment jobId.
+ * BullMQ 5.71 rejects custom ids that contain `:` unless `split(':').length === 3`.
+ */
+function buildThreeSegmentHitlJobId(
+  kind: string,
+  scope: string,
+  detail: string,
+): string {
+  for (const [label, value] of [
+    ["kind", kind],
+    ["scope", scope],
+    ["detail", detail],
+  ] as const) {
+    if (!value || value.includes(":")) {
+      throw new Error(
+        `HITL jobId ${label} must be non-empty and must not contain ':': ${value}`,
+      );
+    }
+  }
+  const jobId = `${kind}:${scope}:${detail}`;
+  if (jobId.split(":").length !== 3) {
+    throw new Error(
+      `HITL jobId must have exactly 3 ':' segments for BullMQ: ${jobId}`,
+    );
+  }
+  return jobId;
+}
+
+/**
  * Deterministic BullMQ jobId for HITL resume (survives worker restart / double-submit).
+ * Format: `hitl-resume:{workflowRunId}:{decision}` (exactly 3 segments).
  */
 export function buildHitlResumeJobId(payload: {
   workflowRunId: string;
   decision: HitlDecision;
 }): string {
-  return `hitl-resume:${payload.workflowRunId}:${payload.decision}`;
+  return buildThreeSegmentHitlJobId(
+    "hitl-resume",
+    payload.workflowRunId,
+    payload.decision,
+  );
 }
 
 /**
  * Deterministic BullMQ jobId for HITL timeout fallback.
+ * Format: `hitl-timeout:{workflowRunId}:timeout` (exactly 3 segments — BullMQ 5.71).
  */
 export function buildHitlTimeoutJobId(workflowRunId: string): string {
-  return `hitl-timeout:${workflowRunId}`;
+  return buildThreeSegmentHitlJobId("hitl-timeout", workflowRunId, "timeout");
 }

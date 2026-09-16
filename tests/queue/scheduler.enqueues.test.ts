@@ -58,16 +58,16 @@ describe("enqueueScheduledAgentScansForAllClients", () => {
     }
 
     const jobIds = add.mock.calls.map((c) => c[2]?.jobId as string);
-    expect(jobIds).toContain("scan:CLT-001:2026-09-16:COMPLIANCE");
-    expect(jobIds).toContain("scan:CLT-001:2026-09-16:ONBOARDING");
-    expect(jobIds).toContain("scan:CLT-002:2026-09-16:COMPLIANCE");
-    expect(jobIds).toContain("scan:CLT-002:2026-09-16:ONBOARDING");
+    expect(jobIds).toContain("scan:CLT-001:2026-09-16_COMPLIANCE");
+    expect(jobIds).toContain("scan:CLT-001:2026-09-16_ONBOARDING");
+    expect(jobIds).toContain("scan:CLT-002:2026-09-16_COMPLIANCE");
+    expect(jobIds).toContain("scan:CLT-002:2026-09-16_ONBOARDING");
   });
 
   it("counts existing jobIds as deduplicated instead of enqueued", async () => {
     getJob
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: "scan:CLT-001:2026-09-16:ONBOARDING" })
+      .mockResolvedValueOnce({ id: "scan:CLT-001:2026-09-16_ONBOARDING" })
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
 

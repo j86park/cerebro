@@ -21,7 +21,7 @@ const webhookSchema = z.object({
  * POST /api/webhooks/document-upload — Supabase webhook endpoint.
  * Validates webhook secret, parses payload, and enqueues an event-driven
  * agent job to the priority queue. Returns 202 immediately.
- * Uses deterministic upload:{clientId}:{docId}:{agentType} jobIds for webhook retries.
+ * Uses deterministic upload:{clientId}:{docId}_{agentType} jobIds for webhook retries.
  */
 export async function POST(req: Request) {
   // SECURITY: Validate webhook secret header

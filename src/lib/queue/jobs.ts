@@ -123,8 +123,56 @@ export function demoDateKey(): string {
 }
 
 /**
+ * BullMQ 5.x allows `:` in custom jobIds only when `split(':').length === 3`
+ * (legacy repeatable-job carve-out). Otherwise it throws `Custom Id cannot contain :`.
+ */
+export const BULLMQ_CUSTOM_JOB_ID_COLON_SEGMENTS = 3;
+
+/**
+ * Asserts a custom jobId is legal for BullMQ 5.71+ (no bare integers; `:` only with exactly 3 segments).
+ */
+export function assertBullMqCompatibleJobId(jobId: string): string {
+  if (`${Number.parseInt(jobId, 10)}` === jobId) {
+    throw new Error(`Custom Id cannot be integers: ${jobId}`);
+  }
+  if (
+    jobId.includes(":") &&
+    jobId.split(":").length !== BULLMQ_CUSTOM_JOB_ID_COLON_SEGMENTS
+  ) {
+    throw new Error(
+      `Custom Id cannot contain : (BullMQ requires exactly ${BULLMQ_CUSTOM_JOB_ID_COLON_SEGMENTS} segments): ${jobId}`,
+    );
+  }
+  return jobId;
+}
+
+/**
+ * Joins kind/scope/detail into a BullMQ-legal 3-segment jobId (`kind:scope:detail`).
+ * Segment values must not themselves contain `:`.
+ */
+export function buildThreeSegmentJobId(
+  kind: string,
+  scope: string,
+  detail: string,
+): string {
+  for (const [label, value] of [
+    ["kind", kind],
+    ["scope", scope],
+    ["detail", detail],
+  ] as const) {
+    if (!value || value.includes(":")) {
+      throw new Error(
+        `jobId ${label} must be non-empty and must not contain ':': ${value}`,
+      );
+    }
+  }
+  return assertBullMqCompatibleJobId(`${kind}:${scope}:${detail}`);
+}
+
+/**
  * Builds a deterministic BullMQ jobId for a live agent payload.
- * Patterns: scan / upload / manual / expiry / risk / profile / sanctions.
+ * Always `kind:clientId:detail` (exactly 3 `:` segments) so BullMQ 5.71 accepts the id.
+ * Detail packs remaining fields with `_` (date / doc / eventKey / agentType).
  * Agent type is part of the key because COMPLIANCE and ONBOARDING are separate jobs.
  */
 export function buildAgentJobId(payload: AgentJobPayload): string {
@@ -133,19 +181,47 @@ export function buildAgentJobId(payload: AgentJobPayload): string {
 
   switch (parsed.trigger) {
     case "EVENT_UPLOAD":
-      return `upload:${parsed.clientId}:${parsed.documentId}:${parsed.agentType}`;
+      return buildThreeSegmentJobId(
+        "upload",
+        parsed.clientId,
+        `${parsed.documentId}_${parsed.agentType}`,
+      );
     case "SCHEDULED":
-      return `scan:${parsed.clientId}:${dateKey}:${parsed.agentType}`;
+      return buildThreeSegmentJobId(
+        "scan",
+        parsed.clientId,
+        `${dateKey}_${parsed.agentType}`,
+      );
     case "MANUAL":
-      return `manual:${parsed.clientId}:${dateKey}:${parsed.agentType}`;
+      return buildThreeSegmentJobId(
+        "manual",
+        parsed.clientId,
+        `${dateKey}_${parsed.agentType}`,
+      );
     case "EVENT_EXPIRY_PROXIMITY":
-      return `expiry:${parsed.clientId}:${parsed.documentId}:${dateKey}:${parsed.agentType}`;
+      return buildThreeSegmentJobId(
+        "expiry",
+        parsed.clientId,
+        `${parsed.documentId}_${dateKey}_${parsed.agentType}`,
+      );
     case "EVENT_RISK_TIER_CHANGE":
-      return `risk:${parsed.clientId}:${parsed.eventKey}:${dateKey}:${parsed.agentType}`;
+      return buildThreeSegmentJobId(
+        "risk",
+        parsed.clientId,
+        `${parsed.eventKey}_${dateKey}_${parsed.agentType}`,
+      );
     case "EVENT_PROFILE_MATERIAL_CHANGE":
-      return `profile:${parsed.clientId}:${parsed.eventKey}:${dateKey}:${parsed.agentType}`;
+      return buildThreeSegmentJobId(
+        "profile",
+        parsed.clientId,
+        `${parsed.eventKey}_${dateKey}_${parsed.agentType}`,
+      );
     case "EVENT_SANCTIONS_PEP":
-      return `sanctions:${parsed.clientId}:${parsed.eventKey}:${dateKey}:${parsed.agentType}`;
+      return buildThreeSegmentJobId(
+        "sanctions",
+        parsed.clientId,
+        `${parsed.eventKey}_${dateKey}_${parsed.agentType}`,
+      );
   }
 }
 
