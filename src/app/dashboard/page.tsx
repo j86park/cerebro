@@ -3,9 +3,16 @@ import { FirmSummaryBar } from "@/components/dashboard/FirmSummaryBar";
 import { VaultGrid } from "@/components/dashboard/VaultGrid";
 import { LiveAgentActivityFeed } from "@/components/dashboard/LiveAgentActivityFeed";
 import { EscalationQueuePanel } from "@/components/dashboard/EscalationQueuePanel";
+import { ApprovalPacketsPanel } from "@/components/dashboard/ApprovalPacketsPanel";
 import { AgentControls } from "@/components/dashboard/AgentControls";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
+import {
+  listPendingApprovalPackets,
+  getFirmSlaMetrics,
+  type ApprovalPacket,
+  type SlaMetrics,
+} from "@/lib/ops";
 
 type DashboardClient = Prisma.ClientGetPayload<{
   include: {
@@ -138,11 +145,28 @@ async function getDashboardData(page: number = 1) {
     secureClients: vaults.filter((v) => v.urgency.highest === "NONE").length,
   };
 
+  let approvalPackets: ApprovalPacket[] = [];
+  let slaMetrics: SlaMetrics | null = null;
+  try {
+    [approvalPackets, slaMetrics] = await Promise.all([
+      listPendingApprovalPackets({
+        status: "PENDING_APPROVAL",
+        limit: 25,
+      }),
+      getFirmSlaMetrics(),
+    ]);
+  } catch (error) {
+    // Ops packets require EscalationState (WP-P0.1+); keep dashboard usable if unavailable.
+    console.error("Failed to load approval packets / SLA metrics:", error);
+  }
+
   return {
     vaults,
     summary,
     initialActions,
     escalations,
+    approvalPackets,
+    slaMetrics,
     totalCount,
     pageSize,
   };
@@ -155,8 +179,16 @@ export default async function DashboardPage({
 }) {
   const resolvedSearchParams = await searchParams;
   const page = Number(resolvedSearchParams.page) || 1;
-  const { vaults, summary, initialActions, escalations, totalCount, pageSize } =
-    await getDashboardData(page);
+  const {
+    vaults,
+    summary,
+    initialActions,
+    escalations,
+    approvalPackets,
+    slaMetrics,
+    totalCount,
+    pageSize,
+  } = await getDashboardData(page);
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto pb-10">
@@ -186,6 +218,10 @@ export default async function DashboardPage({
 
         <div className="w-full lg:w-96 shrink-0 flex flex-col gap-6">
           <AgentControls vaultSummaries={vaults} />
+          <ApprovalPacketsPanel
+            packets={approvalPackets}
+            metrics={slaMetrics}
+          />
           <EscalationQueuePanel escalations={escalations} />
           <LiveAgentActivityFeed initialActions={initialActions} />
         </div>

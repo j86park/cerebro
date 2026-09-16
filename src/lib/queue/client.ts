@@ -4,6 +4,7 @@ import { env } from "@/lib/config";
 import {
   agentJobRetentionOptions,
   type AgentJobPayload,
+  type PriorityJobPayload,
   type SimulationJobPayload,
 } from "./jobs";
 
@@ -61,12 +62,12 @@ const defaultJobOptions = {
 /**
  * The three canonical BullMQ queues per architecture.md §Queue Separation.
  *
- * - `priority` — event-driven uploads, manual dashboard triggers
+ * - `priority` — event-driven uploads, manual dashboard triggers, HITL resume/timeout
  * - `scheduled` — cron-based full vault scans
  * - `simulation` — simulation batch jobs only
  */
 export const queues = {
-  priority: new Queue<AgentJobPayload>("cerebro-priority", {
+  priority: new Queue<PriorityJobPayload>("cerebro-priority", {
     connection: connection as never,
     defaultJobOptions,
   }),

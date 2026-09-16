@@ -54,8 +54,9 @@
   "homepage": "https://github.com/j86park/cerebro#readme",
   "dependencies": {
     "@base-ui/react": "^1.3.0",
-    "@mastra/core": "^1.13.2",
+    "@mastra/core": "^1.67.0",
     "@mastra/memory": "^1.8.2",
+    "@mastra/observability": "^1.17.8",
     "@mastra/pg": "^1.8.0",
     "@openrouter/ai-sdk-provider": "^2.3.1",
     "@prisma/client": "^5.22.0",

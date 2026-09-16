@@ -5,6 +5,7 @@ import {
   buildAgentJobId,
   isDuplicateJobIdError,
   type AgentJobPayload,
+  type PriorityJobPayload,
 } from "@/lib/queue/jobs";
 
 export type EnqueueAgentJobResult = {
@@ -12,7 +13,11 @@ export type EnqueueAgentJobResult = {
   deduplicated: boolean;
 };
 
-type QueueWithGetJob = Queue<AgentJobPayload> & {
+/** Priority queue accepts agent + HITL payloads; scheduled stays agent-only. */
+type QueueWithGetJob = (
+  | Queue<AgentJobPayload>
+  | Queue<PriorityJobPayload>
+) & {
   getJob?: (jobId: string) => Promise<{ id?: string } | null | undefined>;
 };
 

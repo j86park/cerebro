@@ -3,6 +3,18 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
 import { EscalationStatus, LedgerActor, OnboardingStatus } from "@/lib/db/enums";
+import {
+  formatUntrustedDocumentBlock,
+  sanitizeDocumentTextForAgentContext,
+} from "@/lib/documents/injectionHygiene";
+import {
+  agentTypeToPromptAgentId,
+  resolveProductionPromptVersionId,
+} from "@/lib/prompt-ops";
+import {
+  logDecisionInputSchema,
+  type LogDecisionInput,
+} from "@/lib/observability/decision-log";
 
 const vaultContextSchema = z.object({
   clientId: z.string().min(1),
@@ -29,6 +41,8 @@ const logActionInputSchema = z.object({
   idempotencyKey: z.string().min(1).optional(),
 });
 
+const hitlContextSchema = z.record(z.unknown()).optional();
+
 const upsertEscalationInputSchema = z.object({
   openKey: z.string().min(1),
   ladderStage: z.number().int().min(0),
@@ -40,6 +54,7 @@ const upsertEscalationInputSchema = z.object({
   documentId: z.string().optional(),
   reasonCodes: z.array(z.string().min(1)).optional(),
   policyVersion: z.string().optional(),
+  hitlContext: hitlContextSchema,
 });
 
 const resolveEscalationInputSchema = z.object({
@@ -70,6 +85,7 @@ export type ResolveEscalationInput = z.infer<typeof resolveEscalationInputSchema
 export type UpsertOnboardingStageInput = z.infer<
   typeof upsertOnboardingStageInputSchema
 >;
+export type { LogDecisionInput };
 
 type PrismaLike = {
   client: {
@@ -79,6 +95,7 @@ type PrismaLike = {
   };
   document: {
     findMany: (args: unknown) => Promise<unknown[]>;
+    create: (args: unknown) => Promise<unknown>;
     update: (args: unknown) => Promise<unknown>;
     upsert: (args: unknown) => Promise<unknown>;
   };
@@ -97,6 +114,10 @@ type PrismaLike = {
   onboardingStage: {
     findUnique: (args: unknown) => Promise<unknown | null>;
     upsert: (args: unknown) => Promise<unknown>;
+  };
+  decisionRecord: {
+    findMany: (args: unknown) => Promise<unknown[]>;
+    create: (args: unknown) => Promise<Record<string, unknown>>;
   };
 };
 
@@ -123,6 +144,13 @@ export class VaultService {
 
   getNow(): Date {
     return this.now;
+  }
+
+  /**
+   * Returns the vault's fixed clientId (for HITL / enqueue payloads — never for cross-client queries).
+   */
+  getClientId(): string {
+    return this.clientId;
   }
 
   /**
@@ -157,6 +185,44 @@ export class VaultService {
   }
 
   /**
+   * Returns a single document by id, fail-closed to this vault.
+   * Cross-client attempts are audited then thrown.
+   */
+  async getDocumentById(documentId: string) {
+    const id = z.string().min(1).parse(documentId);
+    return this.requireDocumentInVault(id);
+  }
+
+  /**
+   * Loads document body text for agent context: scoped retrieval + injection hygiene.
+   */
+  async getDocumentContentForAgent(documentId: string): Promise<{
+    documentId: string;
+    type: string | null;
+    text: string;
+    strippedPatterns: string[];
+    agentContextBlock: string;
+  }> {
+    const doc = (await this.getDocumentById(documentId)) as {
+      id: string;
+      type?: string | null;
+      notes?: string | null;
+    };
+    const raw = typeof doc.notes === "string" ? doc.notes : "";
+    const sanitized = sanitizeDocumentTextForAgentContext(raw);
+    return {
+      documentId: doc.id,
+      type: typeof doc.type === "string" ? doc.type : null,
+      text: sanitized.text,
+      strippedPatterns: sanitized.strippedPatterns,
+      agentContextBlock: formatUntrustedDocumentBlock({
+        documentId: doc.id,
+        text: sanitized.text,
+      }),
+    };
+  }
+
+  /**
    * Returns action history for this vault, newest first.
    */
   async getActionHistory() {
@@ -167,13 +233,80 @@ export class VaultService {
   }
 
   /**
+   * Writes an append-only examiner DecisionRecord correlated to a Mastra trace / BullMQ job.
+   */
+  async logDecision(
+    input: LogDecisionInput,
+  ): Promise<Record<string, unknown> & { id: string }> {
+    const parsed = logDecisionInputSchema.parse(input);
+    const created = await this.db.decisionRecord.create({
+      data: {
+        clientId: this.clientId,
+        jobId: parsed.jobId,
+        agentName: parsed.agentName,
+        stage: parsed.stage,
+        traceId: parsed.traceId.toLowerCase(),
+        policyVersion: parsed.policyVersion,
+        policyFired: parsed.policyFired,
+        toolProposed: parsed.toolProposed ?? [],
+        toolExecuted: parsed.toolExecuted ?? [],
+        refusalCodes: parsed.refusalCodes ?? [],
+        reviewer: parsed.reviewer,
+        outcome: parsed.outcome,
+        reason: parsed.reason,
+        promptVersionId: parsed.promptVersionId,
+        contentCaptured: parsed.contentCaptured ?? false,
+        metadata: parsed.metadata,
+      },
+    });
+    return {
+      ...created,
+      id: String(created.id),
+    };
+  }
+
+  /**
+   * Returns decision history for this vault, newest first when unsorted callers sort;
+   * default order is chronological (asc) so a job run reconstructs in decision order.
+   */
+  async getDecisionHistory(options?: { jobId?: string }) {
+    return this.db.decisionRecord.findMany({
+      where: {
+        clientId: this.clientId,
+        ...(options?.jobId ? { jobId: options.jobId } : {}),
+      },
+      orderBy: { decidedAt: "asc" },
+    });
+  }
+
+  /**
    * Writes an append-only ActionLedger entry scoped to this vault.
    * When `idempotencyKey` is set, a prior row for the same key is returned (no-op) instead of inserting again.
+   * Resolves production `promptVersionId` when the caller omits it (version-on-audit).
    */
   async logAction(
     input: LogActionInput,
   ): Promise<Record<string, unknown> & { duplicate: boolean; id: string }> {
     const parsed = logActionInputSchema.parse(input);
+
+    let promptVersionId = parsed.promptVersionId;
+    if (!promptVersionId) {
+      const promptAgentId = agentTypeToPromptAgentId(parsed.agentType);
+      if (promptAgentId) {
+        try {
+          promptVersionId =
+            (await resolveProductionPromptVersionId(promptAgentId)) ??
+            undefined;
+        } catch (error: unknown) {
+          // Unit stubs / missing prompt tables must not block ledger writes.
+          console.error(
+            "[VaultService.logAction] promptVersionId resolve failed:",
+            error instanceof Error ? error.message : error,
+          );
+        }
+      }
+    }
+
     const data = {
       documentId: parsed.documentId,
       agentType: parsed.agentType,
@@ -184,7 +317,7 @@ export class VaultService {
       nextScheduledAt: parsed.nextScheduledAt,
       stage: parsed.stage,
       policyVersion: parsed.policyVersion,
-      promptVersionId: parsed.promptVersionId,
+      promptVersionId,
       actor: parsed.actor ?? LedgerActor.AGENT,
       reasonCodes: parsed.reasonCodes ?? [],
       citedFields: parsed.citedFields,
@@ -276,6 +409,7 @@ export class VaultService {
         documentId: parsed.documentId,
         reasonCodes: parsed.reasonCodes ?? [],
         policyVersion: parsed.policyVersion,
+        hitlContext: parsed.hitlContext ?? undefined,
         openedAt: this.now,
       },
       update: {
@@ -284,7 +418,21 @@ export class VaultService {
         documentId: parsed.documentId,
         reasonCodes: parsed.reasonCodes ?? [],
         policyVersion: parsed.policyVersion,
+        hitlContext: parsed.hitlContext ?? undefined,
         resolvedAt: null,
+      },
+    });
+  }
+
+  /**
+   * Finds an open-like escalation by openKey for this vault (HITL resume lookups).
+   */
+  async getEscalationStateByOpenKey(openKey: string) {
+    const parsed = z.string().min(1).parse(openKey);
+    return this.db.escalationState.findFirst({
+      where: {
+        clientId: this.clientId,
+        openKey: parsed,
       },
     });
   }
@@ -310,6 +458,7 @@ export class VaultService {
       data: {
         status: parsed.status,
         openKey: null,
+        hitlContext: null,
         resolvedAt: this.now,
         reasonCodes: parsed.reasonCodes,
       },
@@ -424,21 +573,55 @@ export class VaultService {
    * Updates a document status scoped to this vault.
    */
   async updateDocumentStatus(documentId: string, status: string, notes?: string) {
-    const docs = await this.db.document.findMany({
-      where: { id: documentId, clientId: this.clientId },
-    });
-
-    if (docs.length === 0) {
-      throw new Error(`Document ${documentId} not found in client vault ${this.clientId}`);
-    }
+    const id = z.string().min(1).parse(documentId);
+    await this.requireDocumentInVault(id);
 
     return this.db.document.update({
       where: {
-        id: documentId,
+        id,
       },
       data: {
         status,
         notes,
+      },
+    });
+  }
+
+  /**
+   * Creates a new document row for this vault (upload path).
+   * Optional `notes` are stored as provided — callers must sanitize extracted text first.
+   */
+  async createDocument(input: {
+    id?: string;
+    type: string;
+    category: string;
+    status: string;
+    uploadedAt?: Date;
+    expiryDate?: Date;
+    notificationCount?: number;
+    lastNotifiedAt?: Date;
+    fileRef?: string;
+    notes?: string;
+  }) {
+    const parsed = z
+      .object({
+        id: z.string().min(1).optional(),
+        type: z.string().min(1),
+        category: z.string().min(1),
+        status: z.string().min(1),
+        uploadedAt: z.date().optional(),
+        expiryDate: z.date().optional(),
+        notificationCount: z.number().int().optional(),
+        lastNotifiedAt: z.date().optional(),
+        fileRef: z.string().optional(),
+        notes: z.string().optional(),
+      })
+      .parse(input);
+
+    return this.db.document.create({
+      data: {
+        ...parsed,
+        clientId: this.clientId,
       },
     });
   }
@@ -469,6 +652,52 @@ export class VaultService {
         id,
         ...input,
         clientId: this.clientId,
+      },
+    });
+  }
+
+  /**
+   * Ensures documentId belongs to this vault; audits and throws on cross-client probe.
+   */
+  private async requireDocumentInVault(documentId: string): Promise<unknown> {
+    const scoped = await this.db.document.findMany({
+      where: { id: documentId, clientId: this.clientId },
+    });
+    if (scoped.length > 0) {
+      return scoped[0];
+    }
+
+    const anyMatch = await this.db.document.findMany({
+      where: { id: documentId },
+    });
+    if (anyMatch.length > 0) {
+      await this.auditCrossClientDocumentAccess(documentId);
+      throw new Error(
+        `Cross-client document access denied: document ${documentId} is not in vault ${this.clientId}`,
+      );
+    }
+
+    throw new Error(
+      `Document ${documentId} not found in client vault ${this.clientId}`,
+    );
+  }
+
+  /**
+   * Writes ActionLedger evidence when a cross-client document access is attempted.
+   */
+  private async auditCrossClientDocumentAccess(documentId: string): Promise<void> {
+    await this.logAction({
+      documentId,
+      agentType: "SYSTEM",
+      actionType: "DOCUMENT_ACCESS_DENIED",
+      trigger: "MANUAL",
+      reasoning: `Blocked cross-client document retrieval for ${documentId} against vault ${this.clientId}`,
+      outcome: "DENIED",
+      actor: LedgerActor.SYSTEM,
+      reasonCodes: ["CROSS_CLIENT_ACCESS_DENIED"],
+      citedFields: {
+        documentId,
+        vaultClientId: this.clientId,
       },
     });
   }

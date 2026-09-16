@@ -1,8 +1,14 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
-import { ONBOARDING_STAGES } from "@/lib/documents/onboarding-stages";
-import { env } from "@/lib/config";
+import { addDemoDays, demoNow } from "@/lib/dates/demo-date";
+import {
+  accountTypeSchema,
+  computeChecklistGaps,
+  getTotalOnboardingStages,
+  resolveStageChecklist,
+  riskProfileSchema,
+} from "@/lib/documents/checklist";
 import { enforceToolPolicy } from "@/lib/policy";
 
 const inputSchema = z.object({
@@ -21,13 +27,13 @@ const outputSchema = z.object({
 });
 
 /**
- * Builds completeOnboarding (stage-gated via policy matrix).
+ * Builds completeOnboarding (stage-gated via policy matrix + final checklist).
  */
 export function buildCompleteOnboarding(vault: VaultService) {
   return createTool({
     id: "completeOnboarding",
     description:
-      "Marks the client's onboarding as fully complete. PREREQUISITE: Client must be at the final stage and all Stage 4 documents must have VALID status.",
+      "Marks the client's onboarding as fully complete. PREREQUISITE: Client must be at the final stage and all final-stage checklist documents (account/risk aware) must be VALID under DEMO_DATE rules.",
     inputSchema,
     outputSchema,
     execute: async (inputData) => {
@@ -38,7 +44,12 @@ export function buildCompleteOnboarding(vault: VaultService) {
         unknown
       >;
       const currentStage = client.onboardingStage as number;
-      const totalStages = Object.keys(ONBOARDING_STAGES).length;
+      const totalStages = getTotalOnboardingStages();
+      const accountType = accountTypeSchema.parse(client.accountType);
+      const riskProfile =
+        client.riskProfile == null
+          ? null
+          : riskProfileSchema.parse(client.riskProfile);
 
       const policy = await enforceToolPolicy({
         vault,
@@ -57,44 +68,54 @@ export function buildCompleteOnboarding(vault: VaultService) {
         );
       }
 
-      // Self-enforce: all final stage documents must be VALID
-      const stageConfig = ONBOARDING_STAGES[totalStages];
-      if (stageConfig) {
-        const documents = (await vault.getDocuments()) as Array<
-          Record<string, unknown>
-        >;
+      const checklistContext = {
+        stage: totalStages,
+        accountType,
+        riskProfile,
+      };
+      const stageConfig = resolveStageChecklist(checklistContext);
+      const documents = (await vault.getDocuments()) as Array<{
+        type: string;
+        status: string;
+        expiryDate?: Date | string | null;
+        uploadedAt?: Date | string | null;
+      }>;
 
-        const missingOrInvalid = stageConfig.requiredDocuments.filter(
-          (docType) => {
-            const doc = documents.find((d) => d.type === docType);
-            return !doc || (doc.status as string) !== "VALID";
-          },
+      const gaps = computeChecklistGaps(checklistContext, documents);
+      if (gaps.length > 0) {
+        const parts = gaps.map(
+          (g) => `${g.documentType} (${g.reason}: ${g.status})`,
         );
-
-        if (missingOrInvalid.length > 0) {
-          throw new Error(
-            `Cannot complete onboarding: the following Stage ${totalStages} documents are not VALID: ${missingOrInvalid.join(", ")}.`,
-          );
-        }
+        throw new Error(
+          `Cannot complete onboarding: Stage ${totalStages} checklist incomplete. Gaps: ${parts.join("; ")}.`,
+        );
       }
 
-      await vault.resetOnboarding(totalStages, "COMPLETED");
+      await vault.upsertOnboardingStageState({
+        stage: totalStages,
+        status: "COMPLETED",
+        checklistSnapshot: {
+          stage: totalStages,
+          accountType,
+          riskProfile,
+          requiredDocuments: stageConfig?.requiredDocuments ?? [],
+          gaps: [],
+          completedAt: demoNow().toISOString(),
+        },
+      });
 
-      const completedAt = new Date(env.DEMO_DATE).toISOString();
+      const completedAt = demoNow().toISOString();
 
-      // Always log the action
       await vault.logAction({
         agentType: "ONBOARDING",
         actionType: "COMPLETE_ONBOARDING",
         trigger: "SCHEDULED",
         reasoning,
         outcome: "ONBOARDING_COMPLETED",
-        nextScheduledAt: new Date(
-          new Date(env.DEMO_DATE).getTime() + 30 * 24 * 60 * 60 * 1000,
-        ),
+        nextScheduledAt: addDemoDays(30),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
-        reasonCodes: ["POLICY_ALLOW_AUTO"],
+        reasonCodes: ["POLICY_ALLOW_AUTO", "CHECKLIST_COMPLETE"],
       });
 
       return {

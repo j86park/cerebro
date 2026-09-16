@@ -85,6 +85,8 @@ cerebro/
 │   │   │   ├── agent.ts
 │   │   │   ├── prompts.ts
 │   │   │   └── index.ts
+│   │   ├── workflows/
+│   │   │   └── complianceHitl.workflow.ts  ← Mastra HITL suspend/resume
 │   │   └── mastra.ts            ← single Mastra instance
 │   ├── tools/
 │   │   ├── shared/
@@ -109,10 +111,14 @@ cerebro/
 │   │   ├── db/
 │   │   │   ├── client.ts        ← Prisma client singleton
 │   │   │   └── vault-service.ts ← ALL db access goes through here
+│   │   ├── observability/
+│   │   │   ├── decision-log.ts  ← DecisionRecord Zod schemas (examiner SoR)
+│   │   │   └── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
 │   │   ├── queue/
 │   │   │   ├── client.ts        ← BullMQ + Redis (`REDIS_URL`) setup
 │   │   │   ├── workers.ts       ← queue worker definitions
 │   │   │   └── jobs.ts          ← job type definitions
+│   │   ├── hitl/                ← durable advisor approve/deny/timeout
 │   │   ├── email/
 │   │   │   └── resend.ts
 │   │   ├── policy/              ← stage × tool × auto|approve|block matrix
@@ -442,6 +448,10 @@ POST /api/vaults/[clientId]/upload        → mock document upload (triggers eve
 
 POST /api/agents/trigger                  → manually trigger agent run from dashboard (canonical trigger)
 GET  /api/agents/status                   → current queue depth and active runs
+POST /api/approvals/decide                → advisor HITL approve / edit / deny (enqueues resume job)
+GET  /api/approvals/packets               → pending approval packets (ledger + vault evidence)
+GET  /api/approvals/packets/[openKey]     → single packet (`?clientId=` required)
+GET  /api/approvals/metrics               → firm escalation_rate / timeout_rate SLA metrics
 
 GET  /api/cron/scheduled-scans            → enqueue scheduled scans (secured with `CRON_SECRET`)
 
