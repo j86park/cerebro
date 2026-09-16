@@ -9,7 +9,7 @@ import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
-import { assertEvalOverallScore } from "@/evals/threshold";
+import { assertEvalReleaseGates } from "@/evals/threshold";
 import {
   getMutationEnqueueDecision,
   recordMutationEnqueue,
@@ -199,7 +199,8 @@ export async function runAllEvals(
   }
 
   if (enforceThreshold) {
-    assertEvalOverallScore(overallScore);
+    // Hard canary gates (escalation / onboarding / duplicate) fail closed before soft average.
+    assertEvalReleaseGates(overallScore, scenarioResults);
   }
 
   return {
