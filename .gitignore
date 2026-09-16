@@ -11,3 +11,11 @@ prisma/generated/
 .env.test
 
 .DS_Store
+
+# Project planning artifacts (Agent Store / Context only — do not commit)
+docs/sota-*.md
+docs/auto-run-*.md
+**/sota-upgrade-guidelines.md
+**/sota-web-research-prompt.md
+**/auto-run-implementation-plan.md
+**/auto-run-agent-playbook.md
