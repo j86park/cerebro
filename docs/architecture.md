@@ -115,6 +115,7 @@ cerebro/
 │   │   │   ├── injectionHygiene.ts
 │   │   │   └── registry.ts
 │   │   ├── memory/              ← OM feature-flag helpers + tool-as-subagent stubs (T2.1)
+│   │   ├── sanctions/           ← sanctions/PEP check adapter seam (T2.4; dry-run + Alloy stub)
 │   │   ├── db/
 │   │   │   ├── client.ts        ← Prisma client singleton
 │   │   │   └── vault-service.ts ← ALL db access goes through here
