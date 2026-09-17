@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
+import { sendTransactionalEmail } from "@/lib/email/resend";
 import {
   enforceToolPolicy,
   PolicyApprovalRequiredError,
@@ -70,9 +71,17 @@ export function buildEscalateToComplianceOfficer(vault: VaultService) {
           );
         }
 
-        if (!DRY_RUN) {
-          // TODO: Send formal escalation notification via Resend to compliance officer
-        }
+        const profile = (await vault.getClientProfile()) as {
+          name: string;
+          advisor: { email: string };
+        };
+        await sendTransactionalEmail({
+          to: profile.advisor.email,
+          subject: `Compliance escalation: ${profile.name}`,
+          text:
+            `Formal Stage 4 escalation to the compliance officer for client ${profile.name}.\n\n` +
+            `${reasoning}`,
+        });
 
         await vault.logAction({
           agentType: "COMPLIANCE",
