@@ -8,6 +8,7 @@ import { buildSendAdvisorAlert } from "./sendAdvisorAlert";
 import { buildGetOpenEscalations } from "./getOpenEscalations";
 import { buildGetDocumentForReview } from "./getDocumentForReview";
 import { buildGetChecklistGaps } from "./getChecklistGaps";
+import { buildRefreshDocumentExtract } from "./refreshDocumentExtract";
 
 export {
   buildGetClientProfile,
@@ -17,6 +18,7 @@ export {
   buildGetOpenEscalations,
   buildGetDocumentForReview,
   buildGetChecklistGaps,
+  buildRefreshDocumentExtract,
 };
 
 const sharedToolsOptionsSchema = z.object({
@@ -44,6 +46,7 @@ export function buildSharedTools(
     getOpenEscalations: buildGetOpenEscalations(vault),
     getDocumentForReview: buildGetDocumentForReview(vault),
     getChecklistGaps: buildGetChecklistGaps(vault),
+    refreshDocumentExtract: buildRefreshDocumentExtract(vault),
   };
   const keys = Object.keys(tools);
   for (const name of SHARED_TOOL_ALLOWLIST) {

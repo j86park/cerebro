@@ -6,6 +6,7 @@ import { buildEscalateToComplianceOfficer } from "./escalateToComplianceOfficer"
 import { buildEscalateToManagement } from "./escalateToManagement";
 import { buildUpdateDocumentStatus } from "./updateDocumentStatus";
 import { buildMarkResolved } from "./markResolved";
+import { buildRequestMissingDocument } from "./requestMissingDocument";
 
 export {
   buildGetDocumentComplianceStatus,
@@ -14,6 +15,7 @@ export {
   buildEscalateToManagement,
   buildUpdateDocumentStatus,
   buildMarkResolved,
+  buildRequestMissingDocument,
 };
 
 /**
@@ -27,6 +29,7 @@ export function buildComplianceTools(vault: VaultService) {
     escalateToManagement: buildEscalateToManagement(vault),
     updateDocumentStatus: buildUpdateDocumentStatus(vault),
     markResolved: buildMarkResolved(vault),
+    requestMissingDocument: buildRequestMissingDocument(vault),
   };
   assertDomainToolAllowlist("compliance", Object.keys(tools));
   return tools;
