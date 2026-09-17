@@ -25,6 +25,7 @@
     "eval:canary": "node --env-file=.env.local --import tsx src/evals/run.ts --enforce-threshold --suite canary",
     "eval:smoke": "node --env-file=.env.local --import tsx src/evals/run.ts --suite smoke --sample 5 --sample-seed cerebro-smoke",
     "eval:dev": "node --env-file=.env.local --import tsx src/evals/run.ts --suite canary",
+    "eval:ablate": "node --env-file=.env.local --import tsx scripts/ablate-fixtures.ts",
     "golden:export": "node --env-file=.env.local --import tsx scripts/export-eval-failure.ts",
     "golden:promote": "node --env-file=.env.local --import tsx scripts/promote-golden.ts",
     "benchmark-report": "tsx scripts/benchmark-report.ts",
