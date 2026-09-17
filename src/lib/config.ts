@@ -221,6 +221,12 @@ const envSchema = z.object({
     )
     .default(false),
   /**
+   * Sanctions/PEP check adapter provider (T2.4 seam).
+   * Vault-lifecycle only — no Alloy identity fabric / AML investigation workforce.
+   * `dry-run` never claims clearance; `alloy` is an unconfigured stub until credentials land.
+   */
+  SANCTIONS_CHECK_PROVIDER: z.enum(["dry-run", "alloy"]).default("dry-run"),
+  /**
    * True when running under CI (GitHub Actions sets CI=true / GITHUB_ACTIONS=true).
    * Used to refuse accidental full×live suite runs (cheap-eval PR2).
    */
