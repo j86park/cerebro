@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-007-pass",
+  "scenarioId": "CLT-007",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "sendAdvisorAlert"
+  ],
+  "note": "P1 PR-G multi-issue expiring → stage-1 advisor notify",
+  "contentHash": "e57f0eb0045bccffa0fe7b3e9f32e04363495ce2cc1566182350979b004b2c4f"
+}

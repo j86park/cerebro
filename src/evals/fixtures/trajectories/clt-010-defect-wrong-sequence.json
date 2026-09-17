@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-010-defect-wrong-sequence",
+  "scenarioId": "CLT-010",
+  "kind": "seeded-defect",
+  "toolNames": [
+    "requestDocument",
+    "getOnboardingStatus"
+  ],
+  "note": "Request before observe violates expectedToolSequence",
+  "contentHash": "1503c66f8b37778ce241216335209ecae5a78c0a557e4ebbe3709c29fa414863"
+}
