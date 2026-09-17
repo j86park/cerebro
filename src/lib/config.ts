@@ -131,6 +131,26 @@ const envSchema = z.object({
       z.boolean()
     )
     .default(false),
+  /**
+   * True when running under CI (GitHub Actions sets CI=true / GITHUB_ACTIONS=true).
+   * Used to refuse accidental full×live suite runs (cheap-eval PR2).
+   */
+  CI: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
+  /**
+   * Explicit opt-in for `--suite full` under CI (nightly / pre-release jobs only).
+   * Default false — PR CI must use canary or fixture unit lane.
+   */
+  EVAL_ALLOW_FULL_IN_CI: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
 });
 
 export const env = envSchema.parse(process.env);
