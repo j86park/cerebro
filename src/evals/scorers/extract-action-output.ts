@@ -22,6 +22,7 @@ export function extractActionFromOutput(output: unknown): string | null {
     markResolved: "MARK_RESOLVED",
     requestDocument: "REQUEST_DOCUMENT",
     validateDocumentReceived: "VALIDATE_DOCUMENT",
+    setDocumentStatus: "VALIDATE_DOCUMENT",
     advanceOnboardingStage: "ADVANCE_STAGE",
     completeOnboarding: "COMPLETE_ONBOARDING",
     alertAdvisorStuck: "ALERT_ADVISOR_STUCK",

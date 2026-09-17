@@ -3,6 +3,7 @@ import { assertDomainToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildGetOnboardingStatus } from "./getOnboardingStatus";
 import { buildRequestDocument } from "./requestDocument";
 import { buildValidateDocumentReceived } from "./validateDocumentReceived";
+import { buildSetDocumentStatus } from "./setDocumentStatus";
 import { buildAdvanceOnboardingStage } from "./advanceOnboardingStage";
 import { buildCompleteOnboarding } from "./completeOnboarding";
 import { buildAlertAdvisorStuck } from "./alertAdvisorStuck";
@@ -11,6 +12,7 @@ export {
   buildGetOnboardingStatus,
   buildRequestDocument,
   buildValidateDocumentReceived,
+  buildSetDocumentStatus,
   buildAdvanceOnboardingStage,
   buildCompleteOnboarding,
   buildAlertAdvisorStuck,
@@ -24,6 +26,7 @@ export function buildOnboardingTools(vault: VaultService) {
     getOnboardingStatus: buildGetOnboardingStatus(vault),
     requestDocument: buildRequestDocument(vault),
     validateDocumentReceived: buildValidateDocumentReceived(vault),
+    setDocumentStatus: buildSetDocumentStatus(vault),
     advanceOnboardingStage: buildAdvanceOnboardingStage(vault),
     completeOnboarding: buildCompleteOnboarding(vault),
     alertAdvisorStuck: buildAlertAdvisorStuck(vault),
