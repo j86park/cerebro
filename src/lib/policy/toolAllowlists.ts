@@ -14,6 +14,7 @@ export const SHARED_TOOL_ALLOWLIST = [
   "getDocumentForReview",
   "getChecklistGaps",
   "refreshDocumentExtract",
+  "getDecisionHistory",
 ] as const;
 
 /** Compliance-domain tools only — never attached to onboarding runs. */
