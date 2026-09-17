@@ -10,7 +10,7 @@ import { buildOnboardingTools } from "@/tools/onboarding";
 import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { prisma } from "@/lib/db/client";
-import { buildLiveEvalSessionId, env } from "@/lib/config";
+import { buildLiveEvalSessionId, env, getAgentMaxSteps } from "@/lib/config";
 import {
   assertCanaryCiGates,
   assertEvalReleaseGates,
@@ -282,6 +282,7 @@ export async function runAllEvals(
           const result = await agent.generate(sc.input, {
             memory: buildClientMemoryScope(sc.clientId),
             toolsets: toolsets as never,
+            maxSteps: getAgentMaxSteps(sc.expected.trajectory?.maxSteps),
           });
 
           const scores = await runScenarioScorers(sc, result, mode);

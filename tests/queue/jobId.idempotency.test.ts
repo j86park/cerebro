@@ -6,7 +6,10 @@ vi.mock("@/lib/config", () => ({
     REDIS_URL: "redis://localhost:6379",
     NODE_ENV: "test",
     DRY_RUN: true,
+    AGENT_MAX_STEPS: 12,
   },
+  getAgentMaxSteps: (override?: number) =>
+    override === undefined ? 12 : Math.min(Math.floor(override), 12),
 }));
 
 describe("buildAgentJobId", () => {
@@ -364,6 +367,10 @@ describe("processAgentJob processor idempotency", () => {
       traceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
     });
     expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ maxSteps: 12 }),
+    );
     expect(logAction).toHaveBeenCalledWith(
       expect.objectContaining({ outcome: AGENT_JOB_COMPLETED_OUTCOME })
     );
