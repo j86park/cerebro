@@ -209,6 +209,18 @@ const envSchema = z.object({
    */
   AGENT_MAX_STEPS: z.coerce.number().int().min(1).max(32).default(12),
   /**
+   * Pilot: Mastra Observational Memory on Compliance/Onboarding threads.
+   * Default false — T2.1 gate unmet (no proven long-thread / tool-as-subagent pressure).
+   * Even when true, runtime still disables under DRY_RUN and NODE_ENV=test ($0 CI).
+   * Never invents a third production agent; OM compresses existing agent threads only.
+   */
+  AGENT_OBSERVATIONAL_MEMORY: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
+  /**
    * True when running under CI (GitHub Actions sets CI=true / GITHUB_ACTIONS=true).
    * Used to refuse accidental full×live suite runs (cheap-eval PR2).
    */
@@ -387,4 +399,16 @@ export function getAgentMaxSteps(override?: number): number {
     throw new Error(`getAgentMaxSteps override must be a positive integer, got ${override}`);
   }
   return Math.min(Math.floor(override), cap);
+}
+
+/**
+ * Returns whether Observational Memory may activate at runtime.
+ * Requires AGENT_OBSERVATIONAL_MEMORY=true and fails closed under DRY_RUN / test
+ * so default CI stays at $0 OpenRouter for Observer/Reflector calls.
+ */
+export function isObservationalMemoryEnabled(): boolean {
+  if (!env.AGENT_OBSERVATIONAL_MEMORY) return false;
+  if (env.DRY_RUN) return false;
+  if (env.NODE_ENV === "test") return false;
+  return true;
 }
