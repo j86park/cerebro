@@ -13,6 +13,7 @@ export const SHARED_TOOL_ALLOWLIST = [
   "getOpenEscalations",
   "getDocumentForReview",
   "getChecklistGaps",
+  "refreshDocumentExtract",
 ] as const;
 
 /** Compliance-domain tools only — never attached to onboarding runs. */
@@ -23,6 +24,7 @@ export const COMPLIANCE_TOOL_ALLOWLIST = [
   "escalateToManagement",
   "updateDocumentStatus",
   "markResolved",
+  "requestMissingDocument",
 ] as const;
 
 /** Onboarding-domain tools only — never attached to compliance runs. */
