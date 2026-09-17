@@ -9,6 +9,7 @@ import { buildSharedTools } from "@/tools/shared";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
+import { getAgentMaxSteps } from "@/lib/config";
 
 export interface SimulationParams {
   clientCount: number;
@@ -174,7 +175,8 @@ export class SimulationOrchestrator {
           toolsets: {
             shared: buildSharedTools(vault, { agentType: "COMPLIANCE" }),
             compliance: buildComplianceTools(vault),
-          }
+          },
+          maxSteps: getAgentMaxSteps(),
         });
 
         // Onboarding
@@ -183,7 +185,8 @@ export class SimulationOrchestrator {
           toolsets: {
             shared: buildSharedTools(vault, { agentType: "ONBOARDING" }),
             onboarding: buildOnboardingTools(vault),
-          }
+          },
+          maxSteps: getAgentMaxSteps(),
         });
       }
     }

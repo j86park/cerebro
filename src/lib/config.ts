@@ -203,6 +203,12 @@ const envSchema = z.object({
     )
     .default(false),
   /**
+   * Runtime Mastra `generate` step budget (tool-call turns).
+   * REGULATORY / cost: caps wander; align with canary trajectory goldens (≤12).
+   * Raise toward 16 only for multi-issue runs via env — never unbounded.
+   */
+  AGENT_MAX_STEPS: z.coerce.number().int().min(1).max(32).default(12),
+  /**
    * True when running under CI (GitHub Actions sets CI=true / GITHUB_ACTIONS=true).
    * Used to refuse accidental full×live suite runs (cheap-eval PR2).
    */
@@ -368,4 +374,17 @@ export function assertEvalBudget(spendUsd: number): void {
       `Eval OpenRouter spend $${spendUsd.toFixed(4)} exceeded EVAL_BUDGET_USD=$${cap}`
     );
   }
+}
+
+/**
+ * Returns the Mastra `generate` maxSteps budget from config.
+ * Optional override (e.g. trajectory golden) is clamped to `AGENT_MAX_STEPS`.
+ */
+export function getAgentMaxSteps(override?: number): number {
+  const cap = env.AGENT_MAX_STEPS;
+  if (override === undefined) return cap;
+  if (!Number.isFinite(override) || override < 1) {
+    throw new Error(`getAgentMaxSteps override must be a positive integer, got ${override}`);
+  }
+  return Math.min(Math.floor(override), cap);
 }
