@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { env } from "@/lib/config";
 import {
+  isEligibleForCanaryHardGate,
+  promoteApprovedGoldenToTrajectoryFixture,
   promoteGoldenToApproved,
   rejectFailureCandidate,
 } from "@/evals/golden";
@@ -17,6 +19,11 @@ const approveBodySchema = z.discriminatedUnion("action", [
     regulatoryConfirmed: z.literal(true),
     /** Optional override; defaults to env.DRY_RUN (skip ship write when true). */
     dryRun: z.boolean().optional(),
+    /**
+     * When true, also draft a $0 CI trajectory fixture after a successful ship write.
+     * Fixture write still respects dryRun / env.DRY_RUN.
+     */
+    bridgeFixture: z.boolean().optional(),
   }),
   z.object({
     action: z.literal("reject"),
@@ -28,7 +35,7 @@ const approveBodySchema = z.discriminatedUnion("action", [
 
 /**
  * Human approve / reject for failure→golden promotion.
- * Never auto-called from mutation/shadow workers — explicit human gate only.
+ * Never auto-called from mutation/shadow/online-judge workers — explicit human gate only.
  */
 export async function POST(req: Request) {
   try {
@@ -39,7 +46,7 @@ export async function POST(req: Request) {
           error: "Invalid approve payload",
           details: parsed.error.flatten(),
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -64,6 +71,32 @@ export async function POST(req: Request) {
       dryRun: body.dryRun ?? env.DRY_RUN,
     });
 
+    const canaryEligible = isEligibleForCanaryHardGate({
+      canary: result.golden.scenario.canary === true,
+      regulatoryConfirmed: result.golden.regulatoryConfirmed === true,
+      humanApproved: true,
+    });
+
+    let fixtureBridge: {
+      dryRun: boolean;
+      written: boolean;
+      fixtureId: string;
+      filePath: string | null;
+    } | null = null;
+
+    if (body.bridgeFixture === true) {
+      const bridge = await promoteApprovedGoldenToTrajectoryFixture({
+        golden: result.golden,
+        dryRun: result.dryRun,
+      });
+      fixtureBridge = {
+        dryRun: bridge.dryRun,
+        written: bridge.written,
+        fixtureId: bridge.fixtureId,
+        filePath: bridge.filePath,
+      };
+    }
+
     return NextResponse.json({
       data: {
         dryRun: result.dryRun,
@@ -71,6 +104,13 @@ export async function POST(req: Request) {
         fileName: result.fileName,
         filePath: result.filePath,
         golden: result.golden,
+        canaryHardGateEligible: canaryEligible,
+        fixtureBridge,
+        note: result.written
+          ? canaryEligible
+            ? "Approved golden entered ship suite; canary=true → hard-gate set"
+            : "Approved golden entered ship suite (not marked canary)"
+          : "DRY_RUN: no ship-gate write; candidate remains pending",
       },
     });
   } catch (error) {
@@ -80,7 +120,7 @@ export async function POST(req: Request) {
         error: "Golden approve failed",
         message: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
