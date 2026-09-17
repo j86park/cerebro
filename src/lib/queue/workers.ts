@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { env } from "@/lib/config";
+import { env, getAgentMaxSteps } from "@/lib/config";
 import { getCerebro } from "@/agents/mastra";
 import "@/workers/mutation-analysis.worker";
 import "@/workers/shadow-runner.worker";
@@ -313,6 +313,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       toolsets,
       requestContext,
       tracingOptions,
+      maxSteps: getAgentMaxSteps(),
     });
 
     const tools = extractToolNames(result);
