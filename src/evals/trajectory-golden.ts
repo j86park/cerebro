@@ -62,4 +62,5 @@ export const FORBIDDEN_COMPLIANCE_SIDE_EFFECTS = [
   "sendClientReminder",
   "updateDocumentStatus",
   "markResolved",
+  "requestMissingDocument",
 ] as const;

@@ -25,6 +25,7 @@ const DEFAULT_RULES: ToolPolicyRule[] = [
     mode: "block",
   },
   { domain: "compliance", stage: 1, toolName: "escalateToManagement", mode: "block" },
+  { domain: "compliance", stage: 1, toolName: "requestMissingDocument", mode: "auto" },
 
   { domain: "compliance", stage: 2, toolName: "sendAdvisorAlert", mode: "block" },
   { domain: "compliance", stage: 2, toolName: "sendClientReminder", mode: "auto" },
@@ -35,6 +36,7 @@ const DEFAULT_RULES: ToolPolicyRule[] = [
     mode: "block",
   },
   { domain: "compliance", stage: 2, toolName: "escalateToManagement", mode: "block" },
+  { domain: "compliance", stage: 2, toolName: "requestMissingDocument", mode: "auto" },
 
   { domain: "compliance", stage: 3, toolName: "sendAdvisorAlert", mode: "auto" },
   { domain: "compliance", stage: 3, toolName: "sendClientReminder", mode: "auto" },
@@ -45,6 +47,7 @@ const DEFAULT_RULES: ToolPolicyRule[] = [
     mode: "block",
   },
   { domain: "compliance", stage: 3, toolName: "escalateToManagement", mode: "block" },
+  { domain: "compliance", stage: 3, toolName: "requestMissingDocument", mode: "auto" },
 
   { domain: "compliance", stage: 4, toolName: "sendAdvisorAlert", mode: "block" },
   { domain: "compliance", stage: 4, toolName: "sendClientReminder", mode: "block" },
@@ -55,6 +58,7 @@ const DEFAULT_RULES: ToolPolicyRule[] = [
     mode: "approve",
   },
   { domain: "compliance", stage: 4, toolName: "escalateToManagement", mode: "block" },
+  { domain: "compliance", stage: 4, toolName: "requestMissingDocument", mode: "block" },
 
   { domain: "compliance", stage: 5, toolName: "sendAdvisorAlert", mode: "block" },
   { domain: "compliance", stage: 5, toolName: "sendClientReminder", mode: "block" },
@@ -70,6 +74,7 @@ const DEFAULT_RULES: ToolPolicyRule[] = [
     toolName: "escalateToManagement",
     mode: "approve",
   },
+  { domain: "compliance", stage: 5, toolName: "requestMissingDocument", mode: "block" },
 
   // Onboarding stages 1–4
   { domain: "onboarding", stage: 1, toolName: "requestDocument", mode: "auto" },
