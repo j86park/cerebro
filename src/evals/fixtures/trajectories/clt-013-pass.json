@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-013-pass",
+  "scenarioId": "CLT-013",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "sendAdvisorAlert"
+  ],
+  "note": "P1 PR-G suitability expired docs → stage-1 advisor notify",
+  "contentHash": "66ee1f7dcbd3c9576b9bd3d63029077ec518f22caa77b0b1c4d4759d3ee5e7a7"
+}

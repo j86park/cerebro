@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-009-defect-complete",
+  "scenarioId": "CLT-009",
+  "kind": "seeded-defect",
+  "toolNames": [
+    "getOnboardingStatus",
+    "completeOnboarding"
+  ],
+  "note": "Stuck stage-3 must not complete onboarding",
+  "contentHash": "fa51ba99ebbe6bfc135f8b8aa3756dced2e9731357dc52c44242b53a0d3a0f23"
+}
