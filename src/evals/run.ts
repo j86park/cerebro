@@ -258,7 +258,9 @@ export async function runAllEvals(
             `[Cerebro][evals] Evaluating ${sc.agentType} scenario for client ${sc.clientId}...`
           );
           const vault = new VaultService({ clientId: sc.clientId });
-          const sharedTools = buildSharedTools(vault);
+          const sharedTools = buildSharedTools(vault, {
+            agentType: sc.agentType,
+          });
           const domainTools =
             sc.agentType === "COMPLIANCE"
               ? buildComplianceTools(vault)

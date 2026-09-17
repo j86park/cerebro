@@ -256,7 +256,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
   }
 
   // 2. Build tools — shared + agent-specific, grouped for Mastra toolsets
-  const sharedTools = buildSharedTools(vault);
+  const sharedTools = buildSharedTools(vault, { agentType });
 
   const agentName =
     agentType === "COMPLIANCE" ? "complianceAgent" : "onboardingAgent";

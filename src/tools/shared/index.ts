@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { SHARED_TOOL_ALLOWLIST } from "@/lib/policy/toolAllowlists";
 import { buildGetClientProfile } from "./getClientProfile";
@@ -12,15 +13,28 @@ export {
   buildSendAdvisorAlert,
 };
 
+const sharedToolsOptionsSchema = z.object({
+  /** Calling agent — stamped on sendAdvisorAlert ledger rows. */
+  agentType: z.enum(["COMPLIANCE", "ONBOARDING"]).optional(),
+});
+
+export type BuildSharedToolsOptions = z.infer<typeof sharedToolsOptionsSchema>;
+
 /**
  * Builds shared tools available to both agents; keys must match SHARED_TOOL_ALLOWLIST.
  */
-export function buildSharedTools(vault: VaultService) {
+export function buildSharedTools(
+  vault: VaultService,
+  options: BuildSharedToolsOptions = {},
+) {
+  const parsed = sharedToolsOptionsSchema.parse(options);
   const tools = {
     getClientProfile: buildGetClientProfile(vault),
     getActionHistory: buildGetActionHistory(vault),
     logAction: buildLogAction(vault),
-    sendAdvisorAlert: buildSendAdvisorAlert(vault),
+    sendAdvisorAlert: buildSendAdvisorAlert(vault, {
+      agentType: parsed.agentType,
+    }),
   };
   const keys = Object.keys(tools);
   for (const name of SHARED_TOOL_ALLOWLIST) {

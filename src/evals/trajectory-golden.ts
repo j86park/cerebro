@@ -57,4 +57,5 @@ export const FORBIDDEN_COMPLIANCE_SIDE_EFFECTS = [
   "escalateToComplianceOfficer",
   "sendClientReminder",
   "updateDocumentStatus",
+  "markResolved",
 ] as const;

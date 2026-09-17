@@ -2,10 +2,13 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
+import { addDemoDays } from "@/lib/dates/demo-date";
 import {
   enforceToolPolicy,
   resolveComplianceLadderStage,
 } from "@/lib/policy";
+
+const agentTypeSchema = z.enum(["COMPLIANCE", "ONBOARDING"]);
 
 const inputSchema = z.object({
   subject: z.string().describe("Email subject line"),
@@ -20,12 +23,26 @@ const outputSchema = z.object({
   success: z.boolean(),
   dryRun: z.boolean(),
   policyVersion: z.string(),
+  agentType: agentTypeSchema,
 });
+
+export type BuildSendAdvisorAlertOptions = {
+  /** Ledger actor — must match the calling agent (shared tool honesty). */
+  agentType?: z.infer<typeof agentTypeSchema>;
+};
 
 /**
  * Builds the sendAdvisorAlert tool (stage-gated via policy matrix).
+ * REGULATORY: 5-day no-repeat cooldown on NOTIFY_ADVISOR.
  */
-export function buildSendAdvisorAlert(vault: VaultService) {
+export function buildSendAdvisorAlert(
+  vault: VaultService,
+  options: BuildSendAdvisorAlertOptions = {},
+) {
+  const ledgerAgentType = agentTypeSchema.parse(
+    options.agentType ?? "COMPLIANCE",
+  );
+
   return createTool({
     id: "sendAdvisorAlert",
     description:
@@ -46,13 +63,16 @@ export function buildSendAdvisorAlert(vault: VaultService) {
         domain: "compliance",
         stage,
         toolName: "sendAdvisorAlert",
-        agentType: "COMPLIANCE",
+        agentType: ledgerAgentType,
         actionType: "NOTIFY_ADVISOR",
         reasoning,
         args: { subject },
       });
 
-      // Get advisor email for future Resend integration
+      // REGULATORY: never repeat advisor alerts within 5 days (prompt no-repeat rule).
+      await vault.checkActionCooldown("NOTIFY_ADVISOR", 5);
+
+      // Get advisor email for future Resend integration (wired in email-parity PR).
       const client = (await vault.getClientProfile()) as Record<
         string,
         unknown
@@ -68,16 +88,13 @@ export function buildSendAdvisorAlert(vault: VaultService) {
         void body;
       }
 
-      // Always log the action
       await vault.logAction({
-        agentType: "COMPLIANCE",
+        agentType: ledgerAgentType,
         actionType: "NOTIFY_ADVISOR",
         trigger: "SCHEDULED",
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "EMAIL_SENT",
-        nextScheduledAt: new Date(
-          new Date(env.DEMO_DATE).getTime() + 5 * 24 * 60 * 60 * 1000,
-        ),
+        nextScheduledAt: addDemoDays(5),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
         reasonCodes: ["POLICY_ALLOW_AUTO"],
@@ -87,6 +104,7 @@ export function buildSendAdvisorAlert(vault: VaultService) {
         success: true,
         dryRun: DRY_RUN,
         policyVersion: policy.policyVersion,
+        agentType: ledgerAgentType,
       };
     },
   });
