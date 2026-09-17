@@ -1,0 +1,12 @@
+{
+  "fixtureId": "clt-025-pass-validate-advance",
+  "scenarioId": "CLT-025",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getOnboardingStatus",
+    "validateDocumentReceived",
+    "advanceOnboardingStage"
+  ],
+  "contentHash": "63049a926bae61ef3a8ea50dc284ac99137e25ff1f4fa5763b91ad9afe4a3411",
+  "note": "P0 PR-B upload→validate→VALID→advance tool path (EVENT_UPLOAD)"
+}

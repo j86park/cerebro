@@ -188,6 +188,19 @@ function toDate(value: Date | string | null | undefined): Date | null {
   return value instanceof Date ? value : new Date(value);
 }
 
+const validateDocumentOptionsSchema = z.object({
+  /**
+   * `checklist` (default): require status VALID then check expiry/recency.
+   * `admission`: upload→validate path — allow PENDING_REVIEW/REQUESTED/etc.,
+   * still fail MISSING/EXPIRED and DEMO_DATE expiry/recency; caller may persist VALID.
+   */
+  purpose: z.enum(["checklist", "admission"]).default("checklist"),
+});
+
+export type ValidateDocumentOptions = z.input<
+  typeof validateDocumentOptionsSchema
+>;
+
 /**
  * REGULATORY: deterministic document validity vs DEMO_DATE (expiry + recency).
  * Does not trust LLM judgments — status + date arithmetic only.
@@ -195,7 +208,10 @@ function toDate(value: Date | string | null | undefined): Date | null {
 export function validateDocumentDeterministic(
   doc: VaultDocumentLike | null | undefined,
   documentType: string,
+  options: ValidateDocumentOptions = {},
 ): DocumentValidityResult {
+  const { purpose } = validateDocumentOptionsSchema.parse(options);
+
   if (!doc) {
     return documentValidityResultSchema.parse({
       valid: false,
@@ -237,7 +253,7 @@ export function validateDocumentDeterministic(
     });
   }
 
-  if (status !== "VALID") {
+  if (purpose === "checklist" && status !== "VALID") {
     return documentValidityResultSchema.parse({
       valid: false,
       documentType: doc.type,
@@ -250,7 +266,21 @@ export function validateDocumentDeterministic(
     });
   }
 
-  // REGULATORY: after status=VALID, enforce dated-within recency vs DEMO_DATE.
+  if (purpose === "admission" && status === "MISSING") {
+    return documentValidityResultSchema.parse({
+      valid: false,
+      documentType: doc.type,
+      status,
+      notes: `Document ${doc.type} is MISSING — cannot admit as VALID.`,
+      gapReason: "MISSING",
+      daysUntilExpiry: days,
+      expired: false,
+      staleRecency: false,
+    });
+  }
+
+  // REGULATORY: enforce dated-within recency vs DEMO_DATE (checklist after VALID;
+  // admission before persisting VALID on upload).
   let staleRecency = false;
   if (
     registry?.expiryRuleYears != null &&
@@ -285,8 +315,11 @@ export function validateDocumentDeterministic(
   return documentValidityResultSchema.parse({
     valid: true,
     documentType: doc.type,
-    status,
-    notes: `Document ${doc.type} is VALID and within DEMO_DATE expiry/recency rules.`,
+    status: purpose === "admission" ? "VALID" : status,
+    notes:
+      purpose === "admission"
+        ? `Document ${doc.type} passes DEMO_DATE expiry/recency admission checks and may be marked VALID.`
+        : `Document ${doc.type} is VALID and within DEMO_DATE expiry/recency rules.`,
     gapReason: null,
     daysUntilExpiry: days,
     expired: false,

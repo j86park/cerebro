@@ -379,6 +379,19 @@ export const GROUND_TRUTH: EvalScenario[] = [
       actionTaken: "VALIDATE_DOCUMENT",
       onboardingStage: 2,
       duplicateAction: false,
+      trajectory: {
+        expectedTools: [
+          ...OBSERVE_ONBOARDING,
+          "validateDocumentReceived",
+          "advanceOnboardingStage",
+        ],
+        expectedToolSequence: [
+          "validateDocumentReceived",
+          "advanceOnboardingStage",
+        ],
+        forbiddenTools: [...FORBIDDEN_COMPLIANCE_SIDE_EFFECTS],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-026: Individual account, high-risk flag triggered by KYC answers.

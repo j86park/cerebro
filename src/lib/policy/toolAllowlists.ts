@@ -27,6 +27,7 @@ export const ONBOARDING_TOOL_ALLOWLIST = [
   "getOnboardingStatus",
   "requestDocument",
   "validateDocumentReceived",
+  "setDocumentStatus",
   "advanceOnboardingStage",
   "completeOnboarding",
   "alertAdvisorStuck",

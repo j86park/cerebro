@@ -21,17 +21,20 @@ const outputSchema = z.object({
   expired: z.boolean(),
   staleRecency: z.boolean(),
   extractedFieldKeys: z.array(z.string()),
+  /** True when this call persisted VALID on the document. */
+  statusPersisted: z.boolean(),
 });
 
 /**
  * Builds validateDocumentReceived with DEMO_DATE expiry/recency validators.
+ * On pass, persists VALID via VaultService so upload→advance can proceed.
  * Cites structured extract fields when present (WP-P1.2); policy remains deterministic Zod.
  */
 export function buildValidateDocumentReceived(vault: VaultService) {
   return createTool({
     id: "validateDocumentReceived",
     description:
-      "Validates that an uploaded document exists and passes deterministic DEMO_DATE expiry/recency rules. Does NOT auto-update status — the agent decides next steps from the result.",
+      "Validates an uploaded document against DEMO_DATE expiry/recency rules. When checks pass, persists VALID and logs VALIDATE_DOCUMENT so the agent can advance onboarding.",
     inputSchema,
     outputSchema,
     execute: async (inputData) => {
@@ -57,28 +60,39 @@ export function buildValidateDocumentReceived(vault: VaultService) {
           expired: false,
           staleRecency: false,
           extractedFieldKeys: [],
+          statusPersisted: false,
         };
       }
 
-      const result = validateDocumentDeterministic(doc, doc.type);
+      // Admission purpose: allow PENDING_REVIEW uploads (upload API status) to become VALID.
+      const result = validateDocumentDeterministic(doc, doc.type, {
+        purpose: "admission",
+      });
       const extract = await vault.getDocumentExtractedFields(documentId);
       const extractCited = extract ? citedFieldsFromExtract(extract) : {};
       const extractedFieldKeys = extract?.fields.map((f) => f.key) ?? [];
+
+      let statusPersisted = false;
+      if (result.valid) {
+        await vault.updateDocumentStatus(documentId, "VALID", result.notes);
+        statusPersisted = true;
+      }
 
       await vault.logAction({
         agentType: "ONBOARDING",
         actionType: "VALIDATE_DOCUMENT",
         trigger: "EVENT_UPLOAD",
-        reasoning: `Validated document ${doc.type}. Status=${result.status}; expired=${result.expired}; staleRecency=${result.staleRecency}.`,
+        reasoning: `Validated document ${doc.type}. Status=${result.status}; expired=${result.expired}; staleRecency=${result.staleRecency}; persisted=${statusPersisted}.`,
         outcome: result.valid ? "DOCUMENT_VALID" : "DOCUMENT_INVALID",
         nextScheduledAt: addDemoDays(1),
         documentId,
         reasonCodes: result.valid
-          ? ["VALIDATOR_PASS"]
+          ? ["VALIDATOR_PASS", "STATUS_PERSISTED_VALID"]
           : ["VALIDATOR_FAIL", result.gapReason ?? "UNKNOWN"],
         citedFields: {
           daysUntilExpiry: result.daysUntilExpiry,
           gapReason: result.gapReason,
+          statusPersisted,
           ...extractCited,
         },
       });
@@ -93,6 +107,7 @@ export function buildValidateDocumentReceived(vault: VaultService) {
         expired: result.expired,
         staleRecency: result.staleRecency,
         extractedFieldKeys,
+        statusPersisted,
       };
     },
   });
