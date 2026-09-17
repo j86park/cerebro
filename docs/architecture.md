@@ -125,6 +125,7 @@ cerebro/
 │   │   │   ├── workers.ts       ← queue worker definitions
 │   │   │   └── jobs.ts          ← job type definitions
 │   │   ├── hitl/                ← durable advisor approve/deny/timeout
+│   │   ├── integrations/        ← firm integration watch surfaces (MCP catalog P2.3; not live server)
 │   │   ├── email/
 │   │   │   └── resend.ts
 │   │   ├── policy/              ← stage × tool × auto|approve|block matrix
@@ -143,7 +144,8 @@ cerebro/
 │   │   │   ├── documentPriority.ts
 │   │   │   ├── onboardingStage.ts
 │   │   │   ├── trajectory.ts
-│   │   │   └── reasoningQuality.ts
+│   │   │   ├── reasoningQuality.ts
+│   │   │   └── agentJudge.ts    ← Agent-as-a-Judge planner stub (P2.5 watch; flag-off; not CI gate)
 │   │   ├── fixtures/            ← versioned trajectory JSON for $0 Vitest CI (cheap-eval PR0)
 │   │   │   └── trajectories/    ← golden-pass + seeded-defect fixtures (no OpenRouter)
 │   │   ├── golden/              ← failure→golden export / human promote (WP-P1.5)

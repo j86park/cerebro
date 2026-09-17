@@ -4,3 +4,9 @@ export { documentPriorityScorer } from "./documentPriority";
 export { onboardingStageScorer } from "./onboardingStage";
 export { reasoningQualityScorer } from "./reasoningQuality";
 export { trajectoryScorer } from "./trajectory";
+export {
+  createAgentJudgePlan,
+  runAgentJudge,
+  agentJudgeAllowsPromote,
+  isAgentAsJudgeEnabled,
+} from "./agentJudge";

@@ -24,6 +24,12 @@ export type EvalRunMode = z.infer<typeof evalRunModeSchema>;
 export const SOFT_SCORER_IDS = ["reasoningQualityScorer"] as const;
 export type SoftScorerId = (typeof SOFT_SCORER_IDS)[number];
 
+/**
+ * Agent-as-a-Judge (SOTA P2.5 watch) is intentionally excluded from canary-ci
+ * and from `softScorersForMode` — research/opt-in only via `AGENT_AS_JUDGE`.
+ */
+export const AGENT_JUDGE_SCORER_ID = "agentJudge" as const;
+
 const SOFT_SCORER_ID_SET: ReadonlySet<string> = new Set(SOFT_SCORER_IDS);
 
 /**

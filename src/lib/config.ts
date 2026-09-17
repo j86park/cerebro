@@ -238,6 +238,26 @@ const envSchema = z.object({
       z.boolean()
     )
     .default(false),
+  /**
+   * Agent-as-a-Judge process scorer (SOTA P2.5 watch).
+   * Default false — never canary-ci / promote gate; abstains when unset.
+   */
+  AGENT_AS_JUDGE: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
+  /**
+   * MCP firm integration surface catalog (SOTA P2.3 watch).
+   * Default false — no live MCP server; side-effect tools stay denied over MCP.
+   */
+  MCP_INTEGRATION_SURFACE: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
 });
 
 export const env = envSchema.parse(process.env);
