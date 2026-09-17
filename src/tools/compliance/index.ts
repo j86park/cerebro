@@ -5,6 +5,7 @@ import { buildSendClientReminder } from "./sendClientReminder";
 import { buildEscalateToComplianceOfficer } from "./escalateToComplianceOfficer";
 import { buildEscalateToManagement } from "./escalateToManagement";
 import { buildUpdateDocumentStatus } from "./updateDocumentStatus";
+import { buildMarkResolved } from "./markResolved";
 
 export {
   buildGetDocumentComplianceStatus,
@@ -12,6 +13,7 @@ export {
   buildEscalateToComplianceOfficer,
   buildEscalateToManagement,
   buildUpdateDocumentStatus,
+  buildMarkResolved,
 };
 
 /**
@@ -24,6 +26,7 @@ export function buildComplianceTools(vault: VaultService) {
     escalateToComplianceOfficer: buildEscalateToComplianceOfficer(vault),
     escalateToManagement: buildEscalateToManagement(vault),
     updateDocumentStatus: buildUpdateDocumentStatus(vault),
+    markResolved: buildMarkResolved(vault),
   };
   assertDomainToolAllowlist("compliance", Object.keys(tools));
   return tools;

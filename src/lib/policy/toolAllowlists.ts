@@ -19,6 +19,7 @@ export const COMPLIANCE_TOOL_ALLOWLIST = [
   "escalateToComplianceOfficer",
   "escalateToManagement",
   "updateDocumentStatus",
+  "markResolved",
 ] as const;
 
 /** Onboarding-domain tools only — never attached to compliance runs. */

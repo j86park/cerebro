@@ -166,19 +166,24 @@ export class SimulationOrchestrator {
       } else {
         // Real Mastra Agents (High Fidelity)
         console.log(`[Orchestrator] Executing REAL agents for client ${client.id} (Day ${currentDay})...`);
-        const sharedTools = buildSharedTools(vault);
         const memory = buildClientMemoryScope(client.id);
 
         // Compliance
         await complianceAgent!.generate(`Process current vault state for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
           memory,
-          toolsets: { shared: sharedTools, compliance: buildComplianceTools(vault) }
+          toolsets: {
+            shared: buildSharedTools(vault, { agentType: "COMPLIANCE" }),
+            compliance: buildComplianceTools(vault),
+          }
         });
 
         // Onboarding
         await onboardingAgent!.generate(`Determine onboarding progress for client ${client.id}. Current simulation date is ${simDate.toISOString()}.`, {
           memory,
-          toolsets: { shared: sharedTools, onboarding: buildOnboardingTools(vault) }
+          toolsets: {
+            shared: buildSharedTools(vault, { agentType: "ONBOARDING" }),
+            onboarding: buildOnboardingTools(vault),
+          }
         });
       }
     }

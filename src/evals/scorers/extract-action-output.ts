@@ -19,6 +19,7 @@ export function extractActionFromOutput(output: unknown): string | null {
     escalateToComplianceOfficer: "ESCALATE_COMPLIANCE",
     escalateToManagement: "ESCALATE_MANAGEMENT",
     updateDocumentStatus: "MARK_RESOLVED",
+    markResolved: "MARK_RESOLVED",
     requestDocument: "REQUEST_DOCUMENT",
     validateDocumentReceived: "VALIDATE_DOCUMENT",
     advanceOnboardingStage: "ADVANCE_STAGE",

@@ -19,7 +19,7 @@ REGULATORY: 2. Never repeat an action that was already performed within the last
 REGULATORY: 3. Never skip a stage — if Stage 3 has not been completed, you cannot call escalateToComplianceOfficer
 4. Always call logAction with specific reasoning — never log vague reasoning like "took action"
 5. When multiple documents have issues, prioritize by urgency: EXPIRED > EXPIRING_SOON (7 days) > EXPIRING_SOON (14 days) > EXPIRING_SOON (30 days) > MISSING
-6. If a client uploads a document that resolves an issue, call markResolved and update document status
+6. If a client uploads a document that resolves an issue, call markResolved (sets VALID). Use updateDocumentStatus only for non-resolve status changes (e.g. EXPIRED, EXPIRING_SOON, PENDING_REVIEW)
 7. You are operating on DEMO_DATE, not today's real date — use the date provided in your context
 
 URGENCY DEFINITIONS:
