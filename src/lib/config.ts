@@ -20,6 +20,17 @@ const databaseUrlSchema = z
       )
   );
 
+/**
+ * True when the OpenRouter model id is pinned (not Auto Router).
+ * REGULATORY / eval scores must stay comparable — `openrouter/auto` is banned for judges.
+ */
+export function isPinnedOpenRouterModelId(modelId: string): boolean {
+  const id = modelId.trim().toLowerCase();
+  if (id === "" || id === "openrouter/auto" || id === "auto") return false;
+  if (id.endsWith("/auto")) return false;
+  return true;
+}
+
 const envSchema = z.object({
   DATABASE_URL: databaseUrlSchema,
   /**
@@ -39,9 +50,58 @@ const envSchema = z.object({
   MODEL_DEMO: z.string().default("moonshotai/kimi-k2"),
   /**
    * Pinned eval-judge model id. Soft scorers must call `getModel("evalJudge")` only —
-   * never hardcode this string outside this file.
+   * never hardcode this string outside this file. Ban `openrouter/auto` (judge drift).
    */
-  MODEL_EVAL_JUDGE: z.string().default("moonshotai/kimi-k2"),
+  MODEL_EVAL_JUDGE: z
+    .string()
+    .default("moonshotai/kimi-k2")
+    .refine(isPinnedOpenRouterModelId, {
+      message:
+        "MODEL_EVAL_JUDGE must be a pinned OpenRouter model id (not openrouter/auto)",
+    }),
+  /**
+   * Optional stronger judge for cascade Pilot (cheap-eval PR3).
+   * When unset, cascade is disabled even if EVAL_JUDGE_CASCADE is true.
+   * Still resolved only via `getEvalJudgeEscalateModel` / config — never hardcoded in scorers.
+   */
+  MODEL_EVAL_JUDGE_ESCALATE: z
+    .string()
+    .optional()
+    .refine(
+      (v) => v === undefined || v === "" || isPinnedOpenRouterModelId(v),
+      {
+        message:
+          "MODEL_EVAL_JUDGE_ESCALATE must be a pinned OpenRouter model id (not openrouter/auto)",
+      }
+    ),
+  /**
+   * Pilot: escalate soft judge on `unknown` / `NEEDS_REVIEW` to MODEL_EVAL_JUDGE_ESCALATE.
+   * Default false — opt-in only after calibration.
+   */
+  EVAL_JUDGE_CASCADE: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
+  /**
+   * Exact judge-result cache (in-process). Default true — repeated identical verdicts
+   * skip OpenRouter. Semantic/fuzzy caches are intentionally unsupported.
+   */
+  EVAL_JUDGE_CACHE: z
+    .preprocess(
+      (value) =>
+        value === undefined || value === null || value === ""
+          ? true
+          : value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(true),
+  /**
+   * Optional USD budget gate for a live eval wave (null/0 = disabled).
+   * When set, `assertEvalBudget` fails closed if recorded spend exceeds this.
+   */
+  EVAL_BUDGET_USD: z.coerce.number().min(0).default(0),
   DRY_RUN: z.preprocess((value) => value === "true" || value === true, z.boolean()).default(true),
   /**
    * Version id stamped on ActionLedger rows for stage × tool policy decisions.
@@ -167,8 +227,8 @@ const MODELS = {
 
 export type ModelTier = keyof typeof MODELS;
 
-/** Production OpenRouter model instance (or a test double via `setModelOverride`). */
-export type ModelInstance = ReturnType<typeof openrouter>;
+/** Production OpenRouter chat model instance (or a test double via `setModelOverride`). */
+export type ModelInstance = ReturnType<typeof openrouter.chat>;
 
 type ModelFactory = (tier: ModelTier) => ModelInstance;
 
@@ -196,6 +256,39 @@ export function hasModelOverride(): boolean {
 }
 
 /**
+ * Returns the configured OpenRouter model id for a tier (no network).
+ * Prefer this for EvalRun stamps — never hardcode model strings.
+ */
+export function getModelId(tier: ModelTier): string {
+  return MODELS[tier];
+}
+
+/**
+ * Optional escalate-tier model id for judge cascade Pilot, or null when unset.
+ */
+export function getEvalJudgeEscalateModelId(): string | null {
+  const id = env.MODEL_EVAL_JUDGE_ESCALATE?.trim();
+  if (!id) return null;
+  return id;
+}
+
+/**
+ * Returns true when cascade Pilot is enabled and an escalate model is configured.
+ */
+export function isEvalJudgeCascadeEnabled(): boolean {
+  return env.EVAL_JUDGE_CASCADE && getEvalJudgeEscalateModelId() !== null;
+}
+
+/**
+ * Builds a sticky OpenRouter `session_id` for a live eval wave (prefix caching).
+ * PR/unit lanes must not call live OpenRouter — this is for budgeted live batches only.
+ */
+export function buildLiveEvalSessionId(waveId: string): string {
+  const safe = waveId.trim().replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 96);
+  return `cerebro-eval-${safe || "wave"}`;
+}
+
+/**
  * Returns the configured model by tier.
  * Uses `setModelOverride` when installed (unit/fixture tests); otherwise OpenRouter.
  */
@@ -203,5 +296,55 @@ export function getModel(tier: ModelTier = "dev") {
   if (modelFactoryOverride) {
     return modelFactoryOverride(tier) as ModelInstance;
   }
-  return openrouter(MODELS[tier]);
+  return openrouter.chat(MODELS[tier]);
+}
+
+/**
+ * Live-eval OpenRouter model with sticky `session_id` for provider prefix caching.
+ * AUT stays on `dev`; judges use `evalJudge`. Never used by default unit CI.
+ */
+export function getModelWithLiveSession(
+  tier: ModelTier,
+  sessionId: string
+): ModelInstance {
+  if (modelFactoryOverride) {
+    return modelFactoryOverride(tier) as ModelInstance;
+  }
+  const sid = buildLiveEvalSessionId(sessionId);
+  return openrouter.chat(MODELS[tier], {
+    extraBody: { session_id: sid },
+  });
+}
+
+/**
+ * Escalate-tier judge model for cascade Pilot, or null when disabled/unset.
+ * Still config-only — never hardcode a model string in scorers.
+ */
+export function getEvalJudgeEscalateModel(
+  sessionId?: string
+): ModelInstance | null {
+  const id = getEvalJudgeEscalateModelId();
+  if (!id || !env.EVAL_JUDGE_CASCADE) return null;
+  if (modelFactoryOverride) {
+    // Test seam: treat escalate like evalJudge unless override inspects tier.
+    return modelFactoryOverride("evalJudge") as ModelInstance;
+  }
+  if (sessionId) {
+    const sid = buildLiveEvalSessionId(sessionId);
+    return openrouter.chat(id, { extraBody: { session_id: sid } });
+  }
+  return openrouter.chat(id);
+}
+
+/**
+ * Fails closed when recorded OpenRouter USD spend exceeds `EVAL_BUDGET_USD` (when > 0).
+ */
+export function assertEvalBudget(spendUsd: number): void {
+  const cap = env.EVAL_BUDGET_USD;
+  if (cap <= 0) return;
+  if (spendUsd > cap) {
+    throw new Error(
+      `Eval OpenRouter spend $${spendUsd.toFixed(4)} exceeded EVAL_BUDGET_USD=$${cap}`
+    );
+  }
 }
