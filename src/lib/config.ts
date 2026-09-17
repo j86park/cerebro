@@ -256,6 +256,23 @@ const envSchema = z.object({
       z.boolean()
     )
     .default(false),
+  /**
+   * Optional experiment UI sidecar (SOTA P2.4 watch).
+   * Default `off` — Braintrust/LangSmith are never the CI system of record.
+   */
+  EXPERIMENT_SIDECAR: z
+    .enum(["off", "braintrust", "langsmith"])
+    .default("off"),
+  /**
+   * Cryptographic evidence seal helpers (SOTA P2.6 watch).
+   * Default false — workers do not write seals; append-only ledger remains SoR.
+   */
+  EVIDENCE_SEAL: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
 });
 
 export const env = envSchema.parse(process.env);
