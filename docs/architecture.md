@@ -121,16 +121,11 @@ cerebro/
 │   │   │   └── vault-service.ts ← ALL db access goes through here
 │   │   ├── observability/
 │   │   │   ├── decision-log.ts  ← DecisionRecord Zod schemas (examiner SoR)
-<<<<<<< HEAD
-│   │   │   └── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
-│   │   ├── orchestration/       ← durable-engine probe for Temporal go/no-go (P2.1 watch)
-│   │   ├── routing/             ← hybrid MAS↔SAS cost cascade helpers (P2.7 watch; flag-off)
-=======
 │   │   │   ├── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
 │   │   │   ├── experimentSidecar.ts ← optional Braintrust/LangSmith export (P2.4 watch; default off)
 │   │   │   └── evidenceSeal.ts ← pure sha256 seal chain helpers (P2.6 watch; no DB migration)
-
->>>>>>> origin/main
+│   │   ├── orchestration/       ← durable-engine probe for Temporal go/no-go (P2.1 watch)
+│   │   ├── routing/             ← hybrid MAS↔SAS cost cascade helpers (P2.7 watch; flag-off)
 │   │   ├── queue/
 │   │   │   ├── client.ts        ← BullMQ + Redis (`REDIS_URL`) setup
 │   │   │   ├── workers.ts       ← queue worker definitions
