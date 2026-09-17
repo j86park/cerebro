@@ -25,6 +25,47 @@ export interface ScorecardDocument {
   isBlocker: boolean;
 }
 
+/** Higher = work first. Matches calculateUrgency buckets. */
+export const URGENCY_RANK: Record<UrgencyLevel, number> = {
+  CRITICAL: 5,
+  HIGH: 4,
+  MEDIUM: 3,
+  LOW: 2,
+  NONE: 1,
+};
+
+export interface PrioritizedDocument extends ScorecardDocument {
+  /** 1-based rank after sorting (1 = highest priority). */
+  rank: number;
+}
+
+/**
+ * REGULATORY: Sort multi-issue scorecard docs by urgency then nearer expiry,
+ * blockers before non-blockers within the same bucket.
+ */
+export function rankDocumentsByUrgency(
+  documents: readonly ScorecardDocument[],
+): PrioritizedDocument[] {
+  const sorted = [...documents].sort((a, b) => {
+    const urgencyDiff =
+      URGENCY_RANK[b.urgency] - URGENCY_RANK[a.urgency];
+    if (urgencyDiff !== 0) return urgencyDiff;
+    if (a.isBlocker !== b.isBlocker) return a.isBlocker ? -1 : 1;
+    const aDays = a.daysUntilExpiry;
+    const bDays = b.daysUntilExpiry;
+    if (aDays === null && bDays === null) return a.type.localeCompare(b.type);
+    if (aDays === null) return 1;
+    if (bDays === null) return -1;
+    if (aDays !== bDays) return aDays - bDays;
+    return a.type.localeCompare(b.type);
+  });
+
+  return sorted.map((doc, index) => ({
+    ...doc,
+    rank: index + 1,
+  }));
+}
+
 export interface ComplianceScorecard {
   documents: ScorecardDocument[];
   summary: {
@@ -145,18 +186,11 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
   const allDocs = [...mappedDocs, ...missingDocs];
   const hasBlocker = allDocs.some((d) => d.isBlocker);
 
-  const urgencyOrder: Record<string, number> = {
-    CRITICAL: 5,
-    HIGH: 4,
-    MEDIUM: 3,
-    LOW: 2,
-    NONE: 1,
-  };
-
   const highestUrgency = (
     allDocs.length > 0
-      ? allDocs.reduce((max, d) => (urgencyOrder[d.urgency] > urgencyOrder[max.urgency] ? d : max))
-          .urgency
+      ? allDocs.reduce((max, d) =>
+          URGENCY_RANK[d.urgency] > URGENCY_RANK[max.urgency] ? d : max,
+        ).urgency
       : "NONE"
   ) as UrgencyLevel;
 

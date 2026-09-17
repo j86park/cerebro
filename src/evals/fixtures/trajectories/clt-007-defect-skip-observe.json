@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-007-defect-skip-observe",
+  "scenarioId": "CLT-007",
+  "kind": "seeded-defect",
+  "toolNames": [
+    "prioritizeDocuments",
+    "sendAdvisorAlert"
+  ],
+  "note": "P2 PR-H defect: prioritize without getDocumentComplianceStatus (missing expected observe)",
+  "contentHash": "fc4a24406d1b88f079ba2cc6b7a7a7bd7020467deaa10090c8611c96ba69e43f"
+}

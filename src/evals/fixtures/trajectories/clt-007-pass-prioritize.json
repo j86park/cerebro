@@ -1,0 +1,12 @@
+{
+  "fixtureId": "clt-007-pass-prioritize",
+  "scenarioId": "CLT-007",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "prioritizeDocuments",
+    "sendAdvisorAlert"
+  ],
+  "note": "P2 PR-H multi-issue: observe → prioritize → stage-1 advisor notify",
+  "contentHash": "e39dad83456bba38c7549bc9ed7b7dc2faf1248aae86a48e130355fc5667a2af"
+}
