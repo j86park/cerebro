@@ -21,6 +21,7 @@
     "seed:prompts": "node --env-file=.env.local --import tsx prisma/seeds/seed-prompt-versions.ts",
     "reset-demo": "tsx scripts/reset-demo.ts",
     "eval": "node --env-file=.env.local --import tsx src/evals/run.ts --enforce-threshold",
+    "eval:canary": "node --env-file=.env.local --import tsx src/evals/run.ts --enforce-threshold --canary-ci",
     "eval:dev": "node --env-file=.env.local --import tsx src/evals/run.ts",
     "golden:export": "node --env-file=.env.local --import tsx scripts/export-eval-failure.ts",
     "golden:promote": "node --env-file=.env.local --import tsx scripts/promote-golden.ts",

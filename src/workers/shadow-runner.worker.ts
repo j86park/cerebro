@@ -1,8 +1,16 @@
 import { Worker, type Job } from "bullmq";
 import { prisma } from "@/lib/db/client";
 import { runAllEvals, type ScenarioEvalRow } from "@/evals/run";
-import { getEvalPassK, summarizeCanaryPassK } from "@/evals/pass-k";
-import type { HardGateScenarioRow } from "@/evals/hard-gates";
+import {
+  getEvalPassK,
+  shouldEarlyAbortPassKGate,
+  summarizeCanaryPassK,
+  type CanaryPassKSummary,
+} from "@/evals/pass-k";
+import {
+  canariesPassHardGates,
+  type HardGateScenarioRow,
+} from "@/evals/hard-gates";
 import {
   fullyPassingRate,
   getCanaryClientIds,
@@ -32,6 +40,8 @@ async function swapActiveVersion(agentId: string, versionId: string): Promise<vo
 /**
  * Runs canary scenarios `pass^k` times and returns the summary for the mutation gate.
  * First trial reuses the full-suite canary rows when provided (avoids a redundant run).
+ * Extra trials use `canary-ci` (hard scorers only — soft judge off).
+ * Early-aborts on first hard-gate failure (binary promote gate).
  */
 export async function runCanaryPassKTrials(options: {
   k: number;
@@ -39,19 +49,39 @@ export async function runCanaryPassKTrials(options: {
   /** Scenario results from the primary shadow eval (trial 0). */
   primaryResults: Record<string, HardGateScenarioRow>;
   batchSize?: number;
-}): Promise<ReturnType<typeof summarizeCanaryPassK>> {
+}): Promise<CanaryPassKSummary> {
   const { k, canaryClientIds, primaryResults, batchSize = 3 } = options;
   const trials: Record<string, HardGateScenarioRow>[] = [primaryResults];
+
+  const finish = (earlyAborted: boolean): CanaryPassKSummary => ({
+    ...summarizeCanaryPassK(trials, canaryClientIds, k),
+    earlyAborted,
+    trialsRun: trials.length,
+  });
+
+  // Soft scores never enter pass^k — only hard gates.
+  if (
+    !canariesPassHardGates(primaryResults, canaryClientIds) ||
+    shouldEarlyAbortPassKGate(trials, canaryClientIds, k)
+  ) {
+    return finish(true);
+  }
 
   for (let i = 1; i < k; i++) {
     const extra = await runAllEvals(batchSize, {
       skipPersist: true,
       clientIds: canaryClientIds,
+      // Soft judge off canary ship / pass^k path (cheap-eval PR1).
+      mode: "canary-ci",
     });
     trials.push(extra.scenarioResults);
+
+    if (shouldEarlyAbortPassKGate(trials, canaryClientIds, k)) {
+      return finish(true);
+    }
   }
 
-  return summarizeCanaryPassK(trials, canaryClientIds, k);
+  return finish(false);
 }
 
 async function processShadowRun(job: Job<ShadowRunJobPayload>): Promise<void> {
@@ -134,6 +164,8 @@ async function processShadowRun(job: Job<ShadowRunJobPayload>): Promise<void> {
           canaryPassK: canaryPassSummary.canaryPassK,
           canaryPassKPerCanary: canaryPassSummary.perCanary,
           canaryPassKTrials: canaryPassSummary.trials,
+          canaryPassKEarlyAborted: canaryPassSummary.earlyAborted ?? false,
+          canaryPassKTrialsRun: canaryPassSummary.trialsRun ?? canaryPassSummary.k,
         },
       },
     });

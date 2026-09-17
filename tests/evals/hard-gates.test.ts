@@ -10,6 +10,7 @@ import {
 import {
   assertEvalOverallScore,
   assertEvalReleaseGates,
+  assertCanaryCiGates,
   EvalThresholdError,
   EVAL_OVERALL_THRESHOLD,
 } from "@/evals/threshold";
@@ -222,5 +223,39 @@ describe("eval release gates", () => {
     };
 
     expect(() => assertEvalReleaseGates(0.9, scenarioResults)).not.toThrow();
+  });
+});
+
+describe("canary-ci gates (hard-only)", () => {
+  it("enforces hard gates without requiring overall soft average", () => {
+    const scenarioResults = {
+      "CLT-003": {
+        scores: {
+          escalationStageScorer: { score: 1 },
+          duplicateActionScorer: { score: 1 },
+          trajectoryScorer: { score: 1 },
+          // Soft judge absent on canary-ci path
+        },
+      },
+    };
+
+    expect(() => assertCanaryCiGates(scenarioResults, ["CLT-003"])).not.toThrow();
+  });
+
+  it("still fails on hard canary regression even when soft would have passed", () => {
+    const scenarioResults = {
+      "CLT-003": {
+        scores: {
+          escalationStageScorer: { score: 0 },
+          duplicateActionScorer: { score: 1 },
+          trajectoryScorer: { score: 1 },
+          reasoningQualityScorer: { score: 1 },
+        },
+      },
+    };
+
+    expect(() => assertCanaryCiGates(scenarioResults, ["CLT-003"])).toThrow(
+      EvalHardGateError
+    );
   });
 });

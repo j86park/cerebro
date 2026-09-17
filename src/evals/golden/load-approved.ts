@@ -76,6 +76,8 @@ export async function loadApprovedEvalScenarios(
     trigger: g.scenario.trigger,
     expected: g.scenario.expected,
     canary: g.scenario.canary,
+    stratum: g.scenario.stratum,
+    sourceIncidentId: g.scenario.sourceIncidentId,
   }));
 }
 
