@@ -90,7 +90,8 @@ async function buildInitialPrompt(
   } else if (payload.trigger === "EVENT_SANCTIONS_PEP") {
     parts.push(
       `Sanctions/PEP stub signal received (eventKey=${payload.eventKey ?? "unknown"}). ` +
-        `Treat as a compliance event; do not invent vendor data — escalate if evidence is thin.`,
+        `Call checkSanctionsStatus for the adapter seam result; do not invent vendor data ` +
+        `or clearance — escalate if evidence is thin.`,
     );
   } else {
     parts.push(

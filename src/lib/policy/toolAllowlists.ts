@@ -27,6 +27,7 @@ export const COMPLIANCE_TOOL_ALLOWLIST = [
   "markResolved",
   "requestMissingDocument",
   "prioritizeDocuments",
+  "checkSanctionsStatus",
 ] as const;
 
 /** Onboarding-domain tools only — never attached to compliance runs. */
