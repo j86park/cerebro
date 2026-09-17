@@ -34,6 +34,8 @@ export const ONBOARDING_TOOL_ALLOWLIST = [
   "advanceOnboardingStage",
   "completeOnboarding",
   "alertAdvisorStuck",
+  "sendStageProgressNotice",
+  "sendOnboardingCompleteNotice",
 ] as const;
 
 export type SharedToolName = (typeof SHARED_TOOL_ALLOWLIST)[number];
