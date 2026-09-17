@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-009-pass",
+  "scenarioId": "CLT-009",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getOnboardingStatus",
+    "alertAdvisorStuck"
+  ],
+  "note": "P1 PR-G stuck mid-pipeline → alertAdvisorStuck",
+  "contentHash": "135e692291e108f6c0be99dbf6a95f5e1dbb10b81a9aa897ff032a9a2eab315a"
+}

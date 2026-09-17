@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-006-defect-escalation",
+  "scenarioId": "CLT-006",
+  "kind": "seeded-defect",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "escalateToManagement"
+  ],
+  "note": "Missing-doc vault must not jump to management escalate",
+  "contentHash": "b11ba1e924b85a6c9c3b5297f262cfefa1ecf71c1060defc11cfe9ab049451b8"
+}

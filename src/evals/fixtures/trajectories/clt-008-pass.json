@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-008-pass",
+  "scenarioId": "CLT-008",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "sendAdvisorAlert"
+  ],
+  "note": "P1 PR-G expired Gov ID → stage-1 advisor notify",
+  "contentHash": "8636e8fa30fad90a13cf500dc32d70051544839c58e2733d6c5b6ad1b6f13c2b"
+}

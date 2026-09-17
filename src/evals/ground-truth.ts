@@ -149,9 +149,18 @@ export const GROUND_TRUTH: EvalScenario[] = [
       escalationStage: 1,
       duplicateAction: false,
       highestPriority: "LOW", // Missing is LOW priority based on rules
+      trajectory: {
+        expectedTools: [...OBSERVE_COMPLIANCE, "sendAdvisorAlert"],
+        forbiddenTools: [
+          "escalateToManagement",
+          "escalateToComplianceOfficer",
+          ...FORBIDDEN_ONBOARDING_SIDE_EFFECTS,
+        ],
+        maxSteps: 12,
+      },
     },
   },
-  // CLT-007: Multiple docs expiring within 14 days. (AML expiring in 8 days - HIGH)
+  // CLT-007: Multiple docs expiring within 14 days (AML +8d → MEDIUM; none ≤7d).
   {
     clientId: "CLT-007",
     agentType: "COMPLIANCE",
@@ -160,7 +169,16 @@ export const GROUND_TRUTH: EvalScenario[] = [
       actionTaken: "NOTIFY_ADVISOR",
       escalationStage: 1,
       duplicateAction: false,
-      highestPriority: "HIGH", // (8 days <= 14 days, wait, High is within 7? No, wait AML: 8 days -> MEDIUM. Let me check the rules: HIGH is within 7. Medium within 14.)
+      highestPriority: "MEDIUM",
+      trajectory: {
+        expectedTools: [...OBSERVE_COMPLIANCE, "sendAdvisorAlert"],
+        forbiddenTools: [
+          "escalateToManagement",
+          "escalateToComplianceOfficer",
+          ...FORBIDDEN_ONBOARDING_SIDE_EFFECTS,
+        ],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-008: Government ID expired 90 days ago.
@@ -173,6 +191,15 @@ export const GROUND_TRUTH: EvalScenario[] = [
       escalationStage: 1,
       duplicateAction: false,
       highestPriority: "CRITICAL", // Expired
+      trajectory: {
+        expectedTools: [...OBSERVE_COMPLIANCE, "sendAdvisorAlert"],
+        forbiddenTools: [
+          "escalateToManagement",
+          "escalateToComplianceOfficer",
+          ...FORBIDDEN_ONBOARDING_SIDE_EFFECTS,
+        ],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-009: Onboarding 80% complete, Stage 3, one doc pending 7 days.
@@ -184,6 +211,14 @@ export const GROUND_TRUTH: EvalScenario[] = [
       actionTaken: "ALERT_ADVISOR_STUCK",
       onboardingStage: 3,
       duplicateAction: false,
+      trajectory: {
+        expectedTools: [...OBSERVE_ONBOARDING, "alertAdvisorStuck"],
+        forbiddenTools: [
+          ...FORBIDDEN_COMPLIANCE_SIDE_EFFECTS,
+          "completeOnboarding",
+        ],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-010: Corporate account, Day 3 onboarding.
@@ -194,7 +229,13 @@ export const GROUND_TRUTH: EvalScenario[] = [
     expected: {
       actionTaken: "REQUEST_DOCUMENT", // Has requested Gov ID 3 days ago. No response. 3 days cooldown might restrict duplicate. Should we request others?
       onboardingStage: 1,
-      duplicateAction: false, // Maybe requests POOF_OF_ADDRESS
+      duplicateAction: false, // Maybe requests PROOF_OF_ADDRESS
+      trajectory: {
+        expectedTools: [...OBSERVE_ONBOARDING, "requestDocument"],
+        expectedToolSequence: ["getOnboardingStatus", "requestDocument"],
+        forbiddenTools: [...FORBIDDEN_COMPLIANCE_SIDE_EFFECTS],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-011: Escalation ladder — mock agent advances to compliance escalation from seeded history.
@@ -240,6 +281,15 @@ export const GROUND_TRUTH: EvalScenario[] = [
       escalationStage: 1,
       duplicateAction: false,
       highestPriority: "CRITICAL",
+      trajectory: {
+        expectedTools: [...OBSERVE_COMPLIANCE, "sendAdvisorAlert"],
+        forbiddenTools: [
+          "escalateToManagement",
+          "escalateToComplianceOfficer",
+          ...FORBIDDEN_ONBOARDING_SIDE_EFFECTS,
+        ],
+        maxSteps: 12,
+      },
     },
   },
   // CLT-014: Beneficiary designation missing. Stage 4 completed.

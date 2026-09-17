@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-006-pass",
+  "scenarioId": "CLT-006",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "sendAdvisorAlert"
+  ],
+  "note": "P1 PR-G missing AML → stage-1 advisor notify",
+  "contentHash": "f9cf9b8fe0b9b6cc4d51b8bffc9a7167ef02b01553641b2af287dcd0000da31f"
+}

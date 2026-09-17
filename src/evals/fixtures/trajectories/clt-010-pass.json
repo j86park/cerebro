@@ -1,0 +1,11 @@
+{
+  "fixtureId": "clt-010-pass",
+  "scenarioId": "CLT-010",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getOnboardingStatus",
+    "requestDocument"
+  ],
+  "note": "P1 PR-G corporate day-3 → observe then requestDocument",
+  "contentHash": "858a3fb6a10e24aed8361d7c23201ea2b9019ad0b043e631dd489b6a5b395104"
+}
