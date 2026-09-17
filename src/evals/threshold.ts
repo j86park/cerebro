@@ -40,3 +40,14 @@ export function assertEvalReleaseGates(
   assertCanaryHardGates(scenarioResults, canaryClientIds);
   assertEvalOverallScore(overallScore);
 }
+
+/**
+ * Canary-CI ship gate: hard scorers only (no overall soft average).
+ * REGULATORY: soft LLM judge must not participate in canary exit codes.
+ */
+export function assertCanaryCiGates(
+  scenarioResults: Record<string, HardGateScenarioRow>,
+  canaryClientIds?: readonly string[]
+): void {
+  assertCanaryHardGates(scenarioResults, canaryClientIds);
+}

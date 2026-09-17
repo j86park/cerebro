@@ -153,6 +153,8 @@ cerebro/
 │   │   │   └── goldens/         ← candidates/ (pending) + approved/ (ship gate only)
 │   │   ├── hard-gates.ts
 │   │   ├── pass-k.ts
+│   │   ├── canary-strata.ts     ← stratified canary metadata (cheap-eval PR1)
+│   │   ├── scorer-selection.ts  ← canary-ci hard-only vs full + soft short-circuit
 │   │   └── ground-truth.ts
 │   └── app/                     ← Next.js App Router
 │       ├── api/

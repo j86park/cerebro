@@ -44,7 +44,43 @@ export type CanaryPassKSummary = {
   perCanary: Record<string, boolean>;
   /** Per-canary trial boolean vectors (length k). */
   trials: Record<string, boolean[]>;
+  /**
+   * When true, sequential gate stopped early after a hard fail (remaining trials not run).
+   * Missing trials are fail-closed padded in `trials`.
+   */
+  earlyAborted?: boolean;
+  /** Number of trials actually executed (1…k). */
+  trialsRun?: number;
 };
+
+/**
+ * True when the trials collected so far already prove `pass^k` cannot hold
+ * (any hard fail, or insufficient remaining budget to reach k successes).
+ * Used by sequential canary gates to early-abort.
+ */
+export function shouldEarlyAbortPassKGate(
+  trialResultsSoFar: readonly Record<string, HardGateScenarioRow>[],
+  canaryClientIds: readonly string[],
+  k: number
+): boolean {
+  if (canaryClientIds.length === 0) return true;
+  for (const clientId of canaryClientIds) {
+    let passes = 0;
+    let fails = 0;
+    for (const resultMap of trialResultsSoFar) {
+      if (scenarioTrialPassesHardGates(resultMap[clientId])) {
+        passes += 1;
+      } else {
+        fails += 1;
+      }
+    }
+    // Any hard fail → binary gate cannot achieve all-k success.
+    if (fails > 0) return true;
+    const remaining = k - trialResultsSoFar.length;
+    if (passes + remaining < k) return true;
+  }
+  return false;
+}
 
 /**
  * Aggregates k trial result maps into a canary `pass^k` summary.

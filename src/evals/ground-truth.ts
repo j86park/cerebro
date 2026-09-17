@@ -1,4 +1,5 @@
 import { ActionType, AgentType, TriggerType } from "@/lib/db/enums";
+import type { CanaryStratum } from "./canary-strata";
 import type { TrajectoryGolden } from "./trajectory-golden";
 import {
   FORBIDDEN_COMPLIANCE_SIDE_EFFECTS,
@@ -29,6 +30,13 @@ export type EvalScenario = {
   expected: ExpectedOutcome;
   /** Regression gate: deterministic scenarios that must stay at 100% pass rate after prompt mutations. */
   canary?: boolean;
+  /**
+   * Stratified canary failure mode (required when `canary: true`).
+   * Used to keep the canary partition diverse — not uniform “first N”.
+   */
+  stratum?: CanaryStratum;
+  /** Optional incident / failure id that seeded this canary. */
+  sourceIncidentId?: string;
 };
 
 export const GROUND_TRUTH: EvalScenario[] = [
@@ -36,6 +44,7 @@ export const GROUND_TRUTH: EvalScenario[] = [
   {
     clientId: "CLT-001",
     canary: true,
+    stratum: "onboarding_day1",
     agentType: "ONBOARDING",
     trigger: "SCHEDULED",
     expected: {
@@ -74,6 +83,7 @@ export const GROUND_TRUTH: EvalScenario[] = [
   {
     clientId: "CLT-003",
     canary: true,
+    stratum: "escalation_ladder",
     agentType: "COMPLIANCE",
     trigger: "SCHEDULED",
     expected: {
@@ -112,6 +122,7 @@ export const GROUND_TRUTH: EvalScenario[] = [
   {
     clientId: "CLT-005",
     canary: true,
+    stratum: "compliant_forbidden_tools",
     agentType: "COMPLIANCE",
     trigger: "SCHEDULED",
     expected: {

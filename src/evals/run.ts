@@ -11,7 +11,10 @@ import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { prisma } from "@/lib/db/client";
 import { env } from "@/lib/config";
-import { assertEvalReleaseGates } from "@/evals/threshold";
+import {
+  assertCanaryCiGates,
+  assertEvalReleaseGates,
+} from "@/evals/threshold";
 import {
   getMutationEnqueueDecision,
   recordMutationEnqueue,
@@ -28,6 +31,12 @@ import {
   reasoningQualityScorer,
   trajectoryScorer,
 } from "@/evals/scorers";
+import {
+  evalRunModeSchema,
+  partitionHardThenSoft,
+  shouldSkipSoftJudges,
+  type EvalRunMode,
+} from "@/evals/scorer-selection";
 import type { AbstractScenario } from "@/evals/scenarios/scenario-types";
 import type { EvalScenario } from "@/evals/ground-truth";
 
@@ -52,6 +61,8 @@ function toAbstractFromEvalScenario(g: EvalScenario): AbstractScenario {
       clientId: g.clientId,
       agentType: "COMPLIANCE",
       canary: g.canary,
+      stratum: g.stratum,
+      sourceIncidentId: g.sourceIncidentId,
       input,
       expected: g.expected,
       scorers: [
@@ -67,6 +78,8 @@ function toAbstractFromEvalScenario(g: EvalScenario): AbstractScenario {
     clientId: g.clientId,
     agentType: "ONBOARDING",
     canary: g.canary,
+    stratum: g.stratum,
+    sourceIncidentId: g.sourceIncidentId,
     input,
     expected: g.expected,
     scorers: [
@@ -85,10 +98,66 @@ export type RunEvalsOptions = {
   skipPersist?: boolean;
   /** When set, only run scenarios whose clientId is in this set (canary pass^k trials). */
   clientIds?: readonly string[];
+  /**
+   * `canary-ci` = hard scorers only (soft judge off ship path).
+   * `full` = hard + soft (nightly / opt-in). Default `full`.
+   */
+  mode?: EvalRunMode;
 };
 
 function scenarioHasFailure(row: ScenarioEvalRow): boolean {
   return Object.values(row.scores).some((s) => (s.score ?? 0) < 1);
+}
+
+/**
+ * Runs attached scorers hard-first; skips soft LLM judges on canary-ci or hard fail.
+ */
+async function runScenarioScorers(
+  sc: AbstractScenario,
+  output: unknown,
+  mode: EvalRunMode
+): Promise<Record<string, ScorerResultEntry>> {
+  const scores: Record<string, ScorerResultEntry> = {};
+  const attached = sc.scorers ?? [];
+  const { hard, soft } = partitionHardThenSoft(attached);
+
+  for (const scorer of hard) {
+    try {
+      const scorerResult = await scorer.run({
+        output,
+        groundTruth: sc.expected,
+      });
+      scores[scorer.id] = scorerResult as ScorerResultEntry;
+    } catch (err) {
+      console.error(
+        `[Cerebro][evals] [${scorer.id}] scorer failed on client ${sc.clientId}:`,
+        err
+      );
+      scores[scorer.id] = { score: 0, reason: String(err) };
+    }
+  }
+
+  if (shouldSkipSoftJudges(mode, scores)) {
+    return scores;
+  }
+
+  for (const scorer of soft) {
+    try {
+      const scorerResult = await scorer.run({
+        output,
+        groundTruth: sc.expected,
+      });
+      scores[scorer.id] = scorerResult as ScorerResultEntry;
+    } catch (err) {
+      console.error(
+        `[Cerebro][evals] [${scorer.id}] scorer failed on client ${sc.clientId}:`,
+        err
+      );
+      scores[scorer.id] = { score: 0, reason: String(err) };
+    }
+  }
+
+  return scores;
 }
 
 /**
@@ -102,13 +171,17 @@ export async function runAllEvals(
   scenarioResults: Record<string, ScenarioEvalRow>;
   scorerBreakdown: Record<string, { total: number; passed: number }>;
   evalRunId: string;
+  mode: EvalRunMode;
 }> {
   const enforceThreshold = options?.enforceThreshold ?? false;
   const skipPersist = options?.skipPersist ?? false;
   const clientIdFilter =
     options?.clientIds !== undefined ? new Set(options.clientIds) : null;
+  const mode = evalRunModeSchema.parse(options?.mode ?? "full");
 
-  console.log(`[Cerebro][evals] Starting evaluation suite (batch size: ${batchSize})...`);
+  console.log(
+    `[Cerebro][evals] Starting evaluation suite (batch size: ${batchSize}, mode: ${mode})...`
+  );
   // Ship gate = GROUND_TRUTH wrappers + human-approved goldens only (never candidates/).
   const approvedGoldenScenarios = (await loadApprovedEvalScenarios()).map(
     toAbstractFromEvalScenario
@@ -169,26 +242,7 @@ export async function runAllEvals(
             toolsets: toolsets as never,
           });
 
-          const scores: Record<string, ScorerResultEntry> = {};
-
-          if (sc.scorers) {
-            for (const scorer of sc.scorers) {
-              try {
-                const scorerResult = await scorer.run({
-                  output: result,
-                  groundTruth: sc.expected,
-                });
-
-                scores[scorer.id] = scorerResult as ScorerResultEntry;
-              } catch (err) {
-                console.error(
-                  `[Cerebro][evals] [${scorer.id}] scorer failed on client ${sc.clientId}:`,
-                  err
-                );
-                scores[scorer.id] = { score: 0, reason: String(err) };
-              }
-            }
-          }
+          const scores = await runScenarioScorers(sc, result, mode);
 
           scenarioResults[sc.clientId] = {
             agent: sc.agentType,
@@ -199,7 +253,9 @@ export async function runAllEvals(
         } catch (e) {
           console.error(`[Cerebro][evals] FAILED scenario for ${sc.clientId}:`, e);
           const failScores: Record<string, ScorerResultEntry> = {};
-          sc.scorers?.forEach((scorer) => {
+          const { hard, soft } = partitionHardThenSoft(sc.scorers ?? []);
+          const toFail = mode === "canary-ci" ? hard : [...hard, ...soft];
+          toFail.forEach((scorer) => {
             failScores[scorer.id] = {
               score: 0,
               reason: "Agent Execution Failed: " + String(e),
@@ -277,9 +333,13 @@ export async function runAllEvals(
   }
 
   if (enforceThreshold) {
-    // Hard canary gates (incl. approved golden canaries) fail closed before soft average.
     const canaryClientIds = await getCanaryClientIdsAsync();
-    assertEvalReleaseGates(overallScore, scenarioResults, canaryClientIds);
+    if (mode === "canary-ci") {
+      // Hard-only canary ship path — soft average threshold is nightly/full only.
+      assertCanaryCiGates(scenarioResults, canaryClientIds);
+    } else {
+      assertEvalReleaseGates(overallScore, scenarioResults, canaryClientIds);
+    }
   }
 
   return {
@@ -287,6 +347,7 @@ export async function runAllEvals(
     scenarioResults,
     scorerBreakdown,
     evalRunId: evalRun.id,
+    mode,
   };
 }
 
@@ -299,8 +360,12 @@ if (isMain) {
   const batchSize =
     batchIdx !== -1 ? parseInt(args[batchIdx + 1] ?? "3", 10) : 3;
   const enforceThreshold = args.includes("--enforce-threshold");
+  const canaryCi = args.includes("--canary-ci");
 
-  runAllEvals(batchSize, { enforceThreshold })
+  runAllEvals(batchSize, {
+    enforceThreshold,
+    mode: canaryCi ? "canary-ci" : "full",
+  })
     .then(() => process.exit(0))
     .catch((err) => {
       console.error("[Cerebro][evals]", err);

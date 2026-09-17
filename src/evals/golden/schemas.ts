@@ -36,6 +36,22 @@ export const goldenScenarioBodySchema = z.object({
   expected: expectedOutcomeSchema,
   /** When true, hard canary gates apply after approval into the ship suite. */
   canary: z.boolean().optional(),
+  /**
+   * Stratified canary failure mode (required when promoting into hard-gate canaries).
+   * Validated at canary-list time when `canary: true` on GROUND_TRUTH.
+   */
+  stratum: z
+    .enum([
+      "onboarding_day1",
+      "escalation_ladder",
+      "compliant_forbidden_tools",
+      "stuck_onboarding",
+      "duplicate_action",
+      "document_priority",
+      "other",
+    ])
+    .optional(),
+  sourceIncidentId: z.string().min(1).optional(),
 });
 
 export type GoldenScenarioBody = z.infer<typeof goldenScenarioBodySchema>;
