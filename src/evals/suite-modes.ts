@@ -202,8 +202,10 @@ export function assertSuiteAllowsReleaseGate(
 }
 
 /**
- * Fail closed: refuse full-suite live evals in CI unless explicitly opted in.
- * Default CI stays canary or fixture-unit ($0 OpenRouter).
+ * Fail closed: refuse CLI `--suite full` under CI unless explicitly opted in.
+ * Called from the eval CLI entrypoint only — mocked unit coverage may still
+ * invoke `runAllEvals({ suite: { mode: "full" } })` without OpenRouter.
+ * Default CI stays canary scripts or fixture-unit ($0 OpenRouter).
  * Pass `options` in unit tests to avoid depending on process env.
  */
 export function assertFullSuiteAllowedInCi(
