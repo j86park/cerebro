@@ -8,7 +8,7 @@ export function extractToolNamesFromOutput(output: unknown): string[] {
     // Best-effort: quoted tool ids in prose / JSON dumps
     const names: string[] = [];
     const re =
-      /\b(getClientProfile|getActionHistory|getDocumentComplianceStatus|getOnboardingStatus|logAction|sendAdvisorAlert|sendClientReminder|escalateToComplianceOfficer|escalateToManagement|updateDocumentStatus|requestDocument|validateDocumentReceived|advanceOnboardingStage|completeOnboarding|alertAdvisorStuck|scanVault)\b/g;
+      /\b(getClientProfile|getActionHistory|getDocumentComplianceStatus|prioritizeDocuments|getOnboardingStatus|logAction|sendAdvisorAlert|sendClientReminder|escalateToComplianceOfficer|escalateToManagement|updateDocumentStatus|requestDocument|validateDocumentReceived|advanceOnboardingStage|completeOnboarding|alertAdvisorStuck|getOpenEscalations|getDocumentForReview|getChecklistGaps|refreshDocumentExtract|requestMissingDocument|markResolved|getDecisionHistory|scanVault)\b/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(output)) !== null) {
       names.push(m[1]!);
