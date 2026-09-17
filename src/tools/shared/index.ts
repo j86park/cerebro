@@ -9,6 +9,7 @@ import { buildGetOpenEscalations } from "./getOpenEscalations";
 import { buildGetDocumentForReview } from "./getDocumentForReview";
 import { buildGetChecklistGaps } from "./getChecklistGaps";
 import { buildRefreshDocumentExtract } from "./refreshDocumentExtract";
+import { buildGetDecisionHistory } from "./getDecisionHistory";
 
 export {
   buildGetClientProfile,
@@ -19,6 +20,7 @@ export {
   buildGetDocumentForReview,
   buildGetChecklistGaps,
   buildRefreshDocumentExtract,
+  buildGetDecisionHistory,
 };
 
 const sharedToolsOptionsSchema = z.object({
@@ -47,6 +49,7 @@ export function buildSharedTools(
     getDocumentForReview: buildGetDocumentForReview(vault),
     getChecklistGaps: buildGetChecklistGaps(vault),
     refreshDocumentExtract: buildRefreshDocumentExtract(vault),
+    getDecisionHistory: buildGetDecisionHistory(vault),
   };
   const keys = Object.keys(tools);
   for (const name of SHARED_TOOL_ALLOWLIST) {
