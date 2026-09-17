@@ -10,7 +10,7 @@ import { buildOnboardingTools } from "@/tools/onboarding";
 import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { prisma } from "@/lib/db/client";
-import { env } from "@/lib/config";
+import { buildLiveEvalSessionId, env } from "@/lib/config";
 import {
   assertCanaryCiGates,
   assertEvalReleaseGates,
@@ -45,6 +45,9 @@ import {
   suiteSelectionSchema,
   type SuiteSelection,
 } from "@/evals/suite-modes";
+import {
+  buildEvalRunMetadata,
+} from "@/evals/judge-routing";
 import type { AbstractScenario } from "@/evals/scenarios/scenario-types";
 import type { EvalScenario } from "@/evals/ground-truth";
 
@@ -340,13 +343,29 @@ export async function runAllEvals(
 
   let evalRun: { id: string } = { id: "dry-run" };
 
+  // Sticky session id for live OpenRouter prefix caching across this eval wave.
+  // Default unit Vitest never hits OpenRouter; real/live jobs reuse this stamp.
+  const liveSessionId = buildLiveEvalSessionId(
+    `${suiteSelection.mode}-${env.GITHUB_SHA ?? "local"}`
+  );
+
   if (!skipPersist) {
+    const metadata = buildEvalRunMetadata({
+      suite: suiteSelection,
+      mode,
+      isFinal,
+      liveSessionId,
+      // Fixture / default CI stays $0 — live jobs should pass measured spend later.
+      spendUsd: 0,
+    });
+
     evalRun = await prisma.evalRun.create({
       data: {
         gitCommit: env.GITHUB_SHA ?? "local",
         overallScore,
         scenarioResults: scenarioResults as unknown as Prisma.InputJsonValue,
         scorerBreakdown: scorerBreakdown as unknown as Prisma.InputJsonValue,
+        metadata: metadata as unknown as Prisma.InputJsonValue,
       },
     });
 

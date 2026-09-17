@@ -192,6 +192,8 @@ model EvalRun {
   overallScore    Float
   scenarioResults Json
   scorerBreakdown Json
+  /// Cheap-eval PR3: AUT/judge model stamps, cache hits, cascade + spend telemetry.
+  metadata        Json?
   runAt           DateTime @default(now())
 }
 

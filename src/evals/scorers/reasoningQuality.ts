@@ -1,6 +1,20 @@
 import { createScorer } from "@mastra/core/evals";
 import { generateText } from "ai";
-import { getModel } from "@/lib/config";
+import {
+  getEvalJudgeEscalateModel,
+  getModel,
+  isEvalJudgeCascadeEnabled,
+} from "@/lib/config";
+import {
+  buildJudgeCacheKey,
+  getCachedJudgeVerdict,
+  reasoningQualityCacheKeyParts,
+  setCachedJudgeVerdict,
+} from "@/evals/judge-cache";
+import {
+  recordCascadeEscalation,
+  shouldEscalateJudgeVerdict,
+} from "@/evals/judge-routing";
 import {
   parseJudgeVerdict,
   scoreFromJudgeVerdict,
@@ -29,7 +43,11 @@ function extractReasoningFromOutput(output: unknown): string {
   return "No reasoning explicitly logged.";
 }
 
-function buildJudgePrompt(reasoning: string): string {
+/**
+ * Builds the pinned soft-judge prompt. Bump `REASONING_QUALITY_RUBRIC_VERSION`
+ * in `judge-cache.ts` when this text or verdict semantics change.
+ */
+export function buildJudgePrompt(reasoning: string): string {
   return `
 You are evaluating compliance agent reasoning quality.
 
@@ -53,16 +71,83 @@ Respond with JSON only:
 `.trim();
 }
 
-/**
- * Invokes the pinned evalJudge model and returns a structured verdict.
- * Always uses `getModel("evalJudge")` — never a hardcoded model id.
- */
-export async function judgeReasoningQuality(reasoning: string): Promise<JudgeVerdict | null> {
+/** In-flight dedupe so generateScore + generateReason share one LLM call. */
+const inFlightJudgments = new Map<string, Promise<JudgeVerdict | null>>();
+
+async function invokeJudgeModel(
+  reasoning: string,
+  model: ReturnType<typeof getModel>
+): Promise<JudgeVerdict | null> {
   const { text } = await generateText({
-    model: getModel("evalJudge"),
+    model,
     prompt: buildJudgePrompt(reasoning),
   });
   return parseJudgeVerdict(text);
+}
+
+/**
+ * Invokes the pinned evalJudge model (with exact cache + optional cascade Pilot).
+ * Always uses `getModel("evalJudge")` — never a hardcoded model id.
+ * AUT remains `getModel("dev")` elsewhere; this path is judge-only.
+ */
+export async function judgeReasoningQuality(
+  reasoning: string,
+  options?: {
+    scenarioId?: string;
+    toolsHash?: string;
+    liveSessionId?: string;
+  }
+): Promise<JudgeVerdict | null> {
+  const keyParts = reasoningQualityCacheKeyParts({
+    reasoning,
+    scenarioId: options?.scenarioId,
+    toolsHash: options?.toolsHash,
+  });
+  const cacheKey = buildJudgeCacheKey(keyParts);
+
+  const cached = getCachedJudgeVerdict(cacheKey);
+  if (cached) return cached.verdict;
+
+  const existing = inFlightJudgments.get(cacheKey);
+  if (existing) return existing;
+
+  const pending = (async (): Promise<JudgeVerdict | null> => {
+    let verdict = await invokeJudgeModel(reasoning, getModel("evalJudge"));
+
+    if (shouldEscalateJudgeVerdict(verdict) && isEvalJudgeCascadeEnabled()) {
+      const escalateModel = getEvalJudgeEscalateModel(options?.liveSessionId);
+      if (escalateModel) {
+        recordCascadeEscalation();
+        const escalated = await invokeJudgeModel(reasoning, escalateModel);
+        if (escalated) verdict = escalated;
+      }
+    }
+
+    if (verdict) {
+      setCachedJudgeVerdict(cacheKey, verdict);
+    }
+    return verdict;
+  })();
+
+  inFlightJudgments.set(cacheKey, pending);
+  try {
+    return await pending;
+  } finally {
+    inFlightJudgments.delete(cacheKey);
+  }
+}
+
+/**
+ * Formats a soft-judge reason string from a verdict (shared by generateReason).
+ */
+export function reasonFromJudgeVerdict(verdict: JudgeVerdict | null): string {
+  if (!verdict) {
+    return "Failed to parse structured judge verdict (unknown / NEEDS_REVIEW forced non-pass).";
+  }
+  if (verdict.verdict === "unknown" || verdict.verdict === "NEEDS_REVIEW") {
+    return `Judge verdict ${verdict.verdict}: ${verdict.reason}`;
+  }
+  return verdict.reason;
 }
 
 export const reasoningQualityScorer = createScorer({
@@ -74,6 +159,7 @@ export const reasoningQualityScorer = createScorer({
     const reasoning = extractReasoningFromOutput(run.output);
     if (reasoning === "No reasoning explicitly logged.") return 0.0;
 
+    // Single shared call with generateReason via inFlight + exact cache (PR3).
     const verdict = await judgeReasoningQuality(reasoning);
     if (!verdict) return 0.0;
     return scoreFromJudgeVerdict(verdict);
@@ -85,11 +171,5 @@ export const reasoningQualityScorer = createScorer({
     }
 
     const verdict = await judgeReasoningQuality(reasoning);
-    if (!verdict) {
-      return "Failed to parse structured judge verdict (unknown / NEEDS_REVIEW forced non-pass).";
-    }
-    if (verdict.verdict === "unknown" || verdict.verdict === "NEEDS_REVIEW") {
-      return `Judge verdict ${verdict.verdict}: ${verdict.reason}`;
-    }
-    return verdict.reason;
+    return reasonFromJudgeVerdict(verdict);
   });
