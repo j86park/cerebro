@@ -76,21 +76,29 @@ const DEFAULT_RULES: ToolPolicyRule[] = [
   { domain: "onboarding", stage: 1, toolName: "advanceOnboardingStage", mode: "auto" },
   { domain: "onboarding", stage: 1, toolName: "completeOnboarding", mode: "block" },
   { domain: "onboarding", stage: 1, toolName: "alertAdvisorStuck", mode: "auto" },
+  { domain: "onboarding", stage: 1, toolName: "sendStageProgressNotice", mode: "auto" },
+  { domain: "onboarding", stage: 1, toolName: "sendOnboardingCompleteNotice", mode: "block" },
 
   { domain: "onboarding", stage: 2, toolName: "requestDocument", mode: "auto" },
   { domain: "onboarding", stage: 2, toolName: "advanceOnboardingStage", mode: "auto" },
   { domain: "onboarding", stage: 2, toolName: "completeOnboarding", mode: "block" },
   { domain: "onboarding", stage: 2, toolName: "alertAdvisorStuck", mode: "auto" },
+  { domain: "onboarding", stage: 2, toolName: "sendStageProgressNotice", mode: "auto" },
+  { domain: "onboarding", stage: 2, toolName: "sendOnboardingCompleteNotice", mode: "block" },
 
   { domain: "onboarding", stage: 3, toolName: "requestDocument", mode: "auto" },
   { domain: "onboarding", stage: 3, toolName: "advanceOnboardingStage", mode: "auto" },
   { domain: "onboarding", stage: 3, toolName: "completeOnboarding", mode: "block" },
   { domain: "onboarding", stage: 3, toolName: "alertAdvisorStuck", mode: "auto" },
+  { domain: "onboarding", stage: 3, toolName: "sendStageProgressNotice", mode: "auto" },
+  { domain: "onboarding", stage: 3, toolName: "sendOnboardingCompleteNotice", mode: "block" },
 
   { domain: "onboarding", stage: 4, toolName: "requestDocument", mode: "auto" },
   { domain: "onboarding", stage: 4, toolName: "advanceOnboardingStage", mode: "block" },
   { domain: "onboarding", stage: 4, toolName: "completeOnboarding", mode: "auto" },
   { domain: "onboarding", stage: 4, toolName: "alertAdvisorStuck", mode: "auto" },
+  { domain: "onboarding", stage: 4, toolName: "sendStageProgressNotice", mode: "auto" },
+  { domain: "onboarding", stage: 4, toolName: "sendOnboardingCompleteNotice", mode: "auto" },
 ];
 
 /**

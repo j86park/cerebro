@@ -4,7 +4,7 @@
 export function extractActionFromOutput(output: unknown): string | null {
   if (typeof output === "string") {
     const match = output.match(
-      /(SCAN_VAULT|NOTIFY_ADVISOR|SEND_CLIENT_REMINDER|ESCALATE_COMPLIANCE|ESCALATE_MANAGEMENT|MARK_RESOLVED|REQUEST_DOCUMENT|VALIDATE_DOCUMENT|ADVANCE_STAGE|COMPLETE_ONBOARDING|ALERT_ADVISOR_STUCK)/
+      /(SCAN_VAULT|NOTIFY_ADVISOR|SEND_CLIENT_REMINDER|ESCALATE_COMPLIANCE|ESCALATE_MANAGEMENT|MARK_RESOLVED|REQUEST_DOCUMENT|VALIDATE_DOCUMENT|ADVANCE_STAGE|COMPLETE_ONBOARDING|ALERT_ADVISOR_STUCK|STAGE_PROGRESS_NOTICE|ONBOARDING_COMPLETE_NOTICE)/
     );
     return match ? match[1]! : null;
   }
@@ -26,6 +26,8 @@ export function extractActionFromOutput(output: unknown): string | null {
     advanceOnboardingStage: "ADVANCE_STAGE",
     completeOnboarding: "COMPLETE_ONBOARDING",
     alertAdvisorStuck: "ALERT_ADVISOR_STUCK",
+    sendStageProgressNotice: "STAGE_PROGRESS_NOTICE",
+    sendOnboardingCompleteNotice: "ONBOARDING_COMPLETE_NOTICE",
   };
   for (const call of toolCalls) {
     if (typeof call !== "object" || call === null) continue;
