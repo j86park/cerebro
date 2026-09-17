@@ -211,6 +211,16 @@ const envSchema = z.object({
       z.boolean()
     )
     .default(false),
+  /**
+   * Opt-in live canary tool/prompt LOO (cheap-eval PR4 Pilot).
+   * Default false — fixture LOO stays $0; live only when fixture ablation is inconclusive.
+   */
+  EVAL_LIVE_ABLATION: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
 });
 
 export const env = envSchema.parse(process.env);
