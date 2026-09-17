@@ -44,3 +44,26 @@ export {
   getApprovedCanaryClientIds,
   readApprovedGoldenFile,
 } from "./load-approved";
+
+export {
+  CANARY_PROMOTE_CRITERIA,
+  canaryPromoteCriteriaSchema,
+  isEligibleForCanaryHardGate,
+  type CanaryPromoteCriteria,
+  type CanaryPromoteEligibilityInput,
+} from "./canary-promote-criteria";
+
+export {
+  shouldStagePromoteCandidate,
+  stagePromoteCandidateFromOnlineSample,
+  type StagePromoteCandidateInput,
+  type StagePromoteCandidateResult,
+} from "./promote-queue";
+
+export {
+  buildTrajectoryFixtureFromApprovedGolden,
+  promoteApprovedGoldenToTrajectoryFixture,
+  defaultTrajectoryFixturesDir,
+  type PromoteTrajectoryFixtureInput,
+  type PromoteTrajectoryFixtureResult,
+} from "./fixture-bridge";

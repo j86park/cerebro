@@ -9,6 +9,7 @@ import { ScorerBreakdown } from "@/components/testing/ScorerBreakdown";
 import { ScenarioMatrix } from "@/components/testing/ScenarioMatrix";
 import { MutationHistory } from "@/components/testing/MutationHistory";
 import { PromptOpsPanel } from "@/components/testing/PromptOpsPanel";
+import { GoldenPromotePanel } from "@/components/testing/GoldenPromotePanel";
 import { FailureInspector } from "@/components/testing/FailureInspector";
 import { GROUND_TRUTH } from "@/evals/ground-truth";
 
@@ -157,6 +158,8 @@ export default function TestingPage({
 
           <MutationHistory key={mutationHistoryKey} />
 
+          <GoldenPromotePanel />
+
           <PromptOpsPanel />
 
           <FailureInspector
@@ -166,17 +169,23 @@ export default function TestingPage({
           />
         </>
       ) : (
-        <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed border-cerebro-border bg-cerebro-surface/50 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <h3 className="text-xl font-bold text-foreground">
-              No evaluation runs found
-            </h3>
-            <p className="max-w-sm text-muted-foreground">
-              Run <code className="bg-muted px-1.5 py-0.5 rounded text-primary">npm run eval</code>{" "}
-              or use the button above to generate evaluation data.
-            </p>
+        <>
+          <div className="flex h-[280px] items-center justify-center rounded-lg border border-dashed border-cerebro-border bg-cerebro-surface/50 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <h3 className="text-xl font-bold text-foreground">
+                No evaluation runs found
+              </h3>
+              <p className="max-w-sm text-muted-foreground">
+                Run{" "}
+                <code className="bg-muted px-1.5 py-0.5 rounded text-primary">
+                  npm run eval
+                </code>{" "}
+                or use the button above to generate evaluation data.
+              </p>
+            </div>
           </div>
-        </div>
+          <GoldenPromotePanel />
+        </>
       )}
     </div>
   );

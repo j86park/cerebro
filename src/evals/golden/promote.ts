@@ -62,6 +62,7 @@ export async function readFailureCandidate(
 
 /**
  * Lists pending candidate ids (filenames without .json).
+ * Excludes `.promoted.json` / `.rejected.json` audit markers.
  */
 export async function listPendingCandidateIds(
   roots?: GoldenRoots
@@ -70,7 +71,13 @@ export async function listPendingCandidateIds(
   try {
     const entries = await fs.readdir(r.candidatesDir);
     return entries
-      .filter((f) => f.endsWith(".json") && !f.startsWith("."))
+      .filter(
+        (f) =>
+          f.endsWith(".json") &&
+          !f.startsWith(".") &&
+          !f.endsWith(".promoted.json") &&
+          !f.endsWith(".rejected.json")
+      )
       .map((f) => f.replace(/\.json$/i, ""))
       .sort();
   } catch (err) {
