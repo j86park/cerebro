@@ -1,0 +1,28 @@
+name: CI unit (cheap-eval $0)
+
+# Default PR gate: Vitest unit/fixture lane only — no OpenRouter / live eval.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Fail closed for live lane; unit project does not need a real key.
+      CI_LIVE_EVAL: "false"
+      DRY_RUN: "true"
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/cerebro_ci"
+      REDIS_URL: "redis://localhost:6379"
+      OPENROUTER_API_KEY: "ci-must-not-call-openrouter"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Unit / fixture Vitest (OpenRouter blocked)
+        run: npm run test:unit

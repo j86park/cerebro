@@ -1,0 +1,8 @@
+{
+  "fixtureId": "clt-001-defect-wrong-sequence",
+  "scenarioId": "CLT-001",
+  "kind": "seeded-defect",
+  "toolNames": ["requestDocument", "getOnboardingStatus"],
+  "contentHash": "12cd0a2668d0ea884003c183d38c3de4e5d8b4db3145b73986b6cc792e03d224",
+  "note": "Wrong tool order vs expectedToolSequence — hard gate must fail"
+}

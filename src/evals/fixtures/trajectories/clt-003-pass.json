@@ -1,0 +1,12 @@
+{
+  "fixtureId": "clt-003-pass",
+  "scenarioId": "CLT-003",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "escalateToManagement",
+    "logAction"
+  ],
+  "contentHash": "3b7d3f580d3e35454e85eb46f911b92b34193d37ae8458d5440cc2044305148c",
+  "note": "Canary CLT-003 observe → escalateToManagement path"
+}

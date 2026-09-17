@@ -1,0 +1,13 @@
+{
+  "fixtureId": "clt-005-defect-escalation",
+  "scenarioId": "CLT-005",
+  "kind": "seeded-defect",
+  "toolNames": [
+    "getClientProfile",
+    "getActionHistory",
+    "getDocumentComplianceStatus",
+    "sendAdvisorAlert"
+  ],
+  "contentHash": "c01a604358c8d01118befa66ecbec605141f868596cf567847d3290e3a7b8183",
+  "note": "Clean vault must not fire escalation side effects"
+}
