@@ -10,6 +10,9 @@ export const SHARED_TOOL_ALLOWLIST = [
   "getActionHistory",
   "logAction",
   "sendAdvisorAlert",
+  "getOpenEscalations",
+  "getDocumentForReview",
+  "getChecklistGaps",
 ] as const;
 
 /** Compliance-domain tools only — never attached to onboarding runs. */

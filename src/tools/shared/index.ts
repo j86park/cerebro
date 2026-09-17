@@ -5,12 +5,18 @@ import { buildGetClientProfile } from "./getClientProfile";
 import { buildGetActionHistory } from "./getActionHistory";
 import { buildLogAction } from "./logAction";
 import { buildSendAdvisorAlert } from "./sendAdvisorAlert";
+import { buildGetOpenEscalations } from "./getOpenEscalations";
+import { buildGetDocumentForReview } from "./getDocumentForReview";
+import { buildGetChecklistGaps } from "./getChecklistGaps";
 
 export {
   buildGetClientProfile,
   buildGetActionHistory,
   buildLogAction,
   buildSendAdvisorAlert,
+  buildGetOpenEscalations,
+  buildGetDocumentForReview,
+  buildGetChecklistGaps,
 };
 
 const sharedToolsOptionsSchema = z.object({
@@ -35,6 +41,9 @@ export function buildSharedTools(
     sendAdvisorAlert: buildSendAdvisorAlert(vault, {
       agentType: parsed.agentType,
     }),
+    getOpenEscalations: buildGetOpenEscalations(vault),
+    getDocumentForReview: buildGetDocumentForReview(vault),
+    getChecklistGaps: buildGetChecklistGaps(vault),
   };
   const keys = Object.keys(tools);
   for (const name of SHARED_TOOL_ALLOWLIST) {
