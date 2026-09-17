@@ -14,14 +14,32 @@ export const judgeVerdictSchema = z.object({
 export type JudgeVerdict = z.infer<typeof judgeVerdictSchema>;
 
 /**
+ * True when the judge abstained (`unknown` / `NEEDS_REVIEW`).
+ * Abstention must never soft-pass or promote.
+ */
+export function isAbstentionVerdict(verdict: JudgeVerdict): boolean {
+  return verdict.verdict === "unknown" || verdict.verdict === "NEEDS_REVIEW";
+}
+
+/**
  * Maps a parsed judge verdict to a numeric soft score.
  * Thin evidence (`unknown` / `NEEDS_REVIEW`) never silently passes.
  */
 export function scoreFromJudgeVerdict(verdict: JudgeVerdict): number {
-  if (verdict.verdict === "unknown" || verdict.verdict === "NEEDS_REVIEW") {
+  if (isAbstentionVerdict(verdict)) {
     return 0;
   }
   return verdict.score;
+}
+
+/**
+ * Soft-judge promote check: abstention / parse failure / non-pass = do not promote.
+ * Canary ship path must not rely on this — hard gates own promote (cheap-eval PR1).
+ */
+export function softJudgeAllowsPromote(verdict: JudgeVerdict | null): boolean {
+  if (!verdict) return false;
+  if (isAbstentionVerdict(verdict)) return false;
+  return verdict.verdict === "pass";
 }
 
 /**
