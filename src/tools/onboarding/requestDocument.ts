@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
 import { addDemoDays } from "@/lib/dates/demo-date";
+import { sendTransactionalEmail } from "@/lib/email/resend";
 import {
   accountTypeSchema,
   categoryForDocumentType,
@@ -79,10 +80,11 @@ export function buildRequestDocument(vault: VaultService) {
         parsedType,
       );
 
-      if (!DRY_RUN) {
-        // TODO: Send document request email via Resend
-        void message;
-      }
+      await sendTransactionalEmail({
+        to: z.string().email().parse(client.email),
+        subject: `Document request: ${parsedType}`,
+        text: message,
+      });
 
       await vault.upsertDocument({
         type: parsedType,

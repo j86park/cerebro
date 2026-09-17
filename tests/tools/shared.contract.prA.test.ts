@@ -12,6 +12,10 @@ vi.mock("@/lib/config", () => ({
   },
 }));
 
+vi.mock("@/lib/email/resend", () => ({
+  sendTransactionalEmail: vi.fn().mockResolvedValue({ id: "dry-run", skipped: true }),
+}));
+
 function stubVault(): VaultService {
   return new VaultService({ clientId: "CLT-123" }, {} as never);
 }

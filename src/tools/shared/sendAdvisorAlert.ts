@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
 import { addDemoDays } from "@/lib/dates/demo-date";
+import { sendTransactionalEmail } from "@/lib/email/resend";
 import {
   enforceToolPolicy,
   resolveComplianceLadderStage,
@@ -72,21 +73,15 @@ export function buildSendAdvisorAlert(
       // REGULATORY: never repeat advisor alerts within 5 days (prompt no-repeat rule).
       await vault.checkActionCooldown("NOTIFY_ADVISOR", 5);
 
-      // Get advisor email for future Resend integration (wired in email-parity PR).
-      const client = (await vault.getClientProfile()) as Record<
-        string,
-        unknown
-      > & {
-        advisor: Record<string, unknown>;
+      const client = (await vault.getClientProfile()) as {
+        advisor: { email: string };
       };
 
-      if (!DRY_RUN) {
-        // TODO: Send email via Resend
-        // await resend.emails.send({ to: client.advisor.email, subject, text: body });
-        void client;
-        void subject;
-        void body;
-      }
+      await sendTransactionalEmail({
+        to: client.advisor.email,
+        subject,
+        text: body,
+      });
 
       await vault.logAction({
         agentType: ledgerAgentType,

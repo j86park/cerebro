@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { env } from "@/lib/config";
 import { addDemoDays } from "@/lib/dates/demo-date";
+import { sendTransactionalEmail } from "@/lib/email/resend";
 import { enforceToolPolicy } from "@/lib/policy";
 
 const inputSchema = z.object({
@@ -39,11 +40,12 @@ export function buildAlertAdvisorStuck(vault: VaultService) {
       const { reasoning, daysSinceLastResponse } = inputData;
       const { DRY_RUN } = env;
 
-      const client = (await vault.getClientProfile()) as Record<
-        string,
-        unknown
-      >;
-      const stage = client.onboardingStage as number;
+      const client = (await vault.getClientProfile()) as {
+        name: string;
+        onboardingStage: number;
+        advisor: { email: string };
+      };
+      const stage = client.onboardingStage;
 
       const policy = await enforceToolPolicy({
         vault,
@@ -59,10 +61,13 @@ export function buildAlertAdvisorStuck(vault: VaultService) {
       // Enforce 3-day duplicate action cooldown
       await vault.checkActionCooldown("ALERT_ADVISOR_STUCK", 3);
 
-      if (!DRY_RUN) {
-        // TODO: Send advisor alert email via Resend
-        void daysSinceLastResponse;
-      }
+      await sendTransactionalEmail({
+        to: client.advisor.email,
+        subject: `Onboarding stuck: ${client.name}`,
+        text:
+          `Client ${client.name} appears stuck at onboarding stage ${stage} ` +
+          `(${daysSinceLastResponse} day(s) since last response).\n\n${reasoning}`,
+      });
 
       // Update onboarding status to STALLED
       await vault.resetOnboarding(stage, "STALLED");
