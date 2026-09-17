@@ -156,6 +156,8 @@ cerebro/
 │   │   ├── canary-strata.ts     ← stratified canary metadata (cheap-eval PR1)
 │   │   ├── scorer-selection.ts  ← canary-ci hard-only vs full + soft short-circuit
 │   │   ├── suite-modes.ts       ← canary/full/smoke/clientIds suite selection (cheap-eval PR2)
+│   │   ├── judge-cache.ts       ← exact judge-result cache keys (cheap-eval PR3)
+│   │   ├── judge-routing.ts     ← AUT/judge stamps, cascade Pilot, soft×pass^k (PR3)
 │   │   └── ground-truth.ts
 │   └── app/                     ← Next.js App Router
 │       ├── api/
