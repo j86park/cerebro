@@ -8,6 +8,7 @@ import { buildUpdateDocumentStatus } from "./updateDocumentStatus";
 import { buildMarkResolved } from "./markResolved";
 import { buildRequestMissingDocument } from "./requestMissingDocument";
 import { buildPrioritizeDocuments } from "./prioritizeDocuments";
+import { buildCheckSanctionsStatus } from "./checkSanctionsStatus";
 
 export {
   buildGetDocumentComplianceStatus,
@@ -18,6 +19,7 @@ export {
   buildMarkResolved,
   buildRequestMissingDocument,
   buildPrioritizeDocuments,
+  buildCheckSanctionsStatus,
 };
 
 /**
@@ -33,6 +35,7 @@ export function buildComplianceTools(vault: VaultService) {
     markResolved: buildMarkResolved(vault),
     requestMissingDocument: buildRequestMissingDocument(vault),
     prioritizeDocuments: buildPrioritizeDocuments(vault),
+    checkSanctionsStatus: buildCheckSanctionsStatus(vault),
   };
   assertDomainToolAllowlist("compliance", Object.keys(tools));
   return tools;

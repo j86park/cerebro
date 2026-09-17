@@ -8,6 +8,13 @@ import {
   type DocumentExtractResult,
 } from "@/lib/documents/extract";
 import {
+  getSanctionsCheckAdapter,
+  sanctionsCheckInputSchema,
+  sanctionsCheckResultSchema,
+  type SanctionsCheckInput,
+  type SanctionsCheckResult,
+} from "@/lib/sanctions";
+import {
   formatUntrustedDocumentBlock,
   sanitizeDocumentTextForAgentContext,
 } from "@/lib/documents/injectionHygiene";
@@ -711,6 +718,21 @@ export class VaultService {
         clientId: this.clientId,
       },
     });
+  }
+
+  /**
+   * Runs the configured sanctions/PEP check adapter for this vault.
+   * REGULATORY: never claims vendor clearance — scaffold returns not_checked /
+   * dry_run_skipped / vendor_unavailable with vendorClearanceClaimed=false.
+   * No Alloy identity fabric; tools must not invent match/non-match outcomes.
+   */
+  async checkSanctionsPep(
+    input: SanctionsCheckInput,
+  ): Promise<SanctionsCheckResult> {
+    const parsed = sanctionsCheckInputSchema.parse(input);
+    const adapter = getSanctionsCheckAdapter();
+    const result = await adapter.check(parsed);
+    return sanctionsCheckResultSchema.parse(result);
   }
 
   /**

@@ -1,0 +1,20 @@
+{
+  "fixtureId": "frozen-trace-pass-reminder",
+  "jobId": "scan:CLT-003:2026-03-15",
+  "traceId": "job:scan:CLT-003:2026-03-15",
+  "toolExecuted": ["getDocumentComplianceStatus", "sendClientReminder"],
+  "decisionOutcomes": [
+    {
+      "toolExecuted": "getDocumentComplianceStatus",
+      "outcome": "executed",
+      "refusalCodes": []
+    },
+    {
+      "toolExecuted": "sendClientReminder",
+      "outcome": "dry_run",
+      "refusalCodes": []
+    }
+  ],
+  "contentHash": "79fc5387d7b4e6de0398d335322d6fe0c672a9ce63888e5c218ba4d855caa7de",
+  "note": "SOTA P2.4 watch — synthetic frozen-trace pass (DRY_RUN reminder)"
+}

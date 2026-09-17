@@ -3,6 +3,7 @@ import { Memory } from "@mastra/memory";
 import { mastraPostgres } from "@/lib/mastra-postgres";
 import { ONBOARDING_WORKING_MEMORY_SCHEMA } from "./memory-schema";
 import { getModel } from "@/lib/config";
+import { buildAgentMemoryOptions } from "@/lib/memory/buildAgentMemoryOptions";
 import { loadPrompt } from "@/lib/prompt-loader";
 import { getRelevantLessons, injectLessons } from "@/lib/lessons-loader";
 import { registerAgentMemoClear } from "@/lib/agent-runtime-registry";
@@ -26,13 +27,7 @@ export async function getOnboardingAgent(): Promise<Agent> {
     model: getModel("dev"),
     memory: new Memory({
       storage: mastraPostgres.onboardingMemoryStore,
-      options: {
-        lastMessages: 20,
-        workingMemory: {
-          enabled: true,
-          schema: ONBOARDING_WORKING_MEMORY_SCHEMA,
-        },
-      },
+      options: buildAgentMemoryOptions(ONBOARDING_WORKING_MEMORY_SCHEMA),
     }),
   });
 
