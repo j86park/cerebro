@@ -51,6 +51,8 @@ export const FORBIDDEN_ONBOARDING_SIDE_EFFECTS = [
   "alertAdvisorStuck",
   "setDocumentStatus",
   "validateDocumentReceived",
+  "sendStageProgressNotice",
+  "sendOnboardingCompleteNotice",
 ] as const;
 
 /** Compliance-only side effects that onboarding canaries must never call. */

@@ -7,6 +7,8 @@ import { buildSetDocumentStatus } from "./setDocumentStatus";
 import { buildAdvanceOnboardingStage } from "./advanceOnboardingStage";
 import { buildCompleteOnboarding } from "./completeOnboarding";
 import { buildAlertAdvisorStuck } from "./alertAdvisorStuck";
+import { buildSendStageProgressNotice } from "./sendStageProgressNotice";
+import { buildSendOnboardingCompleteNotice } from "./sendOnboardingCompleteNotice";
 
 export {
   buildGetOnboardingStatus,
@@ -16,6 +18,8 @@ export {
   buildAdvanceOnboardingStage,
   buildCompleteOnboarding,
   buildAlertAdvisorStuck,
+  buildSendStageProgressNotice,
+  buildSendOnboardingCompleteNotice,
 };
 
 /**
@@ -30,6 +34,8 @@ export function buildOnboardingTools(vault: VaultService) {
     advanceOnboardingStage: buildAdvanceOnboardingStage(vault),
     completeOnboarding: buildCompleteOnboarding(vault),
     alertAdvisorStuck: buildAlertAdvisorStuck(vault),
+    sendStageProgressNotice: buildSendStageProgressNotice(vault),
+    sendOnboardingCompleteNotice: buildSendOnboardingCompleteNotice(vault),
   };
   assertDomainToolAllowlist("onboarding", Object.keys(tools));
   return tools;
