@@ -171,11 +171,31 @@ const envSchema = z.object({
   EVAL_PASS_K: z.coerce.number().int().min(3).max(5).default(3),
   /**
    * Document field extract adapter. Policy (Zod checklist / DEMO_DATE) stays in Cerebro.
-   * `heuristic` / `llm-demo` for demo; `textract` / `persona` are stubs until credentials land.
+   * `heuristic` / `llm-demo` for demo; `textract` / `persona` / `docling` are stubs until wired.
    */
   DOCUMENT_EXTRACT_PROVIDER: z
-    .enum(["heuristic", "llm-demo", "textract", "persona"])
+    .enum(["heuristic", "llm-demo", "textract", "persona", "docling"])
     .default("heuristic"),
+  /**
+   * Durable-engine probe for Temporal/Inngest go/no-go (SOTA P2.1 watch).
+   * Default false — Mastra snapshots remain the durability path.
+   */
+  DURABLE_ENGINE_PROBE: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
+  /**
+   * Hybrid MAS↔SAS cost cascade helpers (SOTA P2.7 watch).
+   * Default false — worker routing unchanged; never overrides policy matrix.
+   */
+  HYBRID_COST_CASCADE: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
   /**
    * Uniform stream: fraction of completed agent jobs for async online judge (WP-P1.7 / PR5).
    * Cap 5%; 0 disables. Sampling never blocks the agent worker; DRY_RUN skips LLM calls.

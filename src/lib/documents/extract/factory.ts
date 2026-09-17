@@ -2,6 +2,7 @@ import { env } from "@/lib/config";
 import type { DocumentExtractAdapter } from "./adapter";
 import { createHeuristicExtractAdapter } from "./heuristicAdapter";
 import { createLlmDemoExtractAdapter } from "./llmDemoAdapter";
+import { createDoclingExtractAdapter } from "./doclingStubAdapter";
 import {
   createPersonaExtractAdapter,
   createTextractExtractAdapter,
@@ -31,6 +32,8 @@ export function getDocumentExtractAdapter(
       return createTextractExtractAdapter();
     case "persona":
       return createPersonaExtractAdapter();
+    case "docling":
+      return createDoclingExtractAdapter();
     default: {
       const _exhaustive: never = provider;
       throw new Error(`Unknown document extract provider: ${String(_exhaustive)}`);
