@@ -2,6 +2,22 @@
 
 This document describes how the eval suite works in this repository: runner behavior, ground truth, scorers, agents, persistence, and related infrastructure. **It is a snapshot of the codebase**; if implementation changes, update this file or treat the source files as authoritative.
 
+## Current CLI, CI, and suite modes (authoritative)
+
+Prefer these over older sections below if they disagree:
+
+| Concern | Source of truth |
+| --- | --- |
+| Default PR CI | `.github/workflows/ci-unit.yml` → `npm run test:unit` (`CI_LIVE_EVAL=false`, `$0` OpenRouter) |
+| Suite selection | `src/evals/suite-modes.ts` — `canary` \| `full` \| `smoke` \| `clientIds` |
+| Scripts | `package.json` — `eval`/`eval:full`, `eval:canary`, `eval:smoke`, `eval:dev`, `eval:ablate`, `test:live-eval` |
+| Models | `getModel("dev")` for AUT; `getModel("evalJudge")` for soft judges only (`src/lib/config.ts`) |
+| CI guards | `CI_LIVE_EVAL`, `EVAL_ALLOW_FULL_IN_CI`, `EVAL_LIVE_ABLATION` (all default off / refuse full×live in PR CI) |
+| Fixture bank | `src/evals/fixtures/` (trajectories + frozen traces) — unit Vitest, no live LLM |
+| Agent-as-a-Judge | `AGENT_AS_JUDGE` default false; stub in `src/evals/scorers/agentJudge.ts` — not a promote gate |
+
+Smoke suites are always **non-final**. Canary and full are final labels for ship/nightly paths.
+
 ---
 
 ## 1. Eval runner — `src/evals/run.ts`
@@ -204,11 +220,13 @@ if (isMain) {
 
 - Scenarios are **`complianceScenarios` + `onboardingScenarios`** (from `GROUND_TRUTH` filtered by `agentType`).
 - Results keyed by **`clientId`** (e.g. `CLT-003`); each row includes **`agent`**: `COMPLIANCE` | `ONBOARDING`.
-- No separate priority / canary / golden flags; **`GROUND_TRUTH` is the authoritative scenario list**.
+- **`GROUND_TRUTH`** remains the catalog; **suite modes** (`canary` / `full` / `smoke` / `clientIds` in `suite-modes.ts`) select which clients run. See the [Current CLI, CI, and suite modes](#current-cli-ci-and-suite-modes-authoritative) table above.
 
 ### Canary / golden
 
-- **No** dedicated canary subset in code.
+- **Canary:** stratified partition via `CANARY_CLIENT_IDS` / `canary-strata.ts` — default PR/ship live path (`npm run eval:canary`).
+- **Golden:** approved trajectory goldens under `src/evals/scenarios/goldens/approved/` plus `$0` fixture bank under `src/evals/fixtures/`.
+- **Smoke:** non-final subsample only.
 
 ---
 

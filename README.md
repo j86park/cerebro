@@ -4,19 +4,25 @@ Cerebro is an autonomous AI system for **FutureVault-style** client document vau
 
 ## What's Inside
 
-The **Compliance** agent monitors document status, escalations, and reminders. The **Onboarding** agent tracks onboarding stages, document requests, and completion. Both use **versioned prompts** stored in PostgreSQL, share **BullMQ** background workers for scans and simulations, and persist evaluation results for regression and self-correction workflows.
+The **Compliance** agent monitors document status, escalations, reminders, and urgency ranking. The **Onboarding** agent tracks stages, document requests/validation (persisting **VALID** on pass), progress notices, and completion. Both use **versioned prompts** in PostgreSQL, share **BullMQ** workers for scans and simulations, and persist evaluation results for regression and self-correction.
+
+**Agent capability (on `main`):** shared observation tools (`getOpenEscalations`, `getDocumentForReview`, `getChecklistGaps`, `getDecisionHistory`, `refreshDocumentExtract`); compliance `prioritizeDocuments` and `requestMissingDocument`; onboarding stage/complete notices; email tools honor `DRY_RUN` with Resend stubs; runtime step budget via `AGENT_MAX_STEPS` (default 12).
+
+**Flag-off scaffolds (default off — production path unchanged until enabled):** Observational Memory helpers (`AGENT_OBSERVATIONAL_MEMORY`; also fail-closed under `DRY_RUN` / `NODE_ENV=test`); sanctions/PEP adapter seam (`SANCTIONS_CHECK_PROVIDER=dry-run|alloy` — no live Alloy); SOTA watch stubs for Docling extract, durable-engine probe, hybrid cost cascade, frozen-trace / evidence seal / experiment sidecar, Agent-as-a-Judge, and MCP catalog guardrails (no live MCP server).
 
 ## Architecture Overview
 
-The **Next.js 15** App Router serves UI pages and **API routes** that enqueue BullMQ jobs or call Prisma directly. **PostgreSQL** (typically Supabase) holds vault data, `EvalRun` rows, and `PromptVersion` records. **Mastra** agents (`src/agents/`) load instructions from the DB; tools live under `src/tools/` and always go through `VaultService`. **Redis** backs BullMQ queues for scheduled work, simulation batches, and the self-correcting **mutation-analysis** and **shadow-run** workers (`src/workers/`). The **eval suite** (`src/evals/`) runs scenarios, applies `@mastra/core/evals` scorers, and writes `EvalRun` rows used by `/testing` and the meta-agent pipeline.
+The **Next.js 15** App Router serves UI and **API routes** that enqueue BullMQ jobs or call Prisma. **PostgreSQL** (typically Supabase) holds vault data, `EvalRun` rows, and `PromptVersion` records. **Mastra** agents (`src/agents/`) load instructions from the DB; tools under `src/tools/` always go through **`VaultService`** (constructed with a `clientId`). **Redis** backs BullMQ for scheduled work, simulation, and self-correcting **mutation-analysis** / **shadow-run** / **online-judge** workers. Agents are **never** run from route handlers — handlers enqueue; workers run Mastra. Models come only from **`getModel("dev" | "demo" | "evalJudge")`** in `src/lib/config.ts` (never hardcoded model strings elsewhere). Dates use **`env.DEMO_DATE`**, not `new Date()` directly.
+
+See `docs/architecture.md` for structure and API map; `ARCHITECTURE.md` for end-to-end wiring.
 
 ## Prerequisites
 
 Before you start, you need:
 
-- Node.js 18+
+- Node.js 18+ (CI uses Node 22)
 - A [Supabase](https://supabase.com) project (free tier works) with Postgres
-- An [OpenRouter](https://openrouter.ai) API key
+- An [OpenRouter](https://openrouter.ai) API key (for live agents/evals — not required for default unit CI)
 - A Redis instance — [Upstash](https://upstash.com) free tier works, or run Redis locally with Docker. This repo includes **`docker-compose-redis.yml`**; you need Redis running whenever you use the app with BullMQ (queue-backed agent runs, simulation API, dashboard queue status, workers). Start it before `npm run dev` if you use local Redis:
 
 ```bash
@@ -78,20 +84,31 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Environment variables
 
+All env access is validated in `src/lib/config.ts`. Do not read `process.env` elsewhere.
+
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | Postgres connection string (Supabase direct or pooler URI). |
 | `REDIS_URL` | Yes | Redis URL for BullMQ (e.g. `redis://localhost:6379`). |
-| `OPENROUTER_API_KEY` | Yes | API key for LLM calls through OpenRouter. |
+| `OPENROUTER_API_KEY` | Yes* | API key for LLM calls through OpenRouter. *Not needed for default `$0` unit/fixture CI. |
 | `SUPABASE_URL` | Optional | Supabase project URL; defaults exist in `src/lib/config.ts` for local-only use. |
 | `SUPABASE_ANON_KEY` | Optional | Supabase anon key; defaults for dev. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Optional | Same URL for browser Supabase client; defaults in config. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Optional | Anon key for client helpers; defaults in config. |
 | `RESEND_API_KEY` | Optional | Outbound email; required when `DRY_RUN=false` and emails send. |
-| `DEMO_DATE` | Optional | ISO datetime for deterministic demos; defaults to “now” in config. |
-| `MODEL_DEV`, `MODEL_DEMO`, `MODEL_EVAL_JUDGE` | Optional | OpenRouter model ids; defaults to Kimi K2-class models in config. |
-| `DRY_RUN` | Optional | `true` suppresses emails/external side effects; DB writes still occur per project rules. Default `true`. |
-| `WEBHOOK_SECRET` | Optional | Validates Supabase → app webhooks for document upload. Default dev placeholder. |
+| `DEMO_DATE` | Optional | ISO datetime for deterministic demos/tests; defaults to “now” in config. |
+| `MODEL_DEV`, `MODEL_DEMO`, `MODEL_EVAL_JUDGE` | Optional | OpenRouter model ids; resolved only via `getModel` / `getModelId`. |
+| `DRY_RUN` | Optional | `true` suppresses emails/external side effects; DB writes still occur. Default `true`. |
+| `AGENT_MAX_STEPS` | Optional | Mastra generate step budget (1–32). Default `12`. |
+| `DOCUMENT_EXTRACT_PROVIDER` | Optional | `heuristic` (default) \| `llm-demo` \| `textract` \| `persona` \| `docling` (stub). |
+| `SANCTIONS_CHECK_PROVIDER` | Optional | `dry-run` (default) \| `alloy` (unconfigured stub). |
+| `AGENT_OBSERVATIONAL_MEMORY` | Optional | OM scaffold; default `false`; still disabled under `DRY_RUN`/test. |
+| `DURABLE_ENGINE_PROBE`, `HYBRID_COST_CASCADE`, `EVIDENCE_SEAL`, `AGENT_AS_JUDGE`, `MCP_INTEGRATION_SURFACE` | Optional | SOTA watch scaffolds; all default **off**. |
+| `EXPERIMENT_SIDECAR` | Optional | `off` (default) \| `braintrust` \| `langsmith` — never the CI system of record. |
+| `CI_LIVE_EVAL` | Optional | Opt-in live OpenRouter Vitest lane. Default `false` (`$0` unit CI). |
+| `EVAL_ALLOW_FULL_IN_CI` | Optional | Allow `--suite full` under CI. Default `false`. |
+| `EVAL_LIVE_ABLATION` | Optional | Opt-in live canary LOO. Default `false`. |
+| `WEBHOOK_SECRET` | Optional | Validates Supabase → app webhooks for document upload. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Optional | Service role for server Realtime broadcast when used. |
 | `CRON_SECRET` | Optional | Protects `GET /api/cron/scheduled-scans`. |
 | `GITHUB_SHA` | Optional | Stored on `EvalRun` in CI. |
@@ -101,6 +118,8 @@ Open [http://localhost:3000](http://localhost:3000).
 | `MUTATION_COOLDOWN_MINUTES` | Optional | Minimum minutes between mutation-analysis jobs. Default `5`. |
 | `MUTATION_CIRCUIT_PAUSE_HOURS` | Optional | Pause window after circuit trips. Default `24`. |
 | `NODE_ENV` | Optional | `development` \| `production` \| `test`. |
+
+See `.env.example` for commented templates of the cheap-eval and scaffold flags.
 
 ---
 
@@ -113,10 +132,14 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run start` | Start production server |
 | `npm run lint` | ESLint (Next + TypeScript rules; see note below) |
 | `npm run type-check` | `tsc --noEmit` |
-| `npm run test` | Vitest test suite |
-| `npm run eval` | Eval suite with **threshold enforcement** (`--enforce-threshold`) |
-| `npm run eval:dev` | Eval suite **without** threshold enforcement |
-| `npm run workers` | Run mutation-analysis and shadow-runner BullMQ workers (needs Redis) |
+| `npm run test` / `test:unit` | Vitest **unit/fixture** project (`$0` OpenRouter — default CI) |
+| `npm run test:live-eval` | Opt-in live OpenRouter Vitest lane (`CI_LIVE_EVAL=1`) |
+| `npm run eval` / `eval:full` | Live eval suite `--suite full` with threshold enforcement |
+| `npm run eval:canary` | Live eval `--suite canary` with threshold enforcement |
+| `npm run eval:smoke` | Seeded subsample; **non-final** (not a release gate) |
+| `npm run eval:dev` | Canary suite **without** threshold enforcement |
+| `npm run eval:ablate` | Fixture tool-mask / prompt LOO ablation (`$0` by default) |
+| `npm run workers` | Mutation-analysis and shadow-runner BullMQ workers (needs Redis) |
 | `npm run workers:mutation` | Mutation-analysis worker only |
 | `npm run workers:shadow` | Shadow-runner worker only |
 | `npm run db:generate` | `prisma generate` |
@@ -133,19 +156,24 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## Running the eval suite
+## Testing and evals
 
-The eval suite runs compliance and onboarding scenarios, scores them with `@mastra/core/evals` scorers, and persists results to `EvalRun`.
+### Cheap-eval CI (default PR gate)
 
-```bash
-npm run eval
-```
+GitHub Actions (`.github/workflows/ci-unit.yml`) runs **`npm run test:unit`** only: trajectory / frozen-trace fixtures and unit tests with `CI_LIVE_EVAL=false` and a dummy OpenRouter key. This lane is designed for **`$0` OpenRouter spend**.
 
-CI-style runs use threshold enforcement (overall score must meet `EVAL_OVERALL_THRESHOLD` in `src/evals/threshold.ts`). For local iteration without throwing on score:
+### Live eval suite modes
 
-```bash
-npm run eval:dev
-```
+`src/evals/suite-modes.ts` selects which clients run:
+
+| Mode | CLI | Notes |
+|------|-----|--------|
+| `canary` | `npm run eval:canary` / `eval:dev` | Stratified canary partition; PR / mutation ship path |
+| `full` | `npm run eval` / `eval:full` | Entire ground-truth corpus; nightly / explicit release |
+| `smoke` | `npm run eval:smoke` | Seeded subsample; always **non-final** |
+| `clientIds` | CLI flags | Explicit allowlist for debugging |
+
+Under CI, `--suite full` is refused unless `EVAL_ALLOW_FULL_IN_CI=true`. AUT / agents use `getModel("dev")`; soft judges use `getModel("evalJudge")` only.
 
 Results appear on the Testing dashboard at `/testing`.
 
@@ -153,7 +181,9 @@ To add a scenario:
 
 1. Open `src/evals/ground-truth.ts`
 2. Add an entry to `GROUND_TRUTH` following the existing shape
-3. Re-run `npm run eval:dev` or `npm run eval`
+3. Re-run `npm run eval:dev` or `npm run eval:canary`
+
+Deeper runner/scorer detail: `docs/eval-process.md` (treat source under `src/evals/` as authoritative if they diverge).
 
 ---
 
@@ -167,6 +197,8 @@ npm run workers
 
 Workers require **Redis** (`REDIS_URL`) and a working database. If Redis is down, jobs will fail to enqueue or process—check logs and [Prerequisites](#prerequisites).
 
+Agent runs for vaults use the BullMQ worker in `src/lib/queue/workers.ts` (priority / scheduled / simulation queues)—same `VaultService` + Mastra path as evals.
+
 ---
 
 ## Project structure
@@ -176,8 +208,8 @@ src/
   agents/          # Mastra agent definitions; prompts loaded from DB
   app/             # Next.js App Router pages and API routes
   components/      # React UI
-  evals/           # Eval runner, scenarios, ground truth, scorers
-  lib/             # Config, Prisma, queues, prompts, mutation circuit
+  evals/           # Eval runner, suite modes, fixtures, scorers
+  lib/             # Config, VaultService, queues, memory/sanctions/MCP scaffolds
   tools/           # Agent tools (shared, compliance, onboarding)
   workers/         # BullMQ workers and queue payloads
   workflows/       # Meta-agent taxonomy + prompt mutation helpers
@@ -194,7 +226,7 @@ prisma/
 1. **Agents** — Edit prompt templates in `src/agents/compliance/prompts.ts` and `src/agents/onboarding/prompts.ts`, then seed/version via `npm run db:seed`.
 2. **Scenarios** — Edit `src/evals/ground-truth.ts` and scenario files under `src/evals/scenarios/`.
 3. **Tools** — Edit `src/tools/` and keep DB access inside `VaultService`.
-4. Re-run `npm run eval` to establish a baseline.
+4. Re-run `npm run eval:canary` (or `npm run test:unit` for fixture gates) to establish a baseline.
 
 ---
 
@@ -207,7 +239,7 @@ Run `npm run db:generate` (also runs on `postinstall`).
 Start Redis: `docker compose -f docker-compose-redis.yml up -d` (see **Quick Start → step 4** above), or `docker run -d -p 6379:6379 redis:alpine`, or set `REDIS_URL` to a cloud Redis URL.
 
 **Eval suite fails immediately**  
-Ensure `DATABASE_URL` is set and migrations have run (`npm run db:migrate`).
+Ensure `DATABASE_URL` is set and migrations have run (`npm run db:migrate`). For PR-style checks without OpenRouter spend, use `npm run test:unit`.
 
 **Type errors after pulling**  
 Run `npm install && npm run db:generate`.

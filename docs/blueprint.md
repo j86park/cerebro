@@ -2,4 +2,4 @@
 
 The canonical product specification, NFRs, and demo definition of done live in **[futurevault-agent-blueprint.md](./futurevault-agent-blueprint.md)**.
 
-Use that document for product scope; use [architecture.md](./architecture.md) for implementation structure.
+Use that document for product scope; use [architecture.md](./architecture.md) for implementation structure (including current agent tools, VaultService/BullMQ patterns, and flag-off scaffolds). Setup and eval CI: root **[README.md](../README.md)**.
