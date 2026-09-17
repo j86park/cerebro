@@ -1,0 +1,8 @@
+{
+  "fixtureId": "clt-001-pass",
+  "scenarioId": "CLT-001",
+  "kind": "golden-pass",
+  "toolNames": ["getOnboardingStatus", "requestDocument"],
+  "contentHash": "a26f9cbf69a0bca4cf1bdc25f62ad3d0b886069bdbae17f11e1f96ce09efe8ea",
+  "note": "Canary CLT-001 clean observe → requestDocument path"
+}

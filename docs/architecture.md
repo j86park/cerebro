@@ -144,6 +144,8 @@ cerebro/
 │   │   │   ├── onboardingStage.ts
 │   │   │   ├── trajectory.ts
 │   │   │   └── reasoningQuality.ts
+│   │   ├── fixtures/            ← versioned trajectory JSON for $0 Vitest CI (cheap-eval PR0)
+│   │   │   └── trajectories/    ← golden-pass + seeded-defect fixtures (no OpenRouter)
 │   │   ├── golden/              ← failure→golden export / human promote (WP-P1.5)
 │   │   ├── scenarios/
 │   │   │   ├── compliance.eval.ts
@@ -164,7 +166,9 @@ cerebro/
 │       └── simulation/
 ├── tests/
 │   ├── tools/
-│   └── agents/
+│   ├── agents/
+│   └── evals/
+│       └── fixtures/            ← Vitest consumers of trajectory fixture bank
 └── scripts/
     ├── seed.ts
     └── reset-demo.ts

@@ -1,0 +1,12 @@
+{
+  "fixtureId": "clt-005-pass",
+  "scenarioId": "CLT-005",
+  "kind": "golden-pass",
+  "toolNames": [
+    "getClientProfile",
+    "getActionHistory",
+    "getDocumentComplianceStatus"
+  ],
+  "contentHash": "615254e843091d564208b1612925d6c24eb9d05aa62e4856a3ac5a0afdec7e11",
+  "note": "Canary CLT-005 clean vault observe-only path"
+}

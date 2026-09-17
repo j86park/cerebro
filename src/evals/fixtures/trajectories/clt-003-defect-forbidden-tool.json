@@ -1,0 +1,12 @@
+{
+  "fixtureId": "clt-003-defect-forbidden-tool",
+  "scenarioId": "CLT-003",
+  "kind": "seeded-defect",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "completeOnboarding",
+    "escalateToManagement"
+  ],
+  "contentHash": "3c14a1fb6ed83f04fc4b8d1e809e43485ad4ed0bb861c1667c2f121efc136970",
+  "note": "Lucky escalation end-state but forbidden completeOnboarding — hard gate must fail"
+}

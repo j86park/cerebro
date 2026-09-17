@@ -9,7 +9,9 @@
   },
   "scripts": {
     "postinstall": "prisma generate",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
+    "test:unit": "vitest run --project unit",
+    "test:live-eval": "cross-env CI_LIVE_EVAL=1 vitest run --project live-eval",
     "dev": "dotenv -e .env -e .env.local -o -- cross-env NODE_ENV=development next dev",
     "build": "next build",
     "start": "next start",
@@ -64,6 +66,7 @@
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.1",
     "@tailwindcss/postcss": "^4.2.1",
+    "ai": "^6.0.285",
     "bullmq": "^5.71.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

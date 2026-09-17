@@ -1,0 +1,22 @@
+{
+  "fixtureId": "clt-003-defect-step-budget",
+  "scenarioId": "CLT-003",
+  "kind": "seeded-defect",
+  "toolNames": [
+    "getDocumentComplianceStatus",
+    "escalateToManagement",
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "f",
+    "g",
+    "h",
+    "i",
+    "j",
+    "k"
+  ],
+  "contentHash": "a4869a1f7218632cb18cee3ed887c03e229428301a7aee4e19e226d0dc63ce54",
+  "note": "Exceeds maxSteps 12 — hard gate must fail"
+}

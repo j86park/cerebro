@@ -121,6 +121,16 @@ const envSchema = z.object({
    * Cap 5%; 0 disables. Sampling never blocks the agent worker; DRY_RUN skips LLM calls.
    */
   ONLINE_JUDGE_SAMPLE_RATE: z.coerce.number().min(0).max(0.05).default(0.02),
+  /**
+   * Opt-in live OpenRouter eval Vitest lane (cheap-eval PR0 dual-lane).
+   * Default false — unit/fixture CI must stay at $0 OpenRouter spend.
+   */
+  CI_LIVE_EVAL: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
 });
 
 export const env = envSchema.parse(process.env);
@@ -137,9 +147,41 @@ const MODELS = {
 
 export type ModelTier = keyof typeof MODELS;
 
+/** Production OpenRouter model instance (or a test double via `setModelOverride`). */
+export type ModelInstance = ReturnType<typeof openrouter>;
+
+type ModelFactory = (tier: ModelTier) => ModelInstance;
+
 /**
- * Returns the configured OpenRouter model by tier.
+ * Test-only model factory. When set, `getModel` never calls OpenRouter.
+ * Production code must leave this unset.
+ */
+let modelFactoryOverride: ((tier: ModelTier) => unknown) | null = null;
+
+/**
+ * Injects a model factory for Vitest (MockLanguageModel / throw-guard).
+ * Pass `null` to restore OpenRouter-backed resolution.
+ */
+export function setModelOverride(
+  factory: ((tier: ModelTier) => unknown) | null
+): void {
+  modelFactoryOverride = factory;
+}
+
+/**
+ * Returns whether a test model override is currently installed.
+ */
+export function hasModelOverride(): boolean {
+  return modelFactoryOverride !== null;
+}
+
+/**
+ * Returns the configured model by tier.
+ * Uses `setModelOverride` when installed (unit/fixture tests); otherwise OpenRouter.
  */
 export function getModel(tier: ModelTier = "dev") {
+  if (modelFactoryOverride) {
+    return modelFactoryOverride(tier) as ModelInstance;
+  }
   return openrouter(MODELS[tier]);
 }
