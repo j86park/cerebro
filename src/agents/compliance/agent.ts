@@ -3,6 +3,7 @@ import { Memory } from "@mastra/memory";
 import { mastraPostgres } from "@/lib/mastra-postgres";
 import { COMPLIANCE_WORKING_MEMORY_SCHEMA } from "./memory-schema";
 import { getModel } from "@/lib/config";
+import { buildAgentMemoryOptions } from "@/lib/memory/buildAgentMemoryOptions";
 import { loadPrompt } from "@/lib/prompt-loader";
 import { getRelevantLessons, injectLessons } from "@/lib/lessons-loader";
 import { registerAgentMemoClear } from "@/lib/agent-runtime-registry";
@@ -26,13 +27,7 @@ export async function getComplianceAgent(): Promise<Agent> {
     model: getModel("dev"),
     memory: new Memory({
       storage: mastraPostgres.complianceMemoryStore,
-      options: {
-        lastMessages: 20,
-        workingMemory: {
-          enabled: true,
-          schema: COMPLIANCE_WORKING_MEMORY_SCHEMA,
-        },
-      },
+      options: buildAgentMemoryOptions(COMPLIANCE_WORKING_MEMORY_SCHEMA),
     }),
   });
 

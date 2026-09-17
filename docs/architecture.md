@@ -114,6 +114,7 @@ cerebro/
 │   │   │   ├── checklist.ts     ← stage/risk checklists + DEMO_DATE validators
 │   │   │   ├── injectionHygiene.ts
 │   │   │   └── registry.ts
+│   │   ├── memory/              ← OM feature-flag helpers + tool-as-subagent stubs (T2.1)
 │   │   ├── db/
 │   │   │   ├── client.ts        ← Prisma client singleton
 │   │   │   └── vault-service.ts ← ALL db access goes through here
