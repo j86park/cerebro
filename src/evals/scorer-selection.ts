@@ -11,11 +11,11 @@ import {
 import type { MastraScorer } from "@mastra/core/evals";
 
 /**
- * Eval runner modes (cheap-eval PR1).
+ * Scorer attachment modes (cheap-eval PR1).
  * - `canary-ci`: hard scorers only — soft LLM judge off the ship / canary path
  * - `full`: hard + soft scorers (nightly / opt-in live); soft still cannot override hard fails
  *
- * Suite modes `smoke` / sampling land in PR2.
+ * Which scenarios run is controlled separately by `suite-modes.ts` (`canary`/`full`/`smoke`).
  */
 export const evalRunModeSchema = z.enum(["canary-ci", "full"]);
 export type EvalRunMode = z.infer<typeof evalRunModeSchema>;

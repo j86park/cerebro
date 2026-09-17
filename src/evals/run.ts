@@ -37,6 +37,14 @@ import {
   shouldSkipSoftJudges,
   type EvalRunMode,
 } from "@/evals/scorer-selection";
+import {
+  assertFullSuiteAllowedInCi,
+  assertSuiteAllowsReleaseGate,
+  parseSuiteSelectionFromArgs,
+  resolveSuite,
+  suiteSelectionSchema,
+  type SuiteSelection,
+} from "@/evals/suite-modes";
 import type { AbstractScenario } from "@/evals/scenarios/scenario-types";
 import type { EvalScenario } from "@/evals/ground-truth";
 
@@ -96,13 +104,23 @@ export type RunEvalsOptions = {
   enforceThreshold?: boolean;
   /** Skip `EvalRun` persistence — used by shadow evals so history stays clean. */
   skipPersist?: boolean;
-  /** When set, only run scenarios whose clientId is in this set (canary pass^k trials). */
+  /**
+   * When set, only run scenarios whose clientId is in this set.
+   * Prefer `suite` (`canary` / `smoke` / `clientIds`) for named modes; this remains
+   * for shadow `pass^k` trials and explicit overrides.
+   */
   clientIds?: readonly string[];
   /**
-   * `canary-ci` = hard scorers only (soft judge off ship path).
-   * `full` = hard + soft (nightly / opt-in). Default `full`.
+   * Scorer attachment mode (PR1):
+   * `canary-ci` = hard scorers only; `full` = hard + soft.
+   * When omitted, defaults from `suite` (canary/smoke → canary-ci; full → full).
    */
   mode?: EvalRunMode;
+  /**
+   * Suite selection (PR2): which scenarios run — `canary` | `full` | `smoke` | `clientIds`.
+   * Default `full` for backward compat; CI refuses full unless `EVAL_ALLOW_FULL_IN_CI`.
+   */
+  suite?: SuiteSelection;
 };
 
 function scenarioHasFailure(row: ScenarioEvalRow): boolean {
@@ -172,27 +190,48 @@ export async function runAllEvals(
   scorerBreakdown: Record<string, { total: number; passed: number }>;
   evalRunId: string;
   mode: EvalRunMode;
+  suite: SuiteSelection;
+  /** False for smoke / exploratory clientIds — must not be treated as release quality. */
+  isFinal: boolean;
 }> {
   const enforceThreshold = options?.enforceThreshold ?? false;
   const skipPersist = options?.skipPersist ?? false;
-  const clientIdFilter =
-    options?.clientIds !== undefined ? new Set(options.clientIds) : null;
-  const mode = evalRunModeSchema.parse(options?.mode ?? "full");
 
-  console.log(
-    `[Cerebro][evals] Starting evaluation suite (batch size: ${batchSize}, mode: ${mode})...`
-  );
   // Ship gate = GROUND_TRUTH wrappers + human-approved goldens only (never candidates/).
   const approvedGoldenScenarios = (await loadApprovedEvalScenarios()).map(
     toAbstractFromEvalScenario
   );
-  const scenarios = [
+  const catalog = [
     ...complianceScenarios,
     ...onboardingScenarios,
     ...approvedGoldenScenarios,
-  ].filter((sc) =>
-    clientIdFilter === null ? true : clientIdFilter.has(sc.clientId)
+  ];
+  const catalogIds = catalog.map((sc) => sc.clientId);
+
+  // Explicit `clientIds` option wins (shadow pass^k); else named suite selection.
+  const suiteSelection: SuiteSelection =
+    options?.clientIds !== undefined
+      ? suiteSelectionSchema.parse({
+          mode: "clientIds",
+          clientIds: [...options.clientIds],
+        })
+      : suiteSelectionSchema.parse(options?.suite ?? { mode: "full" });
+
+  assertFullSuiteAllowedInCi(suiteSelection);
+
+  const canaryIds = new Set(await getCanaryClientIdsAsync());
+  const suiteResolution = resolveSuite(suiteSelection, catalogIds, canaryIds);
+  const clientIdFilter = new Set(suiteResolution.clientIds);
+  const mode = evalRunModeSchema.parse(
+    options?.mode ?? suiteResolution.defaultScorerMode
   );
+  const isFinal = suiteResolution.isFinal;
+
+  console.log(
+    `[Cerebro][evals] Starting evaluation suite (batch size: ${batchSize}, suite: ${suiteSelection.mode}, scorerMode: ${mode}, isFinal: ${isFinal})...`
+  );
+
+  const scenarios = catalog.filter((sc) => clientIdFilter.has(sc.clientId));
   const scenarioResults: Record<string, ScenarioEvalRow> = {};
   const scorerBreakdown: Record<string, { total: number; passed: number }> = {};
   let totalScore = 0;
@@ -333,8 +372,10 @@ export async function runAllEvals(
   }
 
   if (enforceThreshold) {
+    // REGULATORY: smoke / non-final suites must never enforce release or ship gates.
+    assertSuiteAllowsReleaseGate(suiteSelection);
     const canaryClientIds = await getCanaryClientIdsAsync();
-    if (mode === "canary-ci") {
+    if (mode === "canary-ci" || suiteSelection.mode === "canary") {
       // Hard-only canary ship path — soft average threshold is nightly/full only.
       assertCanaryCiGates(scenarioResults, canaryClientIds);
     } else {
@@ -348,6 +389,8 @@ export async function runAllEvals(
     scorerBreakdown,
     evalRunId: evalRun.id,
     mode,
+    suite: suiteSelection,
+    isFinal,
   };
 }
 
@@ -360,13 +403,25 @@ if (isMain) {
   const batchSize =
     batchIdx !== -1 ? parseInt(args[batchIdx + 1] ?? "3", 10) : 3;
   const enforceThreshold = args.includes("--enforce-threshold");
-  const canaryCi = args.includes("--canary-ci");
+  const suite = parseSuiteSelectionFromArgs(args);
+  // Scorer mode: explicit --canary-ci forces hard-only; else follow suite default.
+  const scorerMode: EvalRunMode | undefined = args.includes("--canary-ci")
+    ? "canary-ci"
+    : undefined;
 
   runAllEvals(batchSize, {
     enforceThreshold,
-    mode: canaryCi ? "canary-ci" : "full",
+    suite,
+    mode: scorerMode,
   })
-    .then(() => process.exit(0))
+    .then((result) => {
+      if (!result.isFinal) {
+        console.warn(
+          `[Cerebro][evals] Suite "${result.suite.mode}" is NON-FINAL — do not treat overallScore=${result.overallScore.toFixed(3)} as a release gate.`
+        );
+      }
+      process.exit(0);
+    })
     .catch((err) => {
       console.error("[Cerebro][evals]", err);
       process.exit(1);
