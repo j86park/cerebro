@@ -35,6 +35,7 @@ export const documentExtractProviderSchema = z.enum([
   "llm-demo",
   "textract",
   "persona",
+  "docling",
 ]);
 
 export type DocumentExtractProvider = z.infer<typeof documentExtractProviderSchema>;

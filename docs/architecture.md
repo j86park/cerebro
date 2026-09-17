@@ -110,7 +110,7 @@ cerebro/
 │   ├── lib/
 │   │   ├── documents/
 │   │   │   ├── parser.ts        ← PDF text extract
-│   │   │   ├── extract/         ← pluggable field extract adapters (WP-P1.2)
+│   │   │   ├── extract/         ← pluggable field extract adapters (WP-P1.2; docling stub P2.2 watch)
 │   │   │   ├── checklist.ts     ← stage/risk checklists + DEMO_DATE validators
 │   │   │   ├── injectionHygiene.ts
 │   │   │   └── registry.ts
@@ -120,6 +120,8 @@ cerebro/
 │   │   ├── observability/
 │   │   │   ├── decision-log.ts  ← DecisionRecord Zod schemas (examiner SoR)
 │   │   │   └── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
+│   │   ├── orchestration/       ← durable-engine probe for Temporal go/no-go (P2.1 watch)
+│   │   ├── routing/             ← hybrid MAS↔SAS cost cascade helpers (P2.7 watch; flag-off)
 │   │   ├── queue/
 │   │   │   ├── client.ts        ← BullMQ + Redis (`REDIS_URL`) setup
 │   │   │   ├── workers.ts       ← queue worker definitions
