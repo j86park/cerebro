@@ -10,11 +10,19 @@ vi.mock("@/lib/config", () => ({
   },
 }));
 
+vi.mock("@/lib/email/resend", () => ({
+  sendTransactionalEmail: vi.fn().mockResolvedValue({ id: "dry-run", skipped: true }),
+}));
+
 describe("alertAdvisorStuck", () => {
   it("transitions client status to STALLED", async () => {
     const vault = new VaultService({ clientId: "CLT-123" }, {} as never);
 
-    vault.getClientProfile = vi.fn().mockResolvedValue({ onboardingStage: 2 });
+    vault.getClientProfile = vi.fn().mockResolvedValue({
+      name: "Ada",
+      onboardingStage: 2,
+      advisor: { email: "advisor@example.com" },
+    });
     vault.resetOnboarding = vi.fn().mockResolvedValue({});
     vault.checkActionCooldown = vi.fn().mockResolvedValue(undefined);
     vault.logAction = vi.fn().mockResolvedValue({});
