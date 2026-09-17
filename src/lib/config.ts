@@ -177,10 +177,21 @@ const envSchema = z.object({
     .enum(["heuristic", "llm-demo", "textract", "persona"])
     .default("heuristic"),
   /**
-   * Fraction of completed agent jobs to sample for async online judge (WP-P1.7).
+   * Uniform stream: fraction of completed agent jobs for async online judge (WP-P1.7 / PR5).
    * Cap 5%; 0 disables. Sampling never blocks the agent worker; DRY_RUN skips LLM calls.
+   * Online sampling promotes goldens — it is never the ship gate.
    */
   ONLINE_JUDGE_SAMPLE_RATE: z.coerce.number().min(0).max(0.05).default(0.02),
+  /**
+   * Failure-weighted stream: fraction of *failure-signal* jobs to oversample into the
+   * online → golden promote queue (cheap-eval PR5 dual-stream). Cap 1.0; default 0.25.
+   * Independent of the uniform stream; still async + DRY_RUN-safe.
+   */
+  ONLINE_JUDGE_FAILURE_SAMPLE_RATE: z.coerce
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.25),
   /**
    * Opt-in live OpenRouter eval Vitest lane (cheap-eval PR0 dual-lane).
    * Default false — unit/fixture CI must stay at $0 OpenRouter spend.

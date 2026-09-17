@@ -7,6 +7,7 @@ import {
 } from "@/lib/evals/online-judge-sample";
 import { connection } from "@/lib/queue/client";
 import { judgeReasoningQuality } from "@/evals/scorers/reasoningQuality";
+import { stagePromoteCandidateFromOnlineSample } from "@/evals/golden/promote-queue";
 
 /**
  * Builds a short reasoning blob for the online judge from agent text + tools.
@@ -25,12 +26,19 @@ export function buildOnlineJudgeReasoning(input: {
 
 /**
  * Processes one online judge sample job.
- * DRY_RUN: persist DecisionRecord intent without calling OpenRouter.
+ * DRY_RUN: persist DecisionRecord intent without calling OpenRouter; may still
+ * stage a pending promote-queue candidate for failure-weighted samples.
  * Live: call getModel("evalJudge") via judgeReasoningQuality and log verdict.
+ * Never auto-promotes into the ship gate — human approve only.
  */
 export async function processOnlineJudgeJob(
   data: OnlineJudgeJobPayload,
-): Promise<{ outcome: string; skippedLlm: boolean }> {
+): Promise<{
+  outcome: string;
+  skippedLlm: boolean;
+  promoteQueued: boolean;
+  candidateId?: string;
+}> {
   const parsed = onlineJudgeJobSchema.parse(data);
   const vault = new VaultService({ clientId: parsed.clientId });
   const judgeJobId = `oj-${parsed.sourceJobId}`;
@@ -54,10 +62,30 @@ export async function processOnlineJudgeJob(
         sourceJobId: parsed.sourceJobId,
         agentType: parsed.agentType,
         sampleRate: env.ONLINE_JUDGE_SAMPLE_RATE,
+        failureSampleRate: env.ONLINE_JUDGE_FAILURE_SAMPLE_RATE,
+        stream: parsed.stream,
+        isFailureSignal: parsed.isFailureSignal,
         reasoningPreview: reasoning.slice(0, 240),
       },
     });
-    return { outcome: "DRY_RUN", skippedLlm: true };
+
+    const staged = await stagePromoteCandidateFromOnlineSample({
+      clientId: parsed.clientId,
+      agentType: parsed.agentType,
+      sourceJobId: parsed.sourceJobId,
+      toolNames: parsed.toolNames,
+      stream: parsed.stream,
+      isFailureSignal: parsed.isFailureSignal,
+      reasoningPreview: reasoning.slice(0, 240),
+      verdict: null,
+    });
+
+    return {
+      outcome: "DRY_RUN",
+      skippedLlm: true,
+      promoteQueued: staged.staged,
+      candidateId: staged.staged ? staged.candidateId : undefined,
+    };
   }
 
   const verdict = await judgeReasoningQuality(reasoning);
@@ -76,11 +104,30 @@ export async function processOnlineJudgeJob(
       sourceJobId: parsed.sourceJobId,
       agentType: parsed.agentType,
       sampleRate: env.ONLINE_JUDGE_SAMPLE_RATE,
+      failureSampleRate: env.ONLINE_JUDGE_FAILURE_SAMPLE_RATE,
+      stream: parsed.stream,
+      isFailureSignal: parsed.isFailureSignal,
       verdict: verdict ?? null,
     },
   });
 
-  return { outcome: "ONLINE_JUDGED", skippedLlm: false };
+  const staged = await stagePromoteCandidateFromOnlineSample({
+    clientId: parsed.clientId,
+    agentType: parsed.agentType,
+    sourceJobId: parsed.sourceJobId,
+    toolNames: parsed.toolNames,
+    stream: parsed.stream,
+    isFailureSignal: parsed.isFailureSignal,
+    reasoningPreview: reasoning.slice(0, 240),
+    verdict,
+  });
+
+  return {
+    outcome: "ONLINE_JUDGED",
+    skippedLlm: false,
+    promoteQueued: staged.staged,
+    candidateId: staged.staged ? staged.candidateId : undefined,
+  };
 }
 
 const isVitest = process.env.VITEST === "true";
@@ -91,7 +138,7 @@ if (!isVitest) {
     async (job) => {
       const payload = onlineJudgeJobSchema.parse(job.data);
       console.log(
-        `[OnlineJudge] Sampling sourceJob=${payload.sourceJobId} client=${payload.clientId}`,
+        `[OnlineJudge] Sampling sourceJob=${payload.sourceJobId} client=${payload.clientId} stream=${payload.stream}`,
       );
       return processOnlineJudgeJob(payload);
     },
@@ -104,6 +151,7 @@ if (!isVitest) {
   worker.on("completed", (job) => {
     console.log(`[OnlineJudge] Job ${job.id} completed`);
   });
+
   worker.on("failed", (job, err) => {
     console.error(`[OnlineJudge] Job ${job?.id} failed:`, err);
   });

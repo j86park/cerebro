@@ -366,7 +366,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       console.error("[Worker] emitAgentRunComplete failed:", emitErr);
     }
 
-    // WP-P1.7: optional 1–5% async online judge sample (never blocks; DRY_RUN-safe in worker).
+    // Cheap-eval PR5: dual-stream online sample (uniform ≤5%; never blocks; DRY_RUN-safe).
     void maybeEnqueueOnlineJudgeSample({
       clientId,
       agentType,
@@ -376,6 +376,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       stage,
       reasoningText: typeof result.text === "string" ? result.text : "",
       toolNames: tools,
+      isFailureSignal: false,
     });
 
     return { success: true, text: result.text, traceId };
@@ -410,6 +411,19 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
         logError
       );
     }
+
+    // Failure-weighted stream → promote queue (async; never the ship gate).
+    void maybeEnqueueOnlineJudgeSample({
+      clientId,
+      agentType,
+      sourceJobId: jobId,
+      traceId,
+      agentName,
+      stage,
+      reasoningText: error instanceof Error ? error.message : String(error),
+      toolNames: [],
+      isFailureSignal: true,
+    });
 
     // Re-throw so BullMQ handles retries
     throw error;
