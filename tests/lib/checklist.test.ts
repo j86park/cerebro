@@ -106,6 +106,35 @@ describe("validateDocumentDeterministic vs DEMO_DATE", () => {
     expect(result.valid).toBe(true);
     expect(result.gapReason).toBeNull();
   });
+
+  it("admission purpose accepts PENDING_REVIEW when dates pass", () => {
+    const result = validateDocumentDeterministic(
+      {
+        type: "PROOF_OF_ADDRESS",
+        status: "PENDING_REVIEW",
+        uploadedAt: "2025-06-01T00:00:00.000Z",
+        expiryDate: null,
+      },
+      "PROOF_OF_ADDRESS",
+      { purpose: "admission" },
+    );
+    expect(result.valid).toBe(true);
+    expect(result.status).toBe("VALID");
+  });
+
+  it("checklist purpose still rejects PENDING_REVIEW", () => {
+    const result = validateDocumentDeterministic(
+      {
+        type: "PROOF_OF_ADDRESS",
+        status: "PENDING_REVIEW",
+        uploadedAt: "2025-06-01T00:00:00.000Z",
+        expiryDate: null,
+      },
+      "PROOF_OF_ADDRESS",
+    );
+    expect(result.valid).toBe(false);
+    expect(result.gapReason).toBe("NOT_VALID");
+  });
 });
 
 describe("computeChecklistGaps", () => {
