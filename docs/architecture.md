@@ -92,20 +92,32 @@ cerebro/
 │   │   ├── shared/
 │   │   │   ├── getClientProfile.ts
 │   │   │   ├── getActionHistory.ts
+│   │   │   ├── getOpenEscalations.ts
+│   │   │   ├── getDocumentForReview.ts
+│   │   │   ├── getChecklistGaps.ts
+│   │   │   ├── getDecisionHistory.ts      ← DecisionRecord observe (read-only)
+│   │   │   ├── refreshDocumentExtract.ts
 │   │   │   ├── logAction.ts
-│   │   │   └── sendAdvisorAlert.ts
+│   │   │   └── sendAdvisorAlert.ts         ← DRY_RUN email parity
 │   │   ├── compliance/
 │   │   │   ├── getDocumentComplianceStatus.ts
+│   │   │   ├── prioritizeDocuments.ts
+│   │   │   ├── requestMissingDocument.ts
+│   │   │   ├── checkSanctionsStatus.ts     ← T2.4 seam; never claims vendor clearance
 │   │   │   ├── sendClientReminder.ts
 │   │   │   ├── escalateToComplianceOfficer.ts
 │   │   │   ├── escalateToManagement.ts
+│   │   │   ├── markResolved.ts
 │   │   │   └── updateDocumentStatus.ts
 │   │   └── onboarding/
 │   │       ├── getOnboardingStatus.ts
 │   │       ├── requestDocument.ts
-│   │       ├── validateDocumentReceived.ts
+│   │       ├── validateDocumentReceived.ts ← persists VALID on pass
 │   │       ├── advanceOnboardingStage.ts
 │   │       ├── completeOnboarding.ts
+│   │       ├── sendStageProgressNotice.ts
+│   │       ├── sendOnboardingCompleteNotice.ts
+│   │       ├── setDocumentStatus.ts
 │   │       └── alertAdvisorStuck.ts
 │   ├── lib/
 │   │   ├── documents/
@@ -360,12 +372,30 @@ Memory Thread: clientId = "CLT-003"
 2. cerebro.getAgent("complianceAgent") retrieves agent instance
 3. VaultService constructed with clientId
 4. Tools built with VaultService instance
-5. Agent memory loaded for clientId thread
-6. Agent.generate() called with initial context prompt
-7. Agent loops: observe → reason → act (max steps enforced)
+5. Agent memory loaded for clientId thread (via buildAgentMemoryOptions)
+6. Agent.generate() called with initial context prompt (maxSteps = AGENT_MAX_STEPS)
+7. Agent loops: observe → reason → act (step budget enforced)
 8. On completion: memory written, event emitted
 9. On error: BullMQ retries up to 3 times with exponential backoff
 ```
+
+Route handlers **never** call `agent.generate` — they enqueue BullMQ jobs; workers run agents.
+
+### Feature-flag scaffolds (default off)
+
+These land as code on `main` but do **not** change the default production path until explicitly enabled in `src/lib/config.ts`:
+
+| Flag / setting | Default | Intent |
+| --- | --- | --- |
+| `AGENT_OBSERVATIONAL_MEMORY` | `false` | T2.1 OM helpers; also fail-closed under `DRY_RUN` / `NODE_ENV=test` |
+| `SANCTIONS_CHECK_PROVIDER` | `dry-run` | T2.4 sanctions/PEP seam; `alloy` stub is unconfigured (no live vendor) |
+| `DOCUMENT_EXTRACT_PROVIDER=docling` | n/a (default `heuristic`) | Docling stub adapter only — no Python sidecar |
+| `DURABLE_ENGINE_PROBE` | `false` | Temporal/Inngest go/no-go probe helpers |
+| `HYBRID_COST_CASCADE` | `false` | MAS↔SAS cost cascade helpers; worker routing unchanged |
+| `EXPERIMENT_SIDECAR` | `off` | Optional Braintrust/LangSmith export; never CI SoR |
+| `EVIDENCE_SEAL` | `false` | Pure sha256 seal helpers; no Prisma migration |
+| `AGENT_AS_JUDGE` | `false` | Judge planner stub; not a canary/promote gate |
+| `MCP_INTEGRATION_SURFACE` | `false` | MCP catalog ⊆ allowlists; no live MCP server |
 
 ---
 
@@ -547,31 +577,15 @@ supabase
 
 ## 10. Environment Configuration
 
-All configuration lives in `src/lib/config.ts`. Never read `process.env` directly anywhere else.
+All configuration lives in `src/lib/config.ts`. Never read `process.env` directly anywhere else. Use `getModel("dev" | "demo" | "evalJudge")` for LLM instances — never hardcode model id strings outside config.
 
-```typescript
-// src/lib/config.ts
-import { z } from "zod"
+Authoritative schema and defaults: `src/lib/config.ts` and `.env.example`. Highlights:
 
-const envSchema = z.object({
-  DATABASE_URL:          z.string().url(),
-  REDIS_URL:             z.string().url(),
-  SUPABASE_URL:          z.string().url(),
-  SUPABASE_ANON_KEY:     z.string(),
-  OPENROUTER_API_KEY:    z.string(),
-  RESEND_API_KEY:        z.string(),
-  DEMO_DATE:             z.string().default(new Date().toISOString()),
-  MODEL_DEV:             z.string().default("google/gemini-2.0-flash"),
-  MODEL_DEMO:            z.string().default("anthropic/claude-haiku-4-5"),
-  MODEL_EVAL_JUDGE:      z.string().default("google/gemini-flash-1.5"),
-  DRY_RUN:               z.boolean().default(false),
-  NODE_ENV:              z.enum(["development", "production", "test"]),
-})
-
-export const env = envSchema.parse(process.env)
-
-// Always use env.MODEL_DEV or env.MODEL_DEMO — never hardcode a model string
-```
+- **`DRY_RUN`** defaults to **`true`** — emails/external side effects suppressed; DB writes still occur.
+- **`DEMO_DATE`** — all date logic relative to this (never `new Date()` directly).
+- **`MODEL_*` / `getModel`** — AUT uses `dev`; soft judges use `evalJudge` only.
+- **Cheap-eval:** `CI_LIVE_EVAL` (default false), `EVAL_ALLOW_FULL_IN_CI` (default false), suite modes in `src/evals/suite-modes.ts`.
+- **Scaffolds:** see [Feature-flag scaffolds](#feature-flag-scaffolds-default-off) above.
 
 ### DEMO_DATE
 
@@ -586,3 +600,7 @@ const daysUntilExpiry = differenceInDays(doc.expiryDate, today)
 // Never do this
 const daysUntilExpiry = differenceInDays(doc.expiryDate, new Date())
 ```
+
+### DRY_RUN
+
+Before any email, webhook, or vendor call, check `env.DRY_RUN` (and typically `NODE_ENV === "test"`). Action tools still call `vault.logAction` with a dry-run outcome so the audit trail remains complete.

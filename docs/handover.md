@@ -1,5 +1,7 @@
 # Cerebro Handover for New Assistant
 
+> **Stale snapshot.** This file was written during early Milestone scaffolding and does **not** describe current `main`. For setup, architecture, evals, and agent capabilities, use **`README.md`**, **`docs/architecture.md`**, and **`ARCHITECTURE.md`**. Section 9 (critical rules) below remains directionally correct.
+
 ## 1. What This Project Is
 Cerebro is a FutureVault-oriented autonomous document-vault agent system that uses two specialized agents (Compliance and Onboarding) to monitor client document states and trigger escalating actions with full auditability; it is designed to demonstrate that a static vault can become an active operational layer with event-driven and scheduled automation for regulated advisory workflows.
 

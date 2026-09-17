@@ -8,17 +8,19 @@ A browser request hits the Next.js App Router. **Server components and route han
 
 Agents are **not** executed inside API handlers for long-running work. Manual triggers (`POST /api/agents/trigger`) and upload-driven jobs enqueue work to Redis-backed queues; **simulation** batches enqueue day/client slices to the simulation queue. The **BullMQ worker** in `src/lib/queue/workers.ts` runs inside a worker process (started by your process manager or `npm run workers` for the dedicated self-correction workers) and is the place where `VaultService` is constructed per `clientId` and Mastra `generate` is called with toolsets.
 
-Configuration is centralized: **`src/lib/config.ts`** parses `process.env` once and exports `env` and `getModel()`. No other file should read raw environment variables, per project rules.
+Configuration is centralized: **`src/lib/config.ts`** parses `process.env` once and exports `env` and `getModel()`. No other file should read raw environment variables, per project rules. Prefer `DRY_RUN=true` and `DEMO_DATE` for local work; agent capability tools and flag-off scaffolds (OM, sanctions seam, SOTA watch stubs) are summarized in `README.md` and `docs/architecture.md`.
 
 ## Eval pipeline
 
-`runAllEvals()` in `src/evals/run.ts` is the single entry point used by the CLI (`npm run eval` / `npm run eval:dev`), the Testing API (`POST /api/testing/run`), and shadow runs (with `skipPersist: true`).
+`runAllEvals()` in `src/evals/run.ts` is the single entry point used by the CLI (`npm run eval` / `eval:canary` / `eval:dev` / `eval:smoke`), the Testing API (`POST /api/testing/run`), and shadow runs (with `skipPersist: true`).
+
+**Suite modes** (`src/evals/suite-modes.ts`): `canary` (stratified PR/ship path), `full` (nightly / explicit release), `smoke` (seeded subsample, always non-final), `clientIds` (debug allowlist). Default PR CI is **not** live eval — `.github/workflows/ci-unit.yml` runs `npm run test:unit` with `CI_LIVE_EVAL=false` (`$0` OpenRouter). Full suite under CI requires `EVAL_ALLOW_FULL_IN_CI=true`. Models: AUT via `getModel("dev")`; soft judges via `getModel("evalJudge")`.
 
 The function loads **compliance** and **onboarding** scenarios from `src/evals/scenarios/`. Each scenario specifies a `clientId` that exists in seeded data, an agent type, input text, expected ground truth, and a list of **scorers** imported from `src/evals/scorers/`. Scorers are built with `createScorer` from `@mastra/core/evals` (not a separate `@mastra/evals` package).
 
 For each scenario, the code constructs a `VaultService` for that client, builds shared + domain tool objects, and calls `agent.generate()` on the memoized Mastra agent from `src/agents/mastra.ts`. Scorers receive model output plus ground truth and return per-scorer scores. Aggregates are rolled into `overallScore` and `scorerBreakdown`. Unless `skipPersist` is set, a row is inserted into **`EvalRun`** with JSON blobs for `scenarioResults` and `scorerBreakdown`, and an optional **`GITHUB_SHA`**.
 
-When `enforceThreshold` is true (CLI `npm run eval`), `assertEvalOverallScore()` compares `overallScore` to `EVAL_OVERALL_THRESHOLD` in `src/evals/threshold.ts` and throws if the gate fails.
+When `enforceThreshold` is true (CLI `npm run eval` / `eval:canary`), `assertEvalOverallScore()` compares `overallScore` to `EVAL_OVERALL_THRESHOLD` in `src/evals/threshold.ts` and throws if the gate fails.
 
 After a persisted run, if any scenario has a failing scorer, the mutation circuit in `src/lib/mutation-circuit.ts` may allow enqueueing a **mutation-analysis** job on Redis. If Redis is unavailable, the eval still completes but enqueue fails and is logged.
 
