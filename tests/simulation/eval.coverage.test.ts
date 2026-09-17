@@ -105,5 +105,7 @@ describe("Eval Runner - Coverage & Batching", () => {
     expect(result).toBeDefined();
     expect(Object.keys(result.scenarioResults).length).toBe(30);
     expect(result.overallScore).toBe(1.0); // All mocks return 1.0
+    expect(result.suite.mode).toBe("full");
+    expect(result.isFinal).toBe(true);
   });
 });

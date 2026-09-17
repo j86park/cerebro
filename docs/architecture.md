@@ -155,6 +155,7 @@ cerebro/
 │   │   ├── pass-k.ts
 │   │   ├── canary-strata.ts     ← stratified canary metadata (cheap-eval PR1)
 │   │   ├── scorer-selection.ts  ← canary-ci hard-only vs full + soft short-circuit
+│   │   ├── suite-modes.ts       ← canary/full/smoke/clientIds suite selection (cheap-eval PR2)
 │   │   └── ground-truth.ts
 │   └── app/                     ← Next.js App Router
 │       ├── api/
