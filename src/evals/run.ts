@@ -220,8 +220,6 @@ export async function runAllEvals(
         })
       : suiteSelectionSchema.parse(options?.suite ?? { mode: "full" });
 
-  assertFullSuiteAllowedInCi(suiteSelection);
-
   const canaryIds = new Set(await getCanaryClientIdsAsync());
   const suiteResolution = resolveSuite(suiteSelection, catalogIds, canaryIds);
   const clientIdFilter = new Set(suiteResolution.clientIds);
@@ -423,6 +421,9 @@ if (isMain) {
     batchIdx !== -1 ? parseInt(args[batchIdx + 1] ?? "3", 10) : 3;
   const enforceThreshold = args.includes("--enforce-threshold");
   const suite = parseSuiteSelectionFromArgs(args);
+  // CLI / npm scripts refuse full×live under CI unless explicitly opted in.
+  // Programmatic callers (mocked unit coverage, shadow clientIds) are not gated here.
+  assertFullSuiteAllowedInCi(suite);
   // Scorer mode: explicit --canary-ci forces hard-only; else follow suite default.
   const scorerMode: EvalRunMode | undefined = args.includes("--canary-ci")
     ? "canary-ci"
