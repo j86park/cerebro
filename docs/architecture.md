@@ -119,7 +119,10 @@ cerebro/
 │   │   │   └── vault-service.ts ← ALL db access goes through here
 │   │   ├── observability/
 │   │   │   ├── decision-log.ts  ← DecisionRecord Zod schemas (examiner SoR)
-│   │   │   └── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
+│   │   │   ├── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
+│   │   │   ├── experimentSidecar.ts ← optional Braintrust/LangSmith export (P2.4 watch; default off)
+│   │   │   └── evidenceSeal.ts ← pure sha256 seal chain helpers (P2.6 watch; no DB migration)
+
 │   │   ├── queue/
 │   │   │   ├── client.ts        ← BullMQ + Redis (`REDIS_URL`) setup
 │   │   │   ├── workers.ts       ← queue worker definitions
@@ -145,7 +148,9 @@ cerebro/
 │   │   │   ├── trajectory.ts
 │   │   │   └── reasoningQuality.ts
 │   │   ├── fixtures/            ← versioned trajectory JSON for $0 Vitest CI (cheap-eval PR0)
-│   │   │   └── trajectories/    ← golden-pass + seeded-defect fixtures (no OpenRouter)
+│   │   │   ├── trajectories/    ← golden-pass + seeded-defect fixtures (no OpenRouter)
+│   │   │   ├── traces/          ← frozen-trace decision fixtures (SOTA P2.4 watch)
+│   │   │   └── frozenTrace.ts   ← hash + in-memory frozen-trace replay gate
 │   │   ├── golden/              ← failure→golden export / human promote (WP-P1.5)
 │   │   ├── scenarios/
 │   │   │   ├── compliance.eval.ts
