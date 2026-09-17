@@ -29,6 +29,11 @@ export {
 
 export { getDocumentExtractAdapter } from "./factory";
 export { extractFieldsHeuristic } from "./heuristicAdapter";
+export { createDoclingExtractAdapter } from "./doclingStubAdapter";
+export {
+  normalizeDoclingFixture,
+  doclingNormalizeInputSchema,
+} from "./doclingNormalize";
 
 /**
  * Runs the configured (or overridden) extract adapter with Zod I/O validation.

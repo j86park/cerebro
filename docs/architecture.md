@@ -110,16 +110,22 @@ cerebro/
 │   ├── lib/
 │   │   ├── documents/
 │   │   │   ├── parser.ts        ← PDF text extract
-│   │   │   ├── extract/         ← pluggable field extract adapters (WP-P1.2)
+│   │   │   ├── extract/         ← pluggable field extract adapters (WP-P1.2; docling stub P2.2 watch)
 │   │   │   ├── checklist.ts     ← stage/risk checklists + DEMO_DATE validators
 │   │   │   ├── injectionHygiene.ts
 │   │   │   └── registry.ts
+│   │   ├── memory/              ← OM feature-flag helpers + tool-as-subagent stubs (T2.1)
+│   │   ├── sanctions/           ← sanctions/PEP check adapter seam (T2.4; dry-run + Alloy stub)
 │   │   ├── db/
 │   │   │   ├── client.ts        ← Prisma client singleton
 │   │   │   └── vault-service.ts ← ALL db access goes through here
 │   │   ├── observability/
 │   │   │   ├── decision-log.ts  ← DecisionRecord Zod schemas (examiner SoR)
-│   │   │   └── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
+│   │   │   ├── mastra-tracing.ts ← Mastra AI Tracing tags + DefaultExporter
+│   │   │   ├── experimentSidecar.ts ← optional Braintrust/LangSmith export (P2.4 watch; default off)
+│   │   │   └── evidenceSeal.ts ← pure sha256 seal chain helpers (P2.6 watch; no DB migration)
+│   │   ├── orchestration/       ← durable-engine probe for Temporal go/no-go (P2.1 watch)
+│   │   ├── routing/             ← hybrid MAS↔SAS cost cascade helpers (P2.7 watch; flag-off)
 │   │   ├── queue/
 │   │   │   ├── client.ts        ← BullMQ + Redis (`REDIS_URL`) setup
 │   │   │   ├── workers.ts       ← queue worker definitions
@@ -147,7 +153,9 @@ cerebro/
 │   │   │   ├── reasoningQuality.ts
 │   │   │   └── agentJudge.ts    ← Agent-as-a-Judge planner stub (P2.5 watch; flag-off; not CI gate)
 │   │   ├── fixtures/            ← versioned trajectory JSON for $0 Vitest CI (cheap-eval PR0)
-│   │   │   └── trajectories/    ← golden-pass + seeded-defect fixtures (no OpenRouter)
+│   │   │   ├── trajectories/    ← golden-pass + seeded-defect fixtures (no OpenRouter)
+│   │   │   ├── traces/          ← frozen-trace decision fixtures (SOTA P2.4 watch)
+│   │   │   └── frozenTrace.ts   ← hash + in-memory frozen-trace replay gate
 │   │   ├── golden/              ← failure→golden export / human promote (WP-P1.5)
 │   │   ├── scenarios/
 │   │   │   ├── compliance.eval.ts

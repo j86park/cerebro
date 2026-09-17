@@ -14,6 +14,39 @@ vi.mock("@/lib/config", () => ({
   getModel: vi.fn(),
 }));
 
+// Unit lane must never open a real Redis/BullMQ client. Importing
+// processOnlineJudgeJob pulls @/lib/queue/client via the worker module;
+// without this mock, ioredis retries ECONNREFUSED and Vitest can tear down
+// while onUserConsoleLog is still pending (EnvironmentTeardownError).
+vi.mock("@/lib/queue/client", () => ({
+  connection: {
+    on: vi.fn(),
+    quit: vi.fn().mockResolvedValue("OK"),
+    disconnect: vi.fn(),
+  },
+  queues: {},
+}));
+
+vi.mock("bullmq", () => ({
+  Worker: class {
+    on = vi.fn();
+  },
+  Queue: class {
+    name: string;
+    constructor(name: string) {
+      this.name = name;
+    }
+  },
+}));
+
+vi.mock("ioredis", () => ({
+  default: class RedisMock {
+    on = vi.fn();
+    quit = vi.fn().mockResolvedValue("OK");
+    disconnect = vi.fn();
+  },
+}));
+
 describe("online judge dual-stream sampling (cheap-eval PR5)", () => {
   beforeEach(() => {
     vi.resetModules();

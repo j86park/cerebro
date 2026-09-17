@@ -171,11 +171,31 @@ const envSchema = z.object({
   EVAL_PASS_K: z.coerce.number().int().min(3).max(5).default(3),
   /**
    * Document field extract adapter. Policy (Zod checklist / DEMO_DATE) stays in Cerebro.
-   * `heuristic` / `llm-demo` for demo; `textract` / `persona` are stubs until credentials land.
+   * `heuristic` / `llm-demo` for demo; `textract` / `persona` / `docling` are stubs until wired.
    */
   DOCUMENT_EXTRACT_PROVIDER: z
-    .enum(["heuristic", "llm-demo", "textract", "persona"])
+    .enum(["heuristic", "llm-demo", "textract", "persona", "docling"])
     .default("heuristic"),
+  /**
+   * Durable-engine probe for Temporal/Inngest go/no-go (SOTA P2.1 watch).
+   * Default false — Mastra snapshots remain the durability path.
+   */
+  DURABLE_ENGINE_PROBE: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
+  /**
+   * Hybrid MAS↔SAS cost cascade helpers (SOTA P2.7 watch).
+   * Default false — worker routing unchanged; never overrides policy matrix.
+   */
+  HYBRID_COST_CASCADE: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
   /**
    * Uniform stream: fraction of completed agent jobs for async online judge (WP-P1.7 / PR5).
    * Cap 5%; 0 disables. Sampling never blocks the agent worker; DRY_RUN skips LLM calls.
@@ -209,6 +229,24 @@ const envSchema = z.object({
    */
   AGENT_MAX_STEPS: z.coerce.number().int().min(1).max(32).default(12),
   /**
+   * Pilot: Mastra Observational Memory on Compliance/Onboarding threads.
+   * Default false — T2.1 gate unmet (no proven long-thread / tool-as-subagent pressure).
+   * Even when true, runtime still disables under DRY_RUN and NODE_ENV=test ($0 CI).
+   * Never invents a third production agent; OM compresses existing agent threads only.
+   */
+  AGENT_OBSERVATIONAL_MEMORY: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
+  /**
+   * Sanctions/PEP check adapter provider (T2.4 seam).
+   * Vault-lifecycle only — no Alloy identity fabric / AML investigation workforce.
+   * `dry-run` never claims clearance; `alloy` is an unconfigured stub until credentials land.
+   */
+  SANCTIONS_CHECK_PROVIDER: z.enum(["dry-run", "alloy"]).default("dry-run"),
+  /**
    * True when running under CI (GitHub Actions sets CI=true / GITHUB_ACTIONS=true).
    * Used to refuse accidental full×live suite runs (cheap-eval PR2).
    */
@@ -233,6 +271,23 @@ const envSchema = z.object({
    * Default false — fixture LOO stays $0; live only when fixture ablation is inconclusive.
    */
   EVAL_LIVE_ABLATION: z
+    .preprocess(
+      (value) => value === "true" || value === "1" || value === true,
+      z.boolean()
+    )
+    .default(false),
+  /**
+   * Optional experiment UI sidecar (SOTA P2.4 watch).
+   * Default `off` — Braintrust/LangSmith are never the CI system of record.
+   */
+  EXPERIMENT_SIDECAR: z
+    .enum(["off", "braintrust", "langsmith"])
+    .default("off"),
+  /**
+   * Cryptographic evidence seal helpers (SOTA P2.6 watch).
+   * Default false — workers do not write seals; append-only ledger remains SoR.
+   */
+  EVIDENCE_SEAL: z
     .preprocess(
       (value) => value === "true" || value === "1" || value === true,
       z.boolean()
@@ -407,4 +462,16 @@ export function getAgentMaxSteps(override?: number): number {
     throw new Error(`getAgentMaxSteps override must be a positive integer, got ${override}`);
   }
   return Math.min(Math.floor(override), cap);
+}
+
+/**
+ * Returns whether Observational Memory may activate at runtime.
+ * Requires AGENT_OBSERVATIONAL_MEMORY=true and fails closed under DRY_RUN / test
+ * so default CI stays at $0 OpenRouter for Observer/Reflector calls.
+ */
+export function isObservationalMemoryEnabled(): boolean {
+  if (!env.AGENT_OBSERVATIONAL_MEMORY) return false;
+  if (env.DRY_RUN) return false;
+  if (env.NODE_ENV === "test") return false;
+  return true;
 }

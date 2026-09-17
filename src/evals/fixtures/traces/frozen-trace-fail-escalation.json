@@ -1,0 +1,15 @@
+{
+  "fixtureId": "frozen-trace-fail-escalation",
+  "jobId": "scan:CLT-003:2026-03-15",
+  "traceId": "job:scan:CLT-003:2026-03-15",
+  "toolExecuted": ["escalateToComplianceOfficer"],
+  "decisionOutcomes": [
+    {
+      "toolExecuted": "escalateToComplianceOfficer",
+      "outcome": "failed",
+      "refusalCodes": ["TIMEOUT"]
+    }
+  ],
+  "contentHash": "7231cd8341fc9ea0da455f35232363127ab9fe08195149cbd05fcb48100c7816",
+  "note": "SOTA P2.4 watch — seeded failed decision (hash ok → fail, not diverged)"
+}
