@@ -6,6 +6,10 @@ import { EscalationQueuePanel } from "@/components/dashboard/EscalationQueuePane
 import { ApprovalPacketsPanel } from "@/components/dashboard/ApprovalPacketsPanel";
 import { AgentControls } from "@/components/dashboard/AgentControls";
 import { prisma } from "@/lib/db/client";
+
+// Dashboard data is runtime state and must not be fetched while building the
+// application image or static output.
+export const dynamic = "force-dynamic";
 import { env } from "@/lib/config";
 import {
   listPendingApprovalPackets,

@@ -80,6 +80,11 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+The `/dashboard` and `/testing` pages are intentionally server-rendered at
+request time because they read live PostgreSQL state. A production build does
+not need a reachable database, but the configured `DATABASE_URL` must be
+available when the server handles those routes.
+
 ---
 
 ## Environment variables
