@@ -48,8 +48,6 @@ async function main() {
     `[sim+eval] Simulation: ${CLIENT_COUNT} clients, ${SIMULATED_DAYS} day(s), real agents`
   );
 
-  await orchestrator.seedSimulationClients(CLIENT_COUNT);
-
   const simRun = await orchestrator.createSimulationRun({
     clientCount: CLIENT_COUNT,
     simulatedDays: SIMULATED_DAYS,
@@ -58,6 +56,8 @@ async function main() {
     randomSeed: `real-eval-${Date.now()}`,
     useMockAgents: false,
   });
+
+  await orchestrator.seedSimulationClients(CLIENT_COUNT, simRun.id);
 
   await prisma.simulationRun.update({
     where: { id: simRun.id },

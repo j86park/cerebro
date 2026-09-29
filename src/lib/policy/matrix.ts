@@ -76,6 +76,9 @@ const DEFAULT_RULES: ToolPolicyRule[] = [
   },
   { domain: "compliance", stage: 5, toolName: "requestMissingDocument", mode: "block" },
 
+  // Stage 0 may bootstrap a new client by requesting the first Stage 1 document.
+  { domain: "onboarding", stage: 0, toolName: "requestDocument", mode: "auto" },
+
   // Onboarding stages 1–4
   { domain: "onboarding", stage: 1, toolName: "requestDocument", mode: "auto" },
   { domain: "onboarding", stage: 1, toolName: "advanceOnboardingStage", mode: "auto" },

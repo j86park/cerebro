@@ -139,7 +139,8 @@ describe("VaultService client scoping", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           clientId: "CLT-001",
-          documentId: "DOC-FOREIGN",
+          documentId: undefined,
+          citedFields: expect.objectContaining({ documentId: "DOC-FOREIGN" }),
           actionType: "DOCUMENT_ACCESS_DENIED",
           outcome: "DENIED",
           actor: "SYSTEM",

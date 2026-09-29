@@ -12,7 +12,7 @@ async function triggerLoadTest() {
   const args = process.argv.slice(2);
   const clientCount = parseInt(args[0]) || 10000;
   const simulatedDays = parseInt(args[1]) || 30;
-  const useMockAgents = args[2] === "true" || true; // Default to true for speed
+  const useMockAgents = args[2] !== "false"; // Default to true for speed
   const batchSize = 10; // More aggressive batching for 10k clients
 
   console.log(`\n--- Cerebro Load Test Trigger ---`);
@@ -36,12 +36,16 @@ async function triggerLoadTest() {
   console.log(`\nCreated Simulation Run: ${run.id}`);
   console.log(`Status: PENDING`);
 
+  await orchestrator.seedSimulationClients(clientCount, run.id);
+
   // 2. Fragment the simulation into job batches and enqueue
   console.log(`Enqueuing batches...`);
   
   const totalDayBatches = Math.ceil(simulatedDays / batchSize);
   const clientBatchSize = 1000;
   const totalClientBatches = Math.ceil(clientCount / clientBatchSize);
+  const batchesTotal = totalDayBatches * totalClientBatches;
+  await prisma.simulationRun.update({ where: { id: run.id }, data: { batchesTotal } });
   
   let jobsEnqueued = 0;
   for (let d = 0; d < totalDayBatches; d++) {
@@ -52,7 +56,7 @@ async function triggerLoadTest() {
       const clientStart = c * clientBatchSize;
       const clientEnd = Math.min(clientStart + clientBatchSize, clientCount);
       
-      await queues.simulation.add(`load-test-day-${batchStart}-client-${clientStart}`, {
+      await queues.simulation.add(`load-test-${run.id}-day-${batchStart}-client-${clientStart}`, {
         runId: run.id,
         batchStart,
         batchEnd,
@@ -76,8 +80,10 @@ async function triggerLoadTest() {
     
     if (!currentRun) break;
 
-    const progress = (currentRun.batchesCompleted / simulatedDays) * 100;
-    process.stdout.write(`\rProgress: ${progress.toFixed(1)}% (${currentRun.batchesCompleted}/${simulatedDays} days)`);
+    const progress = (currentRun.batchesCompleted / batchesTotal) * 100;
+    process.stdout.write(`\rProgress: ${progress.toFixed(1)}% (${currentRun.batchesCompleted}/${batchesTotal} batches)`);
+
+    if (currentRun.status === "FAILED") throw new Error(`Simulation run ${run.id} failed`);
 
     if (currentRun.status === "COMPLETED") {
       isDone = true;

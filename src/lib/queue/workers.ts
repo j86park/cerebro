@@ -11,6 +11,7 @@ import { buildSharedTools } from "@/tools/shared";
 import { assertAgentToolAllowlist } from "@/lib/policy/toolAllowlists";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { processHitlResumeFromEscalation } from "@/lib/hitl/resume";
+import { buildHitlTimeoutJobId } from "@/lib/hitl/schemas";
 import { maybeEnqueueOnlineJudgeSample } from "@/lib/evals/enqueue-online-judge";
 import type {
   AgentJobPayload,
@@ -29,7 +30,7 @@ import {
   isHitlQueueJob,
 } from "./jobs";
 
-import { connection } from "./client";
+import { connection, queues } from "./client";
 import { emitAgentRunComplete } from "@/lib/events/emit";
 import {
   recordJobCompleted,
@@ -161,6 +162,7 @@ export async function processHitlJob(
       clientId: parsed.clientId,
       openKey: parsed.openKey,
       decision: "timeout",
+      workflowRunId: parsed.workflowRunId,
     });
     return { success: true, ...result };
   }
@@ -178,6 +180,13 @@ export async function processHitlJob(
     editedReasoning: parsed.editedReasoning,
     advisorId: parsed.advisorId,
   });
+  try {
+    const timeout = await queues.priority.getJob(buildHitlTimeoutJobId(parsed.workflowRunId));
+    await timeout?.remove();
+  } catch (error) {
+    // A timeout already promoted to active is handled idempotently above.
+    console.warn("[Worker] HITL timeout cancellation raced processing:", error);
+  }
   return { success: true, ...result };
 }
 
@@ -318,6 +327,11 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
     });
 
     const tools = extractToolNames(result);
+    const usage = result.usage as {
+      inputTokens?: number;
+      outputTokens?: number;
+      totalTokens?: number;
+    } | undefined;
 
     await vault.logDecision({
       jobId,
@@ -331,7 +345,14 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
         ? "Agent run completed under DRY_RUN (externals suppressed)"
         : "Agent run completed successfully",
       contentCaptured,
-      metadata: { trigger, textLength: result.text?.length ?? 0 },
+      metadata: {
+        trigger,
+        textLength: result.text?.length ?? 0,
+        inputTokens: usage?.inputTokens ?? null,
+        outputTokens: usage?.outputTokens ?? null,
+        totalTokens: usage?.totalTokens ?? null,
+        stepCount: result.steps?.length ?? null,
+      },
     });
 
     console.log(
@@ -448,6 +469,9 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
   );
 
   const orchestrator = new SimulationOrchestrator();
+  if (await orchestrator.isBatchComplete(runId, batchStart, clientStart ?? 0)) {
+    return { success: true, deduplicated: true };
+  }
   const clientRange = (clientStart !== undefined && clientEnd !== undefined) 
     ? { start: clientStart, end: clientEnd } 
     : undefined;
@@ -470,7 +494,7 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
     }
     
     // Update progress ONLY after the entire batch is finished
-    await orchestrator.incrementProgress(runId);
+    await orchestrator.completeBatch(runId, batchStart, clientStart ?? 0);
 
     const totalElapsed = (Date.now() - startTime) / 1000;
     console.log(`[Worker] Simulation batch ${batchStart}-${batchEnd} completed for run ${runId} in ${totalElapsed.toFixed(2)}s`);

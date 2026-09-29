@@ -73,6 +73,7 @@ export async function processHitlResumeFromEscalation(input: {
   decision: HitlDecision;
   editedReasoning?: string;
   advisorId?: string;
+  workflowRunId?: string;
   resumeWorkflow?: ResumeWorkflowFn;
 }): Promise<{
   decision: HitlDecision;
@@ -97,6 +98,15 @@ export async function processHitlResumeFromEscalation(input: {
 
   const row = await input.vault.getEscalationStateByOpenKey(parsed.openKey);
   if (!row || typeof row !== "object" || !("hitlContext" in row)) {
+    // An approved/denied escalation clears openKey. A delayed timeout racing
+    // that resolution is successful no-op, not a retryable worker failure.
+    if (parsed.decision === "timeout" && input.workflowRunId) {
+      return {
+        decision: "timeout",
+        outcome: "HITL_TIMEOUT_ALREADY_RESOLVED",
+        workflowRunId: input.workflowRunId,
+      };
+    }
     throw new Error(
       `No pending HITL escalation openKey=${parsed.openKey} for client ${parsed.clientId}`,
     );

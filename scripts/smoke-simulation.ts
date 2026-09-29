@@ -51,9 +51,6 @@ async function main() {
     `[smoke] Starting simulation: ${CLIENT_COUNT} clients, ${SIMULATED_DAYS} day(s), mock agents`
   );
 
-  const seedResult = await orchestrator.seedSimulationClients(CLIENT_COUNT);
-  console.log(`[smoke] Seeded simulation clients: ${seedResult.count}`);
-
   const run = await orchestrator.createSimulationRun({
     clientCount: CLIENT_COUNT,
     simulatedDays: SIMULATED_DAYS,
@@ -63,6 +60,9 @@ async function main() {
     useMockAgents: true,
   });
   console.log(`[smoke] Created run ${run.id}`);
+
+  const seedResult = await orchestrator.seedSimulationClients(CLIENT_COUNT, run.id);
+  console.log(`[smoke] Seeded simulation clients: ${seedResult.count}`);
 
   await prisma.simulationRun.update({
     where: { id: run.id },

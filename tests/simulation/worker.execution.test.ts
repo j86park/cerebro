@@ -25,10 +25,10 @@ vi.mock("bullmq", () => {
 });
 
 // Use vi.hoisted to ensure these are available to vi.mock
-const { mockTick, mockIncrementProgress, mockAggregateMetrics, mockGetRun } =
+const { mockTick, mockCompleteBatch, mockAggregateMetrics, mockGetRun } =
   vi.hoisted(() => ({
     mockTick: vi.fn().mockResolvedValue({ simDate: new Date(), clientCount: 10 }),
-    mockIncrementProgress: vi.fn().mockResolvedValue({}),
+    mockCompleteBatch: vi.fn().mockResolvedValue({ completed: true }),
     mockAggregateMetrics: vi.fn().mockResolvedValue(undefined),
     mockGetRun: vi.fn().mockResolvedValue({
       id: "run-123",
@@ -43,7 +43,8 @@ vi.mock("@/lib/simulation/orchestrator", () => {
     SimulationOrchestrator: vi.fn().mockImplementation(function() {
       return {
         tick: mockTick,
-        incrementProgress: mockIncrementProgress,
+        completeBatch: mockCompleteBatch,
+        isBatchComplete: vi.fn().mockResolvedValue(false),
         aggregateMetrics: mockAggregateMetrics,
         getRun: mockGetRun,
       };
@@ -68,6 +69,6 @@ describe("Simulation Worker Execution", () => {
 
     expect(result.success).toBe(true);
     expect(mockTick).toHaveBeenCalledTimes(3);
-    expect(mockIncrementProgress).toHaveBeenCalledTimes(1);
+    expect(mockCompleteBatch).toHaveBeenCalledTimes(1);
   });
 });

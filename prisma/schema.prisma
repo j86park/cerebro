@@ -31,6 +31,8 @@ model Advisor {
 
 model Client {
   id               String           @id @default(cuid())
+  simulationRunId  String?
+  simulationRun    SimulationRun?   @relation(fields: [simulationRunId], references: [id], onDelete: Restrict)
   advisorId        String
   advisor          Advisor          @relation(fields: [advisorId], references: [id])
   firmId           String
@@ -47,6 +49,8 @@ model Client {
   decisionRecords  DecisionRecord[]
   escalationStates EscalationState[]
   onboardingStageState OnboardingStage?
+
+  @@index([simulationRunId, id])
 }
 
 model Document {
@@ -184,6 +188,18 @@ model SimulationRun {
   metrics             Json?
   startedAt           DateTime         @default(now())
   completedAt         DateTime?
+  clients             Client[]
+  completedBatches    SimulationBatchCompletion[]
+}
+
+model SimulationBatchCompletion {
+  runId       String
+  batchStart  Int
+  clientStart Int
+  completedAt DateTime      @default(now())
+  run         SimulationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@id([runId, batchStart, clientStart])
 }
 
 model EvalRun {
@@ -353,6 +369,7 @@ enum DocumentType {
 enum AgentType {
   COMPLIANCE
   ONBOARDING
+  SYSTEM
 }
 
 enum ActionType {
@@ -369,6 +386,7 @@ enum ActionType {
   ALERT_ADVISOR_STUCK
   STAGE_PROGRESS_NOTICE
   ONBOARDING_COMPLETE_NOTICE
+  DOCUMENT_ACCESS_DENIED
 }
 
 enum TriggerType {

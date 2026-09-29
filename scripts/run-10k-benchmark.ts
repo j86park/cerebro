@@ -6,13 +6,17 @@ async function run10kBenchmark() {
 
     console.log("--- 10k Benchmark Phase ---");
     
-    // 1. Purge
-    console.log("Purging old data...");
-    await orchestrator.purgeSimulationData();
+    const run = await orchestrator.createSimulationRun({
+      clientCount: 10000,
+      simulatedDays: 30,
+      clientResponseRate: 0.8,
+      advisorResponseRate: 0.9,
+      useMockAgents: true,
+    });
 
-    // 2. Seed 10k
+    // Seed a cohort owned by this run.
     console.log("Seeding 10,000 clients...");
-    await orchestrator.seedSimulationClients(10000);
+    await orchestrator.seedSimulationClients(10000, run.id);
 
     // 3. Trigger simulation via script or direct call
     // We'll run it for 30 days

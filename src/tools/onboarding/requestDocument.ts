@@ -76,7 +76,7 @@ export function buildRequestDocument(vault: VaultService) {
       await vault.checkActionCooldown("REQUEST_DOCUMENT", 3);
 
       const onChecklist = isDocumentOnStageChecklist(
-        { stage, accountType, riskProfile },
+        { stage: stage === 0 ? 1 : stage, accountType, riskProfile },
         parsedType,
       );
 
@@ -91,6 +91,14 @@ export function buildRequestDocument(vault: VaultService) {
         category: categoryForDocumentType(parsedType),
         status: "REQUESTED",
       });
+
+      if (stage === 0) {
+        await vault.upsertOnboardingStageState({
+          stage: 1,
+          status: "IN_PROGRESS",
+          checklistSnapshot: { bootstrapDocumentType: parsedType },
+        });
+      }
 
       await vault.logAction({
         agentType: "ONBOARDING",

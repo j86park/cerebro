@@ -11,25 +11,13 @@ describe.skipIf(!process.env.RUN_SIMULATION_LOAD_TESTS)(
   beforeEach(async () => {
     // 1. Ensure foundation exists (idempotent)
     await runSeed();
-    // 2. Purge old simulation data
-    await orchestrator.purgeSimulationData();
   }, 60000);
 
   it("should successfully seed and run 100 clients for 3 days without failure", async () => {
     const clientCount = 100;
     const simulatedDays = 3;
     
-    // 1. Seed
-    const seedResult = await orchestrator.seedSimulationClients(clientCount);
-    expect(seedResult.count).toBe(clientCount);
-    
-    // Verify DB count
-    const dbCount = await prisma.client.count({
-        where: { email: { endsWith: "@example.com" } }
-    });
-    expect(dbCount).toBe(clientCount);
-
-    // 2. Create Run
+    // Create a run before seeding its isolated cohort.
     const run = await orchestrator.createSimulationRun({
         clientCount,
         simulatedDays,
@@ -38,6 +26,11 @@ describe.skipIf(!process.env.RUN_SIMULATION_LOAD_TESTS)(
         randomSeed: "stability-test-" + Date.now(),
     });
     expect(run.status).toBe("PENDING");
+
+    const seedResult = await orchestrator.seedSimulationClients(clientCount, run.id);
+    expect(seedResult.count).toBe(clientCount);
+    const dbCount = await prisma.client.count({ where: { simulationRunId: run.id } });
+    expect(dbCount).toBe(clientCount);
 
     // 3. Process Ticks (serial for test stability)
     console.log(`[Test] Starting 7-day tick sequence for ${clientCount} clients...`);

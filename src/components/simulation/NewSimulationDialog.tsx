@@ -17,7 +17,7 @@ export function NewSimulationDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [params, setParams] = useState({
-    clientCount: 10000,
+    clientCount: 100,
     simulatedDays: 30,
     useMockAgents: true,
   });

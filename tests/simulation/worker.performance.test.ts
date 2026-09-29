@@ -16,7 +16,8 @@ describe("Worker Performance Benchmark", () => {
     mockOrchestrator.tick = vi
       .fn()
       .mockResolvedValue({ simDate: new Date(), eventsTriggered: 1 });
-    mockOrchestrator.incrementProgress = vi.fn().mockResolvedValue({});
+    mockOrchestrator.completeBatch = vi.fn().mockResolvedValue({ completed: true });
+    mockOrchestrator.isBatchComplete = vi.fn().mockResolvedValue(false);
     mockOrchestrator.aggregateMetrics = vi.fn().mockResolvedValue(undefined);
   });
 

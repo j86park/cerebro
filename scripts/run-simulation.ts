@@ -16,6 +16,9 @@ async function runStandaloneSimulation() {
   });
   
   console.log(`Created simulation run: ${run.id}`);
+
+  await orchestrator.seedSimulationClients(run.clientCount, run.id);
+  await prisma.simulationRun.update({ where: { id: run.id }, data: { batchesTotal: run.simulatedDays } });
   
   // 2. Process day-by-day (serial for CLI simplicity)
   for (let day = 0; day < run.simulatedDays; day++) {

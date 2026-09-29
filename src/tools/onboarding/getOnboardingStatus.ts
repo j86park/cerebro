@@ -73,7 +73,7 @@ export function buildGetOnboardingStatus(vault: VaultService) {
           : riskProfileSchema.parse(client.riskProfile);
 
       const checklistContext = {
-        stage: currentStage,
+        stage: currentStage === 0 ? 1 : currentStage,
         accountType,
         riskProfile,
       };

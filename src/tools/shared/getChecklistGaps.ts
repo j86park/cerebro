@@ -55,7 +55,7 @@ export function buildGetChecklistGaps(vault: VaultService) {
         uploadedAt?: Date | string | null;
       }>;
 
-      const stage = parsed.stage ?? (client.onboardingStage as number);
+      const stage = parsed.stage ?? Math.max(1, client.onboardingStage as number);
       const accountType = accountTypeSchema.parse(
         client.accountType ?? "INVESTMENT",
       );

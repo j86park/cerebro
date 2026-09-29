@@ -561,10 +561,12 @@ export class VaultService {
       actionType: string;
       documentId: string | null;
       performedAt: Date;
+      outcome: string | null;
     }>;
 
     const latest = history.find(
-      (h) => h.actionType === actionType && (!documentId || h.documentId === documentId)
+      (h) => h.actionType === actionType && h.outcome !== "POLICY_BLOCKED" &&
+        (!documentId || h.documentId === documentId)
     );
 
     if (latest) {
@@ -784,7 +786,8 @@ export class VaultService {
    */
   private async auditCrossClientDocumentAccess(documentId: string): Promise<void> {
     await this.logAction({
-      documentId,
+      // The probed document belongs to another client; never attach its FK to
+      // this vault's ledger row.
       agentType: "SYSTEM",
       actionType: "DOCUMENT_ACCESS_DENIED",
       trigger: "MANUAL",

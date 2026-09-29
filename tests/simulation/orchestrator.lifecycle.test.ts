@@ -55,38 +55,32 @@ describe("SimulationOrchestrator Lifecycle", () => {
   });
 
   it("should update progress and complete the run", async () => {
-    (prisma.simulationRun.findUnique as any).mockResolvedValue({
-      id: "sim_123",
-      batchesCompleted: 4,
-      batchesTotal: 5,
-    });
-
     (prisma.simulationRun.update as any).mockResolvedValue({
       id: "sim_123",
-      status: "COMPLETED",
+      batchesCompleted: 5,
+      batchesTotal: 5,
     });
+    (prisma.simulationRun as any).updateMany = vi.fn().mockResolvedValue({ count: 1 });
 
     await orchestrator.incrementProgress("sim_123");
 
     expect(prisma.simulationRun.update).toHaveBeenCalledWith({
       where: { id: "sim_123" },
       data: expect.objectContaining({
-        batchesCompleted: 5,
-        status: "COMPLETED",
+        batchesCompleted: { increment: 1 },
+        status: "RUNNING",
       }),
     });
+    expect((prisma.simulationRun as any).updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "COMPLETED" }),
+    }));
   });
 
   it("should update progress without completing if batches remaining", async () => {
-    (prisma.simulationRun.findUnique as any).mockResolvedValue({
-      id: "sim_123",
-      batchesCompleted: 2,
-      batchesTotal: 5,
-    });
-
     (prisma.simulationRun.update as any).mockResolvedValue({
       id: "sim_123",
-      status: "RUNNING",
+      batchesCompleted: 3,
+      batchesTotal: 5,
     });
 
     await orchestrator.incrementProgress("sim_123");
@@ -94,7 +88,7 @@ describe("SimulationOrchestrator Lifecycle", () => {
     expect(prisma.simulationRun.update).toHaveBeenCalledWith({
       where: { id: "sim_123" },
       data: expect.objectContaining({
-        batchesCompleted: 3,
+        batchesCompleted: { increment: 1 },
         status: "RUNNING",
       }),
     });

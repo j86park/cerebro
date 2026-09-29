@@ -2,7 +2,7 @@ import { Mastra } from "@mastra/core";
 import { getComplianceAgent } from "./compliance/agent";
 import { getOnboardingAgent } from "./onboarding/agent";
 import { complianceHitlApprovalWorkflow } from "./workflows/complianceHitl.workflow";
-import { mastraPostgres } from "@/lib/mastra-postgres";
+import { ensureMastraStorageInitialized, mastraPostgres } from "@/lib/mastra-postgres";
 import { registerCerebroMemoClear } from "@/lib/agent-runtime-registry";
 import { createCerebroObservability } from "@/lib/observability/mastra-tracing";
 
@@ -18,6 +18,7 @@ export async function getCerebro(): Promise<Mastra> {
   if (_cerebro) return _cerebro;
   if (!_initPromise) {
     _initPromise = (async () => {
+      await ensureMastraStorageInitialized();
       const [complianceAgent, onboardingAgent] = await Promise.all([
         getComplianceAgent(),
         getOnboardingAgent(),
@@ -35,7 +36,10 @@ export async function getCerebro(): Promise<Mastra> {
         ...(observability ? { observability } : {}),
       });
       return _cerebro;
-    })();
+    })().catch((error) => {
+      _initPromise = null;
+      throw error;
+    });
   }
   return _initPromise;
 }

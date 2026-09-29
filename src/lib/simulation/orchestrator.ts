@@ -10,6 +10,7 @@ import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { getAgentMaxSteps } from "@/lib/config";
+import { ensureMastraStorageInitialized } from "@/lib/mastra-postgres";
 
 export interface SimulationParams {
   clientCount: number;
@@ -39,27 +40,50 @@ export class SimulationOrchestrator {
   }
 
   async incrementProgress(runId: string) {
-    const run = await this.getRun(runId);
-    if (!run) return;
-
-    const batchesCompleted = run.batchesCompleted + 1;
-    const isCompleted = batchesCompleted >= run.batchesTotal;
-    
-    const data: Prisma.SimulationRunUpdateInput = {
-      batchesCompleted,
-      status: isCompleted ? "COMPLETED" : "RUNNING",
-    };
-
-    if (isCompleted) {
-      data.completedAt = new Date();
-      // Final aggregation on completion
+    const run = await prisma.simulationRun.update({
+      where: { id: runId },
+      data: { batchesCompleted: { increment: 1 }, status: "RUNNING" },
+    });
+    if (run.batchesTotal > 0 && run.batchesCompleted >= run.batchesTotal) {
+      await prisma.simulationRun.updateMany({
+        where: { id: runId, status: "RUNNING" },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      });
       await this.aggregateMetrics(runId);
     }
+    return this.getRun(runId);
+  }
 
-    return await prisma.simulationRun.update({
-      where: { id: runId },
-      data,
+  /** Records a batch once, so BullMQ retries cannot advance progress twice. */
+  async isBatchComplete(runId: string, batchStart: number, clientStart: number) {
+    return !!(await prisma.simulationBatchCompletion.findUnique({
+      where: { runId_batchStart_clientStart: { runId, batchStart, clientStart } },
+    }));
+  }
+
+  async completeBatch(runId: string, batchStart: number, clientStart: number) {
+    const result = await prisma.$transaction(async (tx) => {
+      const run = await tx.simulationRun.findUniqueOrThrow({ where: { id: runId } });
+      if (run.status === "FAILED") throw new Error(`Simulation run ${runId} failed`);
+      const inserted = await tx.simulationBatchCompletion.createMany({
+        data: [{ runId, batchStart, clientStart }],
+        skipDuplicates: true,
+      });
+      if (!inserted.count) return { completed: false, run };
+      const updated = await tx.simulationRun.update({
+        where: { id: runId },
+        data: { batchesCompleted: { increment: 1 }, status: "RUNNING" },
+      });
+      return { completed: true, run: updated };
     });
+    if (result.completed && result.run.batchesTotal > 0 &&
+        result.run.batchesCompleted >= result.run.batchesTotal) {
+      await prisma.simulationRun.updateMany({
+        where: { id: runId, status: "RUNNING" },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      });
+    }
+    return result;
   }
 
   async getRun(runId: string) {
@@ -82,13 +106,16 @@ export class SimulationOrchestrator {
   async tick(runId: string, currentDay: number, clientRange?: { start: number; end: number }) {
     const run = await this.getRun(runId);
     if (!run) throw new Error(`Simulation run ${runId} not found`);
+    if (run.status === "FAILED" || run.status === "COMPLETED") {
+      throw new Error(`Simulation run ${runId} is ${run.status}; refusing stale batch`);
+    }
 
     const baseDate = new Date(run.startedAt);
     const simDate = new Date(baseDate.getTime() + currentDay * 24 * 60 * 60 * 1000);
 
     // Fetch batch of clients
     const clients = await prisma.client.findMany({
-      where: { email: { endsWith: "@example.com" } },
+      where: { simulationRunId: runId },
       skip: clientRange?.start ?? 0,
       take: clientRange ? (clientRange.end - clientRange.start) : run.clientCount,
       orderBy: { id: 'asc' },
@@ -103,7 +130,7 @@ export class SimulationOrchestrator {
 
     const rng = new SeededRandom(`${run.randomSeed}-day-${currentDay}`);
     const factory = new EntityFactory(run.randomSeed, simDate);
-    const newDocs: Prisma.DocumentCreateManyInput[] = [];
+    let eventsTriggered = 0;
 
     const metricsJson =
       run.metrics && typeof run.metrics === "object" && !Array.isArray(run.metrics)
@@ -115,6 +142,7 @@ export class SimulationOrchestrator {
     let onboardingAgent: Awaited<ReturnType<typeof getOnboardingAgent>> | null =
       null;
     if (!useMock) {
+      await ensureMastraStorageInitialized();
       [complianceAgent, onboardingAgent] = await Promise.all([
         getComplianceAgent(),
         getOnboardingAgent(),
@@ -134,12 +162,16 @@ export class SimulationOrchestrator {
         const docs = factory.generateDocuments(client.id, profile).slice(0, 1);
         
         if (docs.length > 0) {
-          newDocs.push({
+          const inserted = await prisma.document.createMany({
+            data: [{
             ...docs[0],
             id: `${client.id}-SIM-${currentDay}`,
             status: "PENDING_REVIEW",
             uploadedAt: simDate,
-          } as Prisma.DocumentCreateManyInput);
+            } as Prisma.DocumentCreateManyInput],
+            skipDuplicates: true,
+          });
+          eventsTriggered += inserted.count;
         }
       }
 
@@ -191,14 +223,7 @@ export class SimulationOrchestrator {
       }
     }
     
-    if (newDocs.length > 0) {
-      await prisma.document.createMany({
-        data: newDocs,
-        skipDuplicates: true,
-      });
-    }
-    
-    return { simDate, clientCount: clients.length, eventsTriggered: newDocs.length };
+    return { simDate, clientCount: clients.length, eventsTriggered };
   }
 
   async aggregateMetrics(runId: string) {
@@ -207,14 +232,14 @@ export class SimulationOrchestrator {
 
     const documentStats = await prisma.document.groupBy({
       by: ['status'],
-      where: { client: { email: { endsWith: "@example.com" } } },
+      where: { client: { simulationRunId: runId } },
       _count: true,
     });
 
     const actionHistory = await prisma.agentAction.count({
       where: { 
         trigger: { in: ['SCHEDULED', 'EVENT_UPLOAD', 'SIMULATION'] }, 
-        client: { email: { endsWith: "@example.com" } },
+        client: { simulationRunId: runId },
         performedAt: { gte: new Date(run.startedAt) }
       }
     });
@@ -241,67 +266,61 @@ export class SimulationOrchestrator {
     return metrics;
   }
 
-  async seedSimulationClients(count: number, randomSeed?: string) {
-    console.log(`[Orchestrator] Seeding ${count} simulation clients...`);
-    const seed = randomSeed || Math.random().toString(36).substring(7);
-    const factory = new EntityFactory(seed);
-    
+  async seedSimulationClients(count: number, runId: string) {
+    if (!Number.isInteger(count) || count < 1) throw new Error("client count must be a positive integer");
+    const run = await this.getRun(runId);
+    if (!run) throw new Error(`Simulation run ${runId} not found`);
+    if (count !== run.clientCount) throw new Error(`Simulation run ${runId} expects ${run.clientCount} clients`);
+
+    // Reserved synthetic foundation. It never modifies demo firms/advisors.
+    await prisma.firm.upsert({
+      where: { id: "CEREBRO-SIM-FIRM" },
+      create: { id: "CEREBRO-SIM-FIRM", name: "Cerebro simulation" },
+      update: {},
+    });
+    await prisma.advisor.upsert({
+      where: { id: "CEREBRO-SIM-ADVISOR" },
+      create: {
+        id: "CEREBRO-SIM-ADVISOR",
+        firmId: "CEREBRO-SIM-FIRM",
+        name: "Simulation Advisor",
+        email: "cerebro-simulation-advisor@invalid.example",
+      },
+      update: {},
+    });
+
+    const factory = new EntityFactory(run.randomSeed);
     const batchSize = 1000;
-    const totalBatches = Math.ceil(count / batchSize);
-    
-    for (let i = 0; i < totalBatches; i++) {
-        const take = Math.min(batchSize, count - i * batchSize);
-        const candidates = factory.generateClients(take, i * batchSize);
-        
-        // Filter out existing clients to prevent unique constraint violations
-        const candidateEmails = candidates.map(c => c.email);
-        const existing = await prisma.client.findMany({
-            where: { email: { in: candidateEmails } },
-            select: { email: true }
-        });
-        const existingEmails = new Set(existing.map(e => e.email));
-        
-        const toCreate = candidates
-            .filter(c => !existingEmails.has(c.email))
-            .map(c => ({
-                ...c,
-                advisorId: "ADV-001",
-                firmId: "FIRM-001",
-            }));
-        
-        if (toCreate.length > 0) {
-            await prisma.client.createMany({
-                data: toCreate
-            });
-            console.log(`[Orchestrator] Seeded ${toCreate.length} new clients in batch ${i+1}/${totalBatches}`);
-        } else {
-            console.log(`[Orchestrator] Batch ${i+1}/${totalBatches} already exists. Skipping.`);
-        }
+    for (let start = 0; start < count; start += batchSize) {
+      const candidates = factory.generateClients(Math.min(batchSize, count - start), start);
+      await prisma.client.createMany({
+        data: candidates.map((client, index) => ({
+          ...client,
+          email: `sim-${runId}-${start + index}@example.com`,
+          firmId: "CEREBRO-SIM-FIRM",
+          advisorId: "CEREBRO-SIM-ADVISOR",
+          simulationRunId: runId,
+        })),
+        skipDuplicates: true,
+      });
     }
-    
-    return { count };
+    const seeded = await prisma.client.count({ where: { simulationRunId: runId } });
+    if (seeded !== count) throw new Error(`Simulation run ${runId} seeded ${seeded}/${count} clients`);
+    return { count: seeded };
   }
 
-  async purgeSimulationData() {
-    console.log("[Orchestrator] Purging simulation data...");
-    
-    const docs = await prisma.document.deleteMany({
-      where: {
-        OR: [
-          { client: { email: { endsWith: "@example.com" } } },
-          { id: { contains: "-SIM-" } }
-        ]
-      }
+  /** Deletes only artifacts owned by the named run. Callers must retire its jobs first. */
+  async purgeSimulationData(runId: string) {
+    if (!runId) throw new Error("simulation run id is required for purge");
+    const scope = { client: { simulationRunId: runId } };
+    return prisma.$transaction(async (tx) => {
+      await tx.decisionRecord.deleteMany({ where: scope });
+      await tx.escalationState.deleteMany({ where: scope });
+      await tx.onboardingStage.deleteMany({ where: scope });
+      const actions = await tx.agentAction.deleteMany({ where: scope });
+      const docs = await tx.document.deleteMany({ where: scope });
+      const clients = await tx.client.deleteMany({ where: { simulationRunId: runId } });
+      return { purgedDocuments: docs.count, purgedClients: clients.count, purgedActions: actions.count };
     });
-
-    const actions = await prisma.agentAction.deleteMany({
-        where: { client: { email: { endsWith: "@example.com" } } }
-    });
-
-    const clients = await prisma.client.deleteMany({
-      where: { email: { endsWith: "@example.com" } }
-    });
-
-    return { purgedDocuments: docs.count, purgedClients: clients.count, purgedActions: actions.count };
   }
 }

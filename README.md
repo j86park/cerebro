@@ -204,6 +204,14 @@ Workers require **Redis** (`REDIS_URL`) and a working database. If Redis is down
 
 Agent runs for vaults use the BullMQ worker in `src/lib/queue/workers.ts` (priority / scheduled / simulation queues)—same `VaultService` + Mastra path as evals.
 
+## Agent workflow remediation (September 2026)
+
+Apply pending Prisma migrations with `npm run db:migrate:prod` before starting updated workers. Interactive simulation submissions use `POST /api/simulation/runs` (the legacy `/api/simulation/start` delegates to it); they require Redis and create clients owned by one run. A stale run cannot process another run's clients, and run-specific cleanup requires an explicit run ID. See [workflow remediation and verification](docs/agent-workflow-remediation.md) for the exact isolation, retry, HITL, and recovery behavior.
+
+In a disposable database, run `node --import tsx scripts/verify-simulation-workflows.ts` to exercise the real route, queue, worker, scoped purge, denied-access audit, and timeout replay. For model checks, set `OPENROUTER_API_KEY` in the environment, use `DRY_RUN=true`, and run `node --import tsx scripts/verify-live-agent-workflows.ts`; monitor provider-side spending. `npm run test:unit`, `npm run type-check`, and `npm run build` are the automated gates.
+
+Existing production prompt versions override source prompt changes. `node --import tsx scripts/stage-workflow-prompts.ts` creates staging candidates only; production promotion still requires human confirmation. Never run the initial prompt seed script against an established production database to deploy a prompt update.
+
 ---
 
 ## Project structure
@@ -228,7 +236,7 @@ prisma/
 
 ## Forking and customising
 
-1. **Agents** — Edit prompt templates in `src/agents/compliance/prompts.ts` and `src/agents/onboarding/prompts.ts`, then seed/version via `npm run db:seed`.
+1. **Agents** — Edit prompt templates in `src/agents/compliance/prompts.ts` and `src/agents/onboarding/prompts.ts`. Seed only a fresh database with `npm run db:seed`; for an established database, stage candidate versions with `scripts/stage-workflow-prompts.ts` and use the human-confirmed promotion workflow.
 2. **Scenarios** — Edit `src/evals/ground-truth.ts` and scenario files under `src/evals/scenarios/`.
 3. **Tools** — Edit `src/tools/` and keep DB access inside `VaultService`.
 4. Re-run `npm run eval:canary` (or `npm run test:unit` for fixture gates) to establish a baseline.

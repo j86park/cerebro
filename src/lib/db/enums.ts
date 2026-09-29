@@ -54,6 +54,7 @@ export const DocumentCategory = {
 export const AgentType = {
   COMPLIANCE: "COMPLIANCE",
   ONBOARDING: "ONBOARDING",
+  SYSTEM: "SYSTEM",
 } as const;
 
 export const ActionType = {
@@ -70,6 +71,7 @@ export const ActionType = {
   ALERT_ADVISOR_STUCK: "ALERT_ADVISOR_STUCK",
   STAGE_PROGRESS_NOTICE: "STAGE_PROGRESS_NOTICE",
   ONBOARDING_COMPLETE_NOTICE: "ONBOARDING_COMPLETE_NOTICE",
+  DOCUMENT_ACCESS_DENIED: "DOCUMENT_ACCESS_DENIED",
 } as const;
 
 export const TriggerType = {

@@ -108,6 +108,36 @@ describe("email DRY_RUN parity (PR-C / T0.5)", () => {
     );
   });
 
+  it("bootstraps Stage 0 only after a successful first document request", async () => {
+    const vault = new VaultService({ clientId: "CLT-NEW" }, {} as never);
+    vault.getClientProfile = vi.fn().mockResolvedValue({
+      email: "new-client@example.com",
+      onboardingStage: 0,
+      accountType: "INVESTMENT",
+      riskProfile: null,
+    });
+    vault.checkActionCooldown = vi.fn().mockResolvedValue(undefined);
+    vault.upsertDocument = vi.fn().mockResolvedValue({});
+    vault.upsertOnboardingStageState = vi.fn().mockResolvedValue({});
+    vault.logAction = vi.fn().mockResolvedValue({ id: "a-bootstrap" });
+
+    const tool = buildRequestDocument(vault);
+    const result = await (tool as unknown as { execute: (input: {
+      documentType: string; message: string; reasoning: string;
+    }) => Promise<{ success: boolean; onChecklist: boolean }> }).execute({
+      documentType: "GOVERNMENT_ID",
+      message: "Please upload your government ID.",
+      reasoning: "The first identity document is required to begin onboarding.",
+    });
+
+    expect(result).toMatchObject({ success: true, onChecklist: true });
+    expect(vault.upsertOnboardingStageState).toHaveBeenCalledWith(expect.objectContaining({
+      stage: 1,
+      status: "IN_PROGRESS",
+    }));
+    expect(vault.logAction).toHaveBeenCalledTimes(1);
+  });
+
   it("alertAdvisorStuck emails the advisor via sendTransactionalEmail", async () => {
     const vault = new VaultService({ clientId: "CLT-123" }, {} as never);
     vault.getClientProfile = vi.fn().mockResolvedValue({
