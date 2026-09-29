@@ -91,7 +91,7 @@ describe("validateDocumentReceived → VALID (PR-B)", () => {
     expect(vault.updateDocumentStatus).not.toHaveBeenCalled();
   });
 
-  it("setDocumentStatus writes REQUESTED / PENDING_REVIEW / VALID", async () => {
+  it("setDocumentStatus writes REQUESTED / PENDING_REVIEW but cannot bypass VALID admission", async () => {
     const vault = new VaultService({ clientId: "CLT-123" }, {} as never);
     vault.updateDocumentStatus = vi.fn().mockResolvedValue({});
     vault.logAction = vi.fn().mockResolvedValue({ id: "a1" });
@@ -124,13 +124,13 @@ describe("validateDocumentReceived → VALID (PR-B)", () => {
       status: "PENDING_REVIEW",
       reasoning: "Client uploaded a file; awaiting admission validation next.",
     });
-    await exec({
+    expect(await exec({
       documentId: "d1",
       status: "VALID",
       reasoning: "Manual VALID write after offline review of the document.",
-    });
+    })).toMatchObject({ error: true });
 
-    expect(vault.updateDocumentStatus).toHaveBeenCalledTimes(3);
+    expect(vault.updateDocumentStatus).toHaveBeenCalledTimes(2);
   });
 
   it("upload → validate → VALID unblocks advanceOnboardingStage", async () => {

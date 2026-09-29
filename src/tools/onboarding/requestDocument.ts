@@ -7,6 +7,7 @@ import { sendTransactionalEmail } from "@/lib/email/resend";
 import {
   accountTypeSchema,
   categoryForDocumentType,
+  computeChecklistGaps,
   documentTypeSchema,
   isDocumentOnStageChecklist,
   riskProfileSchema,
@@ -73,12 +74,25 @@ export function buildRequestDocument(vault: VaultService) {
         args: { documentType: parsedType },
       });
 
-      await vault.checkActionCooldown("REQUEST_DOCUMENT", 3);
-
       const onChecklist = isDocumentOnStageChecklist(
         { stage: stage === 0 ? 1 : stage, accountType, riskProfile },
         parsedType,
       );
+      const documents = await vault.getDocuments() as Array<{
+        type: string; status: string; expiryDate?: Date | null; uploadedAt?: Date | null;
+      }>;
+      const gap = computeChecklistGaps(
+        { stage: stage === 0 ? 1 : stage, accountType, riskProfile }, documents, vault.getNow(),
+      ).find((item) => item.documentType === parsedType);
+      if (!onChecklist || !gap) {
+        throw new Error(`Cannot request ${parsedType}: it is not an unresolved gap on the current Stage ${stage === 0 ? 1 : stage} checklist.`);
+      }
+      const existing = documents.find((document) => document.type === parsedType);
+      if (existing?.status === "PENDING_REVIEW") {
+        throw new Error(`Cannot request ${parsedType}: the uploaded document is pending validation.`);
+      }
+
+      await vault.checkActionCooldown("REQUEST_DOCUMENT", 3, undefined, stage, "ONBOARDING");
 
       await sendTransactionalEmail({
         to: z.string().email().parse(client.email),
@@ -86,11 +100,14 @@ export function buildRequestDocument(vault: VaultService) {
         text: message,
       });
 
-      await vault.upsertDocument({
-        type: parsedType,
-        category: categoryForDocumentType(parsedType),
-        status: "REQUESTED",
-      });
+      // A replacement request must not erase an EXPIRED or stale document's status.
+      if (!existing || existing.status === "MISSING" || existing.status === "REQUESTED") {
+        await vault.upsertDocument({
+          type: parsedType,
+          category: categoryForDocumentType(parsedType),
+          status: "REQUESTED",
+        });
+      }
 
       if (stage === 0) {
         await vault.upsertOnboardingStageState({
@@ -106,7 +123,7 @@ export function buildRequestDocument(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "REQUEST_SENT",
-        nextScheduledAt: addDemoDays(3),
+        nextScheduledAt: addDemoDays(3, vault.getNow()),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
         reasonCodes: onChecklist

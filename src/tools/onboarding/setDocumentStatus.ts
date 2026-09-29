@@ -5,7 +5,6 @@ import { addDemoDays } from "@/lib/dates/demo-date";
 
 /** Statuses onboarding may write without borrowing the compliance toolset. */
 const onboardingWritableStatusSchema = z.enum([
-  "VALID",
   "REQUESTED",
   "PENDING_REVIEW",
 ]);
@@ -13,7 +12,7 @@ const onboardingWritableStatusSchema = z.enum([
 const inputSchema = z.object({
   documentId: z.string().describe("ID of the document to update"),
   status: onboardingWritableStatusSchema.describe(
-    "New onboarding-writable status (VALID, REQUESTED, or PENDING_REVIEW)",
+    "New onboarding-writable status (REQUESTED or PENDING_REVIEW)",
   ),
   notes: z.string().optional().describe("Optional notes about the status change"),
   reasoning: z
@@ -29,14 +28,14 @@ const outputSchema = z.object({
 });
 
 /**
- * Builds onboarding-only setDocumentStatus (VALID / REQUESTED / PENDING_REVIEW).
- * Does not expose compliance resolve tooling — use validateDocumentReceived for admission VALID.
+ * Builds onboarding-only setDocumentStatus (REQUESTED / PENDING_REVIEW).
+ * Only validateDocumentReceived may admit an upload as VALID.
  */
 export function buildSetDocumentStatus(vault: VaultService) {
   return createTool({
     id: "setDocumentStatus",
     description:
-      "Sets an onboarding document status to VALID, REQUESTED, or PENDING_REVIEW. Prefer validateDocumentReceived when admitting an upload as VALID.",
+      "Sets an onboarding document status to REQUESTED or PENDING_REVIEW. Use validateDocumentReceived to admit an upload as VALID.",
     inputSchema,
     outputSchema,
     execute: async (inputData) => {
@@ -46,11 +45,11 @@ export function buildSetDocumentStatus(vault: VaultService) {
 
       await vault.logAction({
         agentType: "ONBOARDING",
-        actionType: status === "VALID" ? "VALIDATE_DOCUMENT" : "REQUEST_DOCUMENT",
+        actionType: "REQUEST_DOCUMENT",
         trigger: "SCHEDULED",
         reasoning,
         outcome: `STATUS_UPDATED_TO_${status}`,
-        nextScheduledAt: addDemoDays(3),
+        nextScheduledAt: addDemoDays(3, vault.getNow()),
         documentId,
         reasonCodes: ["ONBOARDING_STATUS_WRITE"],
         citedFields: { newStatus: status },

@@ -77,7 +77,7 @@ export function buildRequestMissingDocument(vault: VaultService) {
         args: { documentType: parsedType },
       });
 
-      await vault.checkActionCooldown("REQUEST_DOCUMENT", 3);
+      await vault.checkActionCooldown("REQUEST_DOCUMENT", 3, undefined, undefined, "COMPLIANCE");
 
       const client = (await vault.getClientProfile()) as Record<
         string,
@@ -102,7 +102,7 @@ export function buildRequestMissingDocument(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "REQUEST_SENT",
-        nextScheduledAt: addDemoDays(3),
+        nextScheduledAt: addDemoDays(3, vault.getNow()),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
         reasonCodes: [

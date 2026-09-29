@@ -44,6 +44,7 @@ vi.mock("@/lib/simulation/orchestrator", () => {
       return {
         tick: mockTick,
         completeBatch: mockCompleteBatch,
+        enqueueNextDay: vi.fn().mockResolvedValue(0),
         isBatchComplete: vi.fn().mockResolvedValue(false),
         aggregateMetrics: mockAggregateMetrics,
         getRun: mockGetRun,

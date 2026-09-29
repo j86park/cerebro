@@ -9,10 +9,11 @@ import { ONBOARDING_STAGES } from "../../src/lib/documents/onboarding-stages";
 describe("Mock Agent Fidelity Validation (Isolated Logic)", () => {
   const mockAgent = new MockAgent();
   const demoDate = new Date(env.DEMO_DATE);
+  const supported = ["CLT-001", "CLT-002", "CLT-003", "CLT-004", "CLT-005", "CLT-006", "CLT-007", "CLT-008", "CLT-009", "CLT-010", "CLT-011", "CLT-012", "CLT-015"];
 
   function createMockVault(scenario: EvalScenario) {
     const { clientId, agentType } = scenario;
-    const accountType = (clientId.includes("CORP") || ["CLT-010", "CLT-016", "CLT-019", "CLT-023", "CLT-025", "CLT-027", "CLT-030"].includes(clientId)) ? "CORPORATE" : "INDIVIDUAL";
+    const accountType = (clientId.includes("CORP") || ["CLT-010", "CLT-016", "CLT-019", "CLT-023", "CLT-025", "CLT-027", "CLT-030"].includes(clientId)) ? "CORPORATE" : "RRSP";
 
     return {
       getNow: () => demoDate,
@@ -80,6 +81,8 @@ describe("Mock Agent Fidelity Validation (Isolated Logic)", () => {
         }
         if (scenario.clientId === "CLT-011") {
             history.push({ agentType: "COMPLIANCE", actionType: "NOTIFY_ADVISOR", escalationStage: 1, performedAt: new Date(demoDate.getTime() - 21 * 24 * 60 * 60 * 1000) });
+            history.push({ agentType: "COMPLIANCE", actionType: "SEND_CLIENT_REMINDER", escalationStage: 2, performedAt: new Date(demoDate.getTime() - 16 * 24 * 60 * 60 * 1000) });
+            history.push({ agentType: "COMPLIANCE", actionType: "SEND_CLIENT_REMINDER", escalationStage: 3, performedAt: new Date(demoDate.getTime() - 11 * 24 * 60 * 60 * 1000) });
         }
         if (["CLT-004", "CLT-009", "CLT-024"].includes(clientId)) {
             history.push({ agentType: "ONBOARDING", actionType: "REQUEST_DOCUMENT", performedAt: new Date(demoDate.getTime() - 10 * 24 * 60 * 60 * 1000) });
@@ -93,7 +96,6 @@ describe("Mock Agent Fidelity Validation (Isolated Logic)", () => {
   }
 
   it.each(GROUND_TRUTH)("should match ground truth logic for $clientId ($agentType)", async (scenario) => {
-    const supported = ["CLT-001", "CLT-002", "CLT-003", "CLT-004", "CLT-005", "CLT-006", "CLT-007", "CLT-008", "CLT-009", "CLT-010", "CLT-011", "CLT-012", "CLT-015"];
     if (!supported.includes(scenario.clientId)) return;
 
     const mockVault = createMockVault(scenario);
@@ -116,7 +118,17 @@ describe("Mock Agent Fidelity Validation (Isolated Logic)", () => {
     }
   }, 5000);
 
-  it("should achieve high fidelity agreement", () => {
-      expect(true).toBe(true);
+  it("achieves at least 95% action-and-stage agreement on supported reference scenarios", async () => {
+    const scenarios = GROUND_TRUTH.filter((scenario) => supported.includes(scenario.clientId));
+    const decisions = await Promise.all(scenarios.map(async (scenario) => ({
+      scenario,
+      decision: await mockAgent.decide(createMockVault(scenario) as never, scenario.agentType, scenario.trigger),
+    })));
+    const matches = decisions.filter(({ scenario, decision }) =>
+      decision.actionTaken === scenario.expected.actionTaken &&
+      (scenario.expected.escalationStage === undefined || decision.escalationStage === scenario.expected.escalationStage) &&
+      (scenario.expected.onboardingStage === undefined || decision.onboardingStage === scenario.expected.onboardingStage)
+    );
+    expect(matches.length / scenarios.length).toBeGreaterThanOrEqual(0.95);
   });
 });

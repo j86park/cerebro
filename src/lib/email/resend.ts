@@ -6,6 +6,7 @@ const sendTransactionalEmailInputSchema = z.object({
   to: z.string().email(),
   subject: z.string().min(1),
   text: z.string().min(1),
+  idempotencyKey: z.string().min(1).optional(),
 });
 
 export type SendTransactionalEmailInput = z.infer<
@@ -34,7 +35,7 @@ export async function sendTransactionalEmail(
     to: parsed.to,
     subject: parsed.subject,
     text: parsed.text,
-  });
+  }, parsed.idempotencyKey ? { idempotencyKey: parsed.idempotencyKey } : undefined);
 
   if (error) {
     throw new Error(`Resend send failed: ${error.message}`);

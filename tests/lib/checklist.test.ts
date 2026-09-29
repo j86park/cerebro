@@ -135,6 +135,22 @@ describe("validateDocumentDeterministic vs DEMO_DATE", () => {
     expect(result.valid).toBe(false);
     expect(result.gapReason).toBe("NOT_VALID");
   });
+
+  it("does not re-admit a superseded historical document", () => {
+    const result = validateDocumentDeterministic({ type: "GOVERNMENT_ID", status: "SUPERSEDED",
+      uploadedAt: "2026-03-01T00:00:00.000Z", expiryDate: "2027-03-01T00:00:00.000Z" },
+    "GOVERNMENT_ID", { purpose: "admission" });
+    expect(result.valid).toBe(false);
+    expect(result.gapReason).toBe("NOT_VALID");
+  });
+
+  it("does not validate a merely requested document without an upload", () => {
+    const result = validateDocumentDeterministic({ type: "GOVERNMENT_ID", status: "REQUESTED",
+      uploadedAt: null, expiryDate: "2027-03-01T00:00:00.000Z" },
+    "GOVERNMENT_ID", { purpose: "admission" });
+    expect(result.valid).toBe(false);
+    expect(result.gapReason).toBe("NOT_VALID");
+  });
 });
 
 describe("computeChecklistGaps", () => {
@@ -160,5 +176,14 @@ describe("computeChecklistGaps", () => {
     expect(
       gaps.find((g) => g.documentType === "PROOF_OF_ADDRESS")?.reason,
     ).toBe("NOT_VALID");
+  });
+
+  it("uses the active replacement instead of a superseded predecessor", () => {
+    const gaps = computeChecklistGaps({ stage: 1, accountType: "RRSP" }, [
+      { type: "GOVERNMENT_ID", status: "SUPERSEDED", expiryDate: "2025-01-01T00:00:00.000Z" },
+      { type: "GOVERNMENT_ID", status: "VALID", uploadedAt: "2026-03-01T00:00:00.000Z",
+        expiryDate: "2027-03-01T00:00:00.000Z" },
+    ]);
+    expect(gaps.some((gap) => gap.documentType === "GOVERNMENT_ID")).toBe(false);
   });
 });

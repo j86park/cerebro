@@ -89,9 +89,7 @@ export function buildEscalateToManagement(vault: VaultService) {
           trigger: "SCHEDULED",
           reasoning,
           outcome: DRY_RUN ? "DRY_RUN" : "ESCALATED",
-          nextScheduledAt: new Date(
-            new Date(env.DEMO_DATE).getTime() + 10 * 24 * 60 * 60 * 1000,
-          ),
+          nextScheduledAt: new Date(vault.getNow().getTime() + 10 * 24 * 60 * 60 * 1000),
           stage: policy.stage,
           policyVersion: policy.policyVersion,
           reasonCodes: ["POLICY_ALLOW_AUTO"],

@@ -86,7 +86,7 @@ export function buildGetOnboardingStatus(vault: VaultService) {
 
       const requiredDocuments = requiredDocTypes.map((docType) => {
         const doc = documents.find((d) => d.type === docType);
-        const validity = validateDocumentDeterministic(doc, docType);
+        const validity = validateDocumentDeterministic(doc, docType, { asOf: vault.getNow() });
         return {
           type: docType,
           status: validity.status,
@@ -96,7 +96,7 @@ export function buildGetOnboardingStatus(vault: VaultService) {
         };
       });
 
-      const gaps = computeChecklistGaps(checklistContext, documents);
+      const gaps = computeChecklistGaps(checklistContext, documents, vault.getNow());
       const totalStages = getTotalOnboardingStages();
       const completedStages = Math.max(0, currentStage - 1);
       const completionPercentage = Math.round(

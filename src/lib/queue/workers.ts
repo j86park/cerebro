@@ -5,6 +5,8 @@ import "@/workers/mutation-analysis.worker";
 import "@/workers/shadow-runner.worker";
 import "@/workers/online-judge.worker";
 import { VaultService } from "@/lib/db/vault-service";
+import { prisma } from "@/lib/db/client";
+import { retryPendingReminderEmails } from "@/lib/email/reminder-outbox";
 import { buildComplianceTools } from "@/tools/compliance";
 import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildSharedTools } from "@/tools/shared";
@@ -24,7 +26,6 @@ import {
   AGENT_JOB_COMPLETED_OUTCOME,
   AGENT_JOB_SKIPPED_OUTCOME,
   agentJobSchema,
-  demoDateKey,
   hitlResumeJobSchema,
   hitlTimeoutJobSchema,
   isHitlQueueJob,
@@ -38,7 +39,8 @@ import {
   type QueueName,
 } from "@/lib/queue/metrics";
 import { buildJobTracingContext } from "@/lib/observability/mastra-tracing";
-import { ensureExpiredDocumentStageOneAlert } from "./complianceOutcomeGate";
+import { ensureDueStageFiveApproval, ensureDueStageThreeActions, ensureExpiredDocumentStageOneAlert } from "./complianceOutcomeGate";
+import { deriveWorkflowOutcome } from "./workflowOutcome";
 
 /**
  * Builds the initial context prompt for an agent run, describing what
@@ -52,6 +54,7 @@ async function buildInitialPrompt(
   const parts = [
     `You are running for client ${payload.clientId}.`,
     `This run was triggered by: ${payload.trigger}.`,
+    `Current effective business time: ${vault.getNow().toISOString()}. Use this time, not the system clock, to calculate escalation age and cooldowns from actionHistory.effectiveAt.`,
   ];
 
   if (payload.trigger === "EVENT_UPLOAD" && payload.documentId) {
@@ -220,10 +223,10 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
   );
 
   // 1. Build VaultService scoped to this client
-  const vault = new VaultService({ clientId });
+  const vault = new VaultService({ clientId, now: parsed.effectiveAt ? new Date(parsed.effectiveAt) : undefined });
 
   // Skip if this logical job already completed successfully (replay / leftover retention miss).
-  const since = new Date(`${demoDateKey()}T00:00:00.000Z`);
+  const since = new Date(`${vault.getNow().toISOString().slice(0, 10)}T00:00:00.000Z`);
   const alreadyDone = await vault.hasCompletedAgentJob({
     agentType,
     trigger,
@@ -294,6 +297,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
   };
 
   const stage = await resolveRunStage(vault);
+  const actionIdsBefore = new Set((await vault.getActionHistory() as Array<{ id: string }>).map((action) => action.id));
   const { requestContext, tracingOptions, traceId, contentCaptured } =
     buildJobTracingContext({
       clientId,
@@ -331,9 +335,21 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
     const outcomeGate = agentType === "COMPLIANCE"
       ? await ensureExpiredDocumentStageOneAlert(vault)
       : null;
+    const stageThreeGate = agentType === "COMPLIANCE"
+      ? await ensureDueStageThreeActions(vault)
+      : null;
+    const stageFiveGate = agentType === "COMPLIANCE"
+      ? await ensureDueStageFiveApproval(vault)
+      : null;
     const executedTools = outcomeGate?.applied
       ? [...tools, "sendAdvisorAlert"]
       : tools;
+    if (stageThreeGate?.applied) executedTools.push("sendAdvisorAlert", "sendClientReminder");
+    if (stageFiveGate?.applied) executedTools.push("escalateToManagement");
+    const newActions = (await vault.getActionHistory() as Array<{
+      id: string; actionType: string; outcome?: string | null; reasoning?: string;
+    }>).filter((action) => !actionIdsBefore.has(action.id));
+    const workflowOutcome = deriveWorkflowOutcome(newActions);
     const usage = result.usage as {
       inputTokens?: number;
       outputTokens?: number;
@@ -360,6 +376,10 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
         totalTokens: usage?.totalTokens ?? null,
         stepCount: result.steps?.length ?? null,
         outcomeGate: outcomeGate ?? null,
+        stageThreeGate: stageThreeGate ?? null,
+        stageFiveGate: stageFiveGate ?? null,
+        workflowOutcome,
+        observedActionTypes: newActions.map((action) => action.actionType),
       },
     });
 
@@ -375,9 +395,8 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
         trigger,
         reasoning: `Agent run completed successfully for job ${String(job.id ?? "unknown")}`,
         outcome: AGENT_JOB_COMPLETED_OUTCOME,
-        nextScheduledAt: new Date(
-          new Date(env.DEMO_DATE).getTime() + 1 * 24 * 60 * 60 * 1000
-        ),
+        citedFields: { workflowOutcome },
+        nextScheduledAt: new Date(vault.getNow().getTime() + 1 * 24 * 60 * 60 * 1000),
       });
     } catch (logError) {
       console.error(
@@ -418,6 +437,34 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       traceId,
     };
   } catch (error) {
+    // A model can fail on a later step after policy-gated tools already committed.
+    // Do not replay those side effects merely because the final text was lost.
+    try {
+      const newActions = (await vault.getActionHistory() as Array<{
+        id: string; actionType: string; outcome?: string | null; reasoning?: string;
+      }>).filter((action) => !actionIdsBefore.has(action.id));
+      const durableEffects = newActions.filter((action) => action.actionType !== "SCAN_VAULT"
+        && action.outcome !== "POLICY_BLOCKED");
+      if (durableEffects.length > 0) {
+        const workflowOutcome = deriveWorkflowOutcome(newActions);
+        await vault.logDecision({
+          jobId, agentName, stage, traceId,
+          outcome: "RUN_EFFECT_PERSISTED_MODEL_ERROR",
+          reason: "The model response failed after policy-gated actions persisted; suppressing replay of committed effects.",
+          contentCaptured,
+          metadata: { trigger, workflowOutcome, observedActionTypes: durableEffects.map((action) => action.actionType) },
+        });
+        await vault.logAction({ documentId, agentType, actionType: "SCAN_VAULT", trigger,
+          reasoning: `Agent job ${jobId} recovered after model response error because durable effects were already committed.`,
+          outcome: AGENT_JOB_COMPLETED_OUTCOME,
+          citedFields: { workflowOutcome, recoveredAfterModelError: true },
+        });
+        await emitAgentRunComplete({ clientId, agentType, jobId, success: true });
+        return { success: true, recovered: true, workflowOutcome, traceId };
+      }
+    } catch (recoveryError) {
+      console.error(`[Worker] Could not recover persisted effects for job ${jobId}:`, recoveryError);
+    }
     // Always log failure to audit trail so the dashboard can see it
     try {
       await vault.logDecision({
@@ -438,9 +485,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
         trigger,
         reasoning: `Agent run failed with error: ${error instanceof Error ? error.message : String(error)}`,
         outcome: "AGENT_RUN_FAILED",
-        nextScheduledAt: new Date(
-          new Date(env.DEMO_DATE).getTime() + 1 * 24 * 60 * 60 * 1000
-        ),
+        nextScheduledAt: new Date(vault.getNow().getTime() + 1 * 24 * 60 * 60 * 1000),
       });
     } catch (logError) {
       console.error(
@@ -484,6 +529,7 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
 
   const orchestrator = new SimulationOrchestrator();
   if (await orchestrator.isBatchComplete(runId, batchStart, clientStart ?? 0)) {
+    await orchestrator.enqueueNextDay(runId, batchEnd);
     return { success: true, deduplicated: true };
   }
   const clientRange = (clientStart !== undefined && clientEnd !== undefined) 
@@ -509,6 +555,7 @@ export async function processSimulationJob(job: Job<SimulationJobPayload>) {
     
     // Update progress ONLY after the entire batch is finished
     await orchestrator.completeBatch(runId, batchStart, clientStart ?? 0);
+    await orchestrator.enqueueNextDay(runId, batchEnd);
 
     const totalElapsed = (Date.now() - startTime) / 1000;
     console.log(`[Worker] Simulation batch ${batchStart}-${batchEnd} completed for run ${runId} in ${totalElapsed.toFixed(2)}s`);
@@ -568,6 +615,11 @@ export const workers: WorkerBundle = isVitest
 
 // Generic error/completion logging + metrics for all workers
 if (!isVitest) {
+  const outboxTimer = setInterval(() => {
+    if (!env.DRY_RUN) void retryPendingReminderEmails().catch((error) =>
+      console.error("[ReminderOutbox] Retry sweep failed:", error));
+  }, 60_000);
+  outboxTimer.unref();
   Object.values(workers).forEach((worker) => {
     const queueName = worker.name as QueueName;
     console.log(`[Worker] Initialized queue: ${worker.name}`);
@@ -580,6 +632,13 @@ if (!isVitest) {
     worker.on("failed", (job, err) => {
       recordJobFailed(queueName);
       console.error(`[Worker - ${worker.name}] Job ${job?.id} failed:`, err);
+      if (worker.name === "cerebro-simulation" && job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+        const runId = (job.data as SimulationJobPayload).runId;
+        void prisma.simulationRun.updateMany({
+          where: { id: runId, status: { in: ["PENDING", "RUNNING"] } },
+          data: { status: "FAILED", completedAt: new Date() },
+        }).catch((error) => console.error(`[Worker] Could not mark simulation ${runId} failed:`, error));
+      }
     });
   });
 }

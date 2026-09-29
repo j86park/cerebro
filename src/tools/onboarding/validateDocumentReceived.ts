@@ -67,6 +67,7 @@ export function buildValidateDocumentReceived(vault: VaultService) {
       // Admission purpose: allow PENDING_REVIEW uploads (upload API status) to become VALID.
       const result = validateDocumentDeterministic(doc, doc.type, {
         purpose: "admission",
+        asOf: vault.getNow(),
       });
       const extract = await vault.getDocumentExtractedFields(documentId);
       const extractCited = extract ? citedFieldsFromExtract(extract) : {};
@@ -84,7 +85,7 @@ export function buildValidateDocumentReceived(vault: VaultService) {
         trigger: "EVENT_UPLOAD",
         reasoning: `Validated document ${doc.type}. Status=${result.status}; expired=${result.expired}; staleRecency=${result.staleRecency}; persisted=${statusPersisted}.`,
         outcome: result.valid ? "DOCUMENT_VALID" : "DOCUMENT_INVALID",
-        nextScheduledAt: addDemoDays(1),
+        nextScheduledAt: addDemoDays(1, vault.getNow()),
         documentId,
         reasonCodes: result.valid
           ? ["VALIDATOR_PASS", "STATUS_PERSISTED_VALID"]

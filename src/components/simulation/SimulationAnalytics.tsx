@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ABComparisonChart } from "@/components/simulation/ABComparisonChart";
 import { OutcomeSummaryCards } from "@/components/simulation/OutcomeSummaryCards";
 import type { OutcomeSummaryMetrics } from "@/components/simulation/OutcomeSummaryCards";
 import { RealtimeProgressFeed } from "@/components/simulation/RealtimeProgressFeed";
-import { TimelineChart } from "@/components/simulation/TimelineChart";
 import { EscalationFunnel } from "@/components/simulation/EscalationFunnel";
 import { RunComparisonTable } from "@/components/simulation/RunComparisonTable";
 import { RunConfigurationPanel } from "@/components/simulation/RunConfigurationPanel";
@@ -23,22 +21,22 @@ type RunRow = {
 
 function defaultSummary(): OutcomeSummaryMetrics {
   return {
-    issuesDetected: 0,
-    issuesResolved: 0,
-    escalations: 0,
-    avgResolutionDays: 0,
+    onboardingCompletedByAgent: 0,
+    clientsWithUnresolvedDocuments: 0,
+    documentsNeedingAttention: 0,
+    simulatedDaysProcessed: 0,
   };
 }
 
 function summaryFromMetrics(raw: unknown): OutcomeSummaryMetrics {
   if (!raw || typeof raw !== "object") return defaultSummary();
   const m = raw as Record<string, unknown>;
-  const num = (k: string) => (typeof m[k] === "number" ? m[k] : Number(m[k])) || 0;
+  const num = (k: string) => typeof m[k] === "number" && Number.isFinite(m[k]) ? m[k] as number : 0;
   return {
-    issuesDetected: num("issuesDetected") || num("totalActionsTriggered") || 0,
-    issuesResolved: num("issuesResolved") || Math.floor(num("totalActionsTriggered") * 0.72),
-    escalations: num("escalations") || Math.floor(num("totalActionsTriggered") * 0.05),
-    avgResolutionDays: num("avgResolutionDays") || 3.2,
+    onboardingCompletedByAgent: num("onboardingCompletedByAgent"),
+    clientsWithUnresolvedDocuments: num("clientsWithUnresolvedDocuments"),
+    documentsNeedingAttention: num("documentsNeedingAttention"),
+    simulatedDaysProcessed: num("simulatedDaysProcessed"),
   };
 }
 
@@ -66,36 +64,18 @@ export function SimulationAnalytics() {
     [latest?.metrics]
   );
 
-  const abData = useMemo(() => {
-    const agent = summary.issuesResolved;
-    const baseline = Math.max(0, Math.floor(agent * 0.65));
-    return [
-      { label: "Resolved", agent, baseline },
-      { label: "Escalations avoided", agent: Math.max(0, agent - summary.escalations), baseline: Math.max(0, baseline - summary.escalations) },
-    ];
-  }, [summary]);
-
-  const timelineData = useMemo(() => {
-    const days = latest?.simulatedDays ?? 7;
-    const slice = Math.min(days, 14);
-    return Array.from({ length: slice }, (_, i) => {
-      const d = i + 1;
-      return {
-        day: `D${d}`,
-        detected: Math.round(summary.issuesDetected * (d / slice)),
-        resolved: Math.round(summary.issuesResolved * (d / slice) * 0.9),
-      };
-    });
-  }, [latest?.simulatedDays, summary]);
-
   const funnelData = useMemo(
-    () => [
-      { stage: "Detected", count: summary.issuesDetected },
-      { stage: "Reminded", count: Math.floor(summary.issuesDetected * 0.55) },
-      { stage: "Escalated", count: summary.escalations },
-      { stage: "Resolved", count: summary.issuesResolved },
-    ],
-    [summary]
+    () => {
+      const m = latest?.metrics as Record<string, unknown> | undefined;
+      const count = (key: string) => typeof m?.[key] === "number" ? m[key] as number : 0;
+      return [
+        { stage: "Client reminders", count: count("clientReminders") },
+        { stage: "Advisor alerts", count: count("advisorAlerts") },
+        { stage: "Compliance officer", count: count("complianceOfficerEscalations") },
+        { stage: "Management", count: count("managementEscalations") },
+      ];
+    },
+    [latest?.metrics]
   );
 
   const comparisonRows = useMemo(
@@ -116,12 +96,13 @@ export function SimulationAnalytics() {
 
   return (
     <div className="space-y-8">
-      <ABComparisonChart data={abData} />
+      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-400">
+        Agent vs baseline comparison is unavailable: no measured baseline run is attached. A completed batch run does not mean every client workflow completed.
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-6">
           <OutcomeSummaryCards metrics={summary} />
-          <TimelineChart data={timelineData} />
           <EscalationFunnel data={funnelData} />
         </div>
         <div className="space-y-6">

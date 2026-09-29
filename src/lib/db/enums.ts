@@ -20,6 +20,7 @@ export const DocumentStatus = {
   VALID: "VALID",
   EXPIRING_SOON: "EXPIRING_SOON",
   EXPIRED: "EXPIRED",
+  SUPERSEDED: "SUPERSEDED",
 } as const;
 
 export const DocumentType = {

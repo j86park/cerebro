@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VaultService } from "@/lib/db/vault-service";
-import { ensureExpiredDocumentStageOneAlert } from "@/lib/queue/complianceOutcomeGate";
+import { ensureDueStageFiveApproval, ensureExpiredDocumentStageOneAlert } from "@/lib/queue/complianceOutcomeGate";
 
 const sendEmail = vi.fn().mockResolvedValue({ id: "dry-run", skipped: true });
 
@@ -21,6 +21,7 @@ function vaultFixture(options: {
 } = {}) {
   const logAction = vi.fn().mockResolvedValue({ id: "alert-1" });
   const vault = {
+    getNow: () => new Date("2026-09-28T12:00:00.000Z"),
     getClientId: () => "CLT-GATE",
     getDocuments: vi.fn().mockResolvedValue([
       { id: "DOC-1", type: "GOVERNMENT_ID", status: options.status ?? "EXPIRED" },
@@ -72,5 +73,17 @@ describe("expired-document compliance outcome gate", () => {
       history: [{ actionType: "NOTIFY_ADVISOR", outcome: "POLICY_BLOCKED" }],
     });
     expect(await ensureExpiredDocumentStageOneAlert(vault)).toMatchObject({ applied: true });
+  });
+
+  it("does not request Stage 5 approval without a completed advisor-approved Stage 4", async () => {
+    const { vault } = vaultFixture();
+    vault.getActionHistory = vi.fn().mockResolvedValue([
+      { actionType: "NOTIFY_ADVISOR", stage: 1, outcome: "DRY_RUN",
+        effectiveAt: new Date("2026-08-01T00:00:00.000Z"), performedAt: new Date() },
+      { actionType: "SEND_CLIENT_REMINDER", stage: 2, outcome: "DRY_RUN" },
+      { actionType: "SEND_CLIENT_REMINDER", stage: 3, outcome: "DRY_RUN" },
+      { actionType: "ESCALATE_COMPLIANCE", stage: 4, outcome: "HITL_SUSPENDED" },
+    ]);
+    expect(await ensureDueStageFiveApproval(vault)).toEqual({ applied: false });
   });
 });

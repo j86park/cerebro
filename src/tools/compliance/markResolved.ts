@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { addDemoDays } from "@/lib/dates/demo-date";
+import { assertResolvableDocument } from "@/lib/documents/resolution";
 
 const inputSchema = z.object({
   documentId: z.string().describe("ID of the document that resolves the issue"),
@@ -39,6 +40,7 @@ export function buildMarkResolved(vault: VaultService) {
 
       // REGULATORY: avoid duplicate resolve noise within the 5-day no-repeat window.
       await vault.checkActionCooldown("MARK_RESOLVED", 5, documentId);
+      await assertResolvableDocument(vault, documentId);
 
       await vault.updateDocumentStatus(documentId, "VALID", notes);
 
@@ -48,7 +50,7 @@ export function buildMarkResolved(vault: VaultService) {
         trigger: "EVENT_UPLOAD",
         reasoning,
         outcome: "STATUS_UPDATED_TO_VALID",
-        nextScheduledAt: addDemoDays(7),
+        nextScheduledAt: addDemoDays(7, vault.getNow()),
         documentId,
         reasonCodes: ["MARK_RESOLVED"],
       });

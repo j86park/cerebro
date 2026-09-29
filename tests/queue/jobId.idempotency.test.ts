@@ -229,6 +229,8 @@ describe("processAgentJob processor idempotency", () => {
     }));
     vi.doMock("@/lib/db/vault-service", () => ({
       VaultService: class {
+        getNow = () => new Date("2026-09-28T12:00:00.000Z");
+        getActionHistory = vi.fn().mockResolvedValue([]);
         hasCompletedAgentJob = hasCompletedAgentJob;
         logAction = logAction;
       },
@@ -299,6 +301,8 @@ describe("processAgentJob processor idempotency", () => {
     }));
     vi.doMock("@/lib/db/vault-service", () => ({
       VaultService: class {
+        getNow = () => new Date("2026-09-28T12:00:00.000Z");
+        getActionHistory = vi.fn().mockResolvedValue([]);
         hasCompletedAgentJob = hasCompletedAgentJob;
         logAction = logAction;
         logDecision = logDecision;
@@ -374,5 +378,53 @@ describe("processAgentJob processor idempotency", () => {
     expect(logAction).toHaveBeenCalledWith(
       expect.objectContaining({ outcome: AGENT_JOB_COMPLETED_OUTCOME })
     );
+  });
+
+  it("marks a job recovered when model transport fails after a durable completion action", async () => {
+    const generate = vi.fn().mockRejectedValue(new Error("upstream reset after tool execution"));
+    const logAction = vi.fn().mockResolvedValue({});
+    const logDecision = vi.fn().mockResolvedValue({});
+    const getActionHistory = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "completed-1", actionType: "COMPLETE_ONBOARDING",
+        outcome: "ONBOARDING_COMPLETED", reasoning: "Checklist complete" }]);
+    const emitAgentRunComplete = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@/agents/mastra", () => ({ getCerebro: vi.fn().mockResolvedValue({
+      getAgent: () => ({ generate }),
+    }) }));
+    vi.doMock("@/lib/db/vault-service", () => ({ VaultService: class {
+      getNow = () => new Date("2026-09-28T12:00:00.000Z");
+      getActionHistory = getActionHistory;
+      hasCompletedAgentJob = vi.fn().mockResolvedValue(false);
+      getOnboardingStageState = vi.fn().mockResolvedValue({ stage: 4 });
+      logAction = logAction;
+      logDecision = logDecision;
+    } }));
+    vi.doMock("@/lib/policy/toolAllowlists", () => ({ assertAgentToolAllowlist: vi.fn() }));
+    vi.doMock("@/lib/observability/mastra-tracing", () => ({ buildJobTracingContext: vi.fn(() => ({
+      requestContext: {}, tracingOptions: {}, traceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", contentCaptured: false,
+    })) }));
+    vi.doMock("@/tools/compliance", () => ({ buildComplianceTools: vi.fn(() => ({})) }));
+    vi.doMock("@/tools/onboarding", () => ({ buildOnboardingTools: vi.fn(() => ({})) }));
+    vi.doMock("@/tools/shared", () => ({ buildSharedTools: vi.fn(() => ({})) }));
+    vi.doMock("@/lib/events/emit", () => ({ emitAgentRunComplete }));
+    vi.doMock("@/lib/queue/client", () => ({ connection: { on: vi.fn() } }));
+    vi.doMock("@/lib/queue/clientMemory", () => ({ buildClientMemoryScope: vi.fn(() => ({
+      resource: "CLT-001", thread: "CLT-001",
+    })) }));
+    vi.doMock("@/workers/mutation-analysis.worker", () => ({}));
+    vi.doMock("@/workers/shadow-runner.worker", () => ({}));
+    vi.doMock("@/workers/online-judge.worker", () => ({}));
+    vi.doMock("@/lib/evals/enqueue-online-judge", () => ({ maybeEnqueueOnlineJudgeSample: vi.fn() }));
+
+    const { processAgentJob } = await import("@/lib/queue/workers");
+    const result = await processAgentJob({ id: "recovered-onboarding-job", data: {
+      clientId: "CLT-001", agentType: "ONBOARDING", trigger: "SCHEDULED",
+    } } as never);
+
+    expect(result).toMatchObject({ success: true, recovered: true, workflowOutcome: "COMPLETED" });
+    expect(logDecision).toHaveBeenCalledWith(expect.objectContaining({ outcome: "RUN_EFFECT_PERSISTED_MODEL_ERROR" }));
+    expect(logAction).toHaveBeenCalledWith(expect.objectContaining({ outcome: "AGENT_RUN_COMPLETED" }));
+    expect(emitAgentRunComplete).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 });

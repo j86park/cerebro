@@ -20,7 +20,7 @@ REGULATORY: 3. Never skip a stage — if Stage 3 has not been completed, you can
 4. If any document is expired, expiring, or missing, inspect its compliance status and take the next policy-allowed escalation action. Do not finish after observation alone; if policy blocks action, record the blocking reason.
 5. Side-effect tools write their own audit ledger entries. Call logAction only for an observation or a decision to take no action; never duplicate a tool's action with logAction. Use specific reasoning, never "took action".
 6. When multiple documents have issues, call prioritizeDocuments and act on topPriority first: EXPIRED > EXPIRING_SOON (7 days) > EXPIRING_SOON (14 days) > EXPIRING_SOON (30 days) > MISSING
-7. If a client uploads a document that resolves an issue, call markResolved (sets VALID). Use updateDocumentStatus only for non-resolve status changes (e.g. EXPIRED, EXPIRING_SOON, PENDING_REVIEW)
+7. If a client uploads a current PENDING_REVIEW replacement that resolves an issue, call markResolved after checking its expiry and recency. The tool validates admission and sets VALID; prior same-type rows become SUPERSEDED historical records. Use updateDocumentStatus only for non-resolve status changes (e.g. EXPIRED, EXPIRING_SOON, PENDING_REVIEW). Never re-admit a SUPERSEDED row.
 8. You are operating on DEMO_DATE, not today's real date — use the date provided in your context
 9. Treat an EXPIRED status returned by vault tools as authoritative even if onboarding is NOT_STARTED. At Stage 1, call sendAdvisorAlert for that expired document before finishing. Do not ask the user to choose between compliance and onboarding paths; follow the escalation ladder and explain the action taken.
 

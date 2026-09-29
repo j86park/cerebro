@@ -56,6 +56,17 @@ describe("resolveComplianceLadderStage", () => {
       resolveComplianceLadderStage([{ actionType: "ESCALATE_COMPLIANCE" }]),
     ).toBe(5);
   });
+
+  it("does not mistake suspended or denied HITL for completed escalation", () => {
+    const base = [
+      { actionType: "SEND_CLIENT_REMINDER", outcome: "DRY_RUN" },
+      { actionType: "SEND_CLIENT_REMINDER", outcome: "DRY_RUN" },
+    ];
+    for (const outcome of ["PENDING_APPROVAL", "HITL_SUSPENDED", "HITL_DENIED", "HITL_TIMEOUT_SAFE_HOLD"]) {
+      expect(resolveComplianceLadderStage([...base, { actionType: "ESCALATE_COMPLIANCE", outcome }])).toBe(4);
+    }
+    expect(resolveComplianceLadderStage([...base, { actionType: "ESCALATE_COMPLIANCE", outcome: "DRY_RUN" }])).toBe(5);
+  });
 });
 
 describe("evaluateToolPolicy deny-wins", () => {
@@ -210,8 +221,7 @@ describe("tool wrappers respect policy", () => {
     vault.getClientProfile = vi
       .fn()
       .mockResolvedValue({ email: "client@example.com" });
-    vault.updateDocumentStatus = vi.fn().mockResolvedValue({});
-    vault.logAction = vi.fn().mockResolvedValue({ id: "rem-1", duplicate: false });
+    vault.recordDocumentNotification = vi.fn().mockResolvedValue({ notificationCount: 1, duplicate: false });
 
     const tool = buildSendClientReminder(vault);
     const result = await (
@@ -238,9 +248,8 @@ describe("tool wrappers respect policy", () => {
     expect(result.dryRun).toBe(true);
     expect(result.policyVersion).toBe("tool-policy-v1");
     expect(resendSendMock).not.toHaveBeenCalled();
-    expect(vault.logAction).toHaveBeenCalledWith(
+    expect(vault.recordDocumentNotification).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionType: "SEND_CLIENT_REMINDER",
         outcome: "DRY_RUN",
         policyVersion: "tool-policy-v1",
         stage: 2,

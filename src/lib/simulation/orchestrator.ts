@@ -1,8 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/client";
 import { VaultService } from "@/lib/db/vault-service";
-import { SeededRandom, EntityFactory, type ClientProfile } from "./factory";
+import { SeededRandom, EntityFactory } from "./factory";
 import { MockAgent } from "./mock-agent";
+import { executeMockDecision } from "./action-executor";
 import { getComplianceAgent } from "@/agents/compliance/agent";
 import { getOnboardingAgent } from "@/agents/onboarding/agent";
 import { buildSharedTools } from "@/tools/shared";
@@ -11,6 +12,10 @@ import { buildOnboardingTools } from "@/tools/onboarding";
 import { buildClientMemoryScope } from "@/lib/queue/clientMemory";
 import { getAgentMaxSteps } from "@/lib/config";
 import { ensureMastraStorageInitialized } from "@/lib/mastra-postgres";
+import { queues } from "@/lib/queue/client";
+import { processHitlResumeFromEscalation } from "@/lib/hitl/resume";
+
+export const SIMULATION_CLIENT_BATCH_SIZE = 100;
 
 export interface SimulationParams {
   clientCount: number;
@@ -59,6 +64,25 @@ export class SimulationOrchestrator {
     return !!(await prisma.simulationBatchCompletion.findUnique({
       where: { runId_batchStart_clientStart: { runId, batchStart, clientStart } },
     }));
+  }
+
+  /** Day barrier: enqueue the next day only after every client chunk for this day committed. */
+  async enqueueNextDay(runId: string, currentDay: number) {
+    const run = await this.getRun(runId);
+    if (!run || run.status === "FAILED" || run.status === "COMPLETED") return 0;
+    const chunks = Math.ceil(run.clientCount / SIMULATION_CLIENT_BATCH_SIZE);
+    const completed = await prisma.simulationBatchCompletion.count({ where: { runId, batchStart: currentDay } });
+    if (completed < chunks || currentDay + 1 >= run.simulatedDays) return 0;
+    let enqueued = 0;
+    for (let clientStart = 0; clientStart < run.clientCount; clientStart += SIMULATION_CLIENT_BATCH_SIZE) {
+      const nextDay = currentDay + 1;
+      const jobId = `simulation-${runId}-${nextDay}-${clientStart}`;
+      await queues.simulation.add(jobId, { runId, batchStart: nextDay, batchEnd: nextDay,
+        clientStart, clientEnd: Math.min(clientStart + SIMULATION_CLIENT_BATCH_SIZE, run.clientCount) },
+      { jobId, attempts: 3 });
+      enqueued++;
+    }
+    return enqueued;
   }
 
   async completeBatch(runId: string, batchStart: number, clientStart: number) {
@@ -128,8 +152,6 @@ export class SimulationOrchestrator {
       return { simDate, clientCount: 0, eventsTriggered: 0 };
     }
 
-    const rng = new SeededRandom(`${run.randomSeed}-day-${currentDay}`);
-    const factory = new EntityFactory(run.randomSeed, simDate);
     let eventsTriggered = 0;
 
     const metricsJson =
@@ -150,52 +172,44 @@ export class SimulationOrchestrator {
     }
 
     for (const client of clients) {
-      const trigger = rng.next() < 0.05 ? "EVENT_UPLOAD" : "SCHEDULED";
-
-      // 1. Document Events
-      if (trigger === "EVENT_UPLOAD") {
-        const rawProfile = (client as { profile?: string }).profile;
-        const profile: ClientProfile =
-          rawProfile === "IDEAL" || rawProfile === "MESSY" || rawProfile === "HIGH_RISK"
-            ? rawProfile
-            : "MESSY";
-        const docs = factory.generateDocuments(client.id, profile).slice(0, 1);
-        
-        if (docs.length > 0) {
-          const inserted = await prisma.document.createMany({
-            data: [{
-            ...docs[0],
-            id: `${client.id}-SIM-${currentDay}`,
-            status: "PENDING_REVIEW",
-            uploadedAt: simDate,
-            } as Prisma.DocumentCreateManyInput],
-            skipDuplicates: true,
-          });
-          eventsTriggered += inserted.count;
-        }
+      const clientIndex = client.email.match(/-(\d+)@example\.com$/)?.[1] ?? client.id;
+      const rng = new SeededRandom(`${run.randomSeed}-day-${currentDay}-client-${clientIndex}`);
+      const requested = await prisma.document.findFirst({
+        where: { clientId: client.id, status: "REQUESTED" },
+        orderBy: { type: "asc" },
+      });
+      const received = !!requested && rng.next() < run.clientResponseRate;
+      if (received) {
+        await prisma.document.update({ where: { id: requested.id }, data: {
+          status: "PENDING_REVIEW", uploadedAt: simDate,
+          expiryDate: new Date(simDate.getTime() + 365 * 24 * 60 * 60 * 1000),
+        } });
+        eventsTriggered++;
       }
+      const trigger = received ? "EVENT_UPLOAD" : "SCHEDULED";
 
       // 2. Real/Mock Agent Integration
-      const vault = new VaultService({ clientId: client.id });
+      const vault = new VaultService({ clientId: client.id, now: simDate });
       
       if (useMock) {
-        // Compliance (Mock)
+        const pending = (await vault.getEscalationStates({ openOnly: true }) as Array<{
+          status: string; openKey: string | null;
+        }>).find((state) => state.status === "PENDING_APPROVAL" && state.openKey);
+        if (pending?.openKey && rng.next() < run.advisorResponseRate) {
+          await processHitlResumeFromEscalation({ vault, clientId: client.id,
+            openKey: pending.openKey, decision: "approve", advisorId: client.advisorId,
+            resumeWorkflow: async () => ({ status: "completed" }),
+          });
+          eventsTriggered++;
+        }
         const compDec = await this.mockAgent.decide(vault, "COMPLIANCE", trigger);
-        await vault.logAction({
-          agentType: "COMPLIANCE",
-          actionType: compDec.actionTaken,
-          trigger,
-          reasoning: compDec.reasoning,
-        });
+        await executeMockDecision(vault, "COMPLIANCE", compDec);
 
-        // Onboarding (Mock)
-        const onbDec = await this.mockAgent.decide(vault, "ONBOARDING", trigger);
-        await vault.logAction({
-          agentType: "ONBOARDING",
-          actionType: onbDec.actionTaken,
-          trigger,
-          reasoning: onbDec.reasoning,
-        });
+        for (let step = 0; step < 3; step++) {
+          const onbDec = await this.mockAgent.decide(vault, "ONBOARDING", step === 0 ? trigger : "SCHEDULED");
+          const result = await executeMockDecision(vault, "ONBOARDING", onbDec);
+          if (!result.followUp) break;
+        }
       } else {
         // Real Mastra Agents (High Fidelity)
         console.log(`[Orchestrator] Executing REAL agents for client ${client.id} (Day ${currentDay})...`);
@@ -243,6 +257,18 @@ export class SimulationOrchestrator {
         performedAt: { gte: new Date(run.startedAt) }
       }
     });
+    const scope = { client: { simulationRunId: runId } };
+    const [completedOnboarding, unresolvedClientRows, actionCounts, activeEscalations] = await Promise.all([
+      prisma.agentAction.groupBy({ by: ["clientId"], where: { ...scope,
+        actionType: "COMPLETE_ONBOARDING", outcome: "ONBOARDING_COMPLETED" } }),
+      prisma.document.groupBy({ by: ["clientId"], where: { ...scope, status: { notIn: ["VALID", "SUPERSEDED"] } } }),
+      prisma.agentAction.groupBy({ by: ["actionType"], where: { ...scope,
+        outcome: { notIn: ["POLICY_BLOCKED", "PENDING_APPROVAL"] } }, _count: true }),
+      prisma.escalationState.count({ where: { ...scope, status: { in: ["OPEN", "PENDING_APPROVAL", "SAFE_HOLD"] } } }),
+    ]);
+    const actionCount = (type: string) => actionCounts.find((row) => row.actionType === type)?._count ?? 0;
+    const documentsNeedingAttention = documentStats.filter((row) => row.status !== "VALID" && row.status !== "SUPERSEDED")
+      .reduce((sum, row) => sum + row._count, 0);
 
     const baseMetrics =
       run.metrics &&
@@ -255,7 +281,15 @@ export class SimulationOrchestrator {
       ...baseMetrics,
       documentStatusDistribution: documentStats,
       totalActionsTriggered: actionHistory,
-      simulatedDaysProcessed: run.batchesCompleted,
+      simulatedDaysProcessed: Math.floor(run.batchesCompleted / Math.ceil(run.clientCount / SIMULATION_CLIENT_BATCH_SIZE)),
+      onboardingCompletedByAgent: completedOnboarding.length,
+      clientsWithUnresolvedDocuments: unresolvedClientRows.length,
+      documentsNeedingAttention,
+      activeEscalations,
+      advisorAlerts: actionCount("NOTIFY_ADVISOR"),
+      clientReminders: actionCount("SEND_CLIENT_REMINDER"),
+      complianceOfficerEscalations: actionCount("ESCALATE_COMPLIANCE"),
+      managementEscalations: actionCount("ESCALATE_MANAGEMENT"),
     };
 
     await prisma.simulationRun.update({
@@ -296,6 +330,9 @@ export class SimulationOrchestrator {
       await prisma.client.createMany({
         data: candidates.map((client, index) => ({
           ...client,
+          ...((start + index) % 3 === 2
+            ? { onboardingStage: 4, onboardingStatus: "COMPLETED" as const }
+            : {}),
           email: `sim-${runId}-${start + index}@example.com`,
           firmId: "CEREBRO-SIM-FIRM",
           advisorId: "CEREBRO-SIM-ADVISOR",
@@ -306,6 +343,22 @@ export class SimulationOrchestrator {
     }
     const seeded = await prisma.client.count({ where: { simulationRunId: runId } });
     if (seeded !== count) throw new Error(`Simulation run ${runId} seeded ${seeded}/${count} clients`);
+    for (let start = 0; start < count; start += batchSize) {
+      const clients = await prisma.client.findMany({
+        where: { simulationRunId: runId, email: { startsWith: `sim-${runId}-` } },
+        select: { id: true, email: true },
+        skip: start, take: Math.min(batchSize, count - start), orderBy: { email: "asc" },
+      });
+      const documents = clients.flatMap((client) => {
+        const index = Number(client.email.match(/-(\d+)@example\.com$/)?.[1] ?? 0);
+        const profile = index % 3 === 0 ? "IDEAL" : index % 3 === 1 ? "MESSY" : "HIGH_RISK";
+        const factory = new EntityFactory(`${run.randomSeed}-client-${index}`, new Date(run.startedAt));
+        return factory.generateDocuments(client.id, profile).map((document) => ({
+          ...document, id: `${client.id}-${document.type}`,
+        } as Prisma.DocumentCreateManyInput));
+      });
+      if (documents.length) await prisma.document.createMany({ data: documents, skipDuplicates: true });
+    }
     return { count: seeded };
   }
 

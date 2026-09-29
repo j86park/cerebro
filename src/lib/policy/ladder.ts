@@ -13,8 +13,12 @@ export function resolveComplianceLadderStage(
   history: Array<{ actionType: string; outcome?: string | null }>,
 ): number {
   // A denied attempt is evidence of a policy check, not a completed ladder step.
+  const uncommittedOutcomes = new Set([
+    "POLICY_BLOCKED", "PENDING_APPROVAL", "HITL_SUSPENDED",
+    "HITL_DENIED", "HITL_TIMEOUT_SAFE_HOLD",
+  ]);
   const parsed = z.array(actionHistoryItemSchema).parse(history).filter(
-    (action) => action.outcome !== "POLICY_BLOCKED",
+    (action) => !uncommittedOutcomes.has(action.outcome ?? ""),
   );
 
   const hasManagement = parsed.some((a) => a.actionType === "ESCALATE_MANAGEMENT");

@@ -15,7 +15,7 @@ export function buildAgentMemoryOptions(workingMemorySchema: ZodType) {
       scope: "thread";
     };
   } = {
-    lastMessages: 20,
+    lastMessages: 4,
     workingMemory: {
       enabled: true,
       schema: workingMemorySchema,

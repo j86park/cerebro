@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
 import { addDemoDays } from "@/lib/dates/demo-date";
+import { assertResolvableDocument } from "@/lib/documents/resolution";
 
 /** Statuses that close an open compliance issue — use markResolved instead. */
 const resolveClassStatuses = ["VALID"] as const;
@@ -55,6 +56,7 @@ export function buildUpdateDocumentStatus(vault: VaultService) {
       if (usedResolvePath) {
         // REGULATORY: same 5-day no-repeat window as markResolved for VALID writes.
         await vault.checkActionCooldown("MARK_RESOLVED", 5, documentId);
+        await assertResolvableDocument(vault, documentId);
       }
 
       await vault.updateDocumentStatus(documentId, status, notes);
@@ -67,7 +69,7 @@ export function buildUpdateDocumentStatus(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: `STATUS_UPDATED_TO_${status}`,
-        nextScheduledAt: addDemoDays(7),
+        nextScheduledAt: addDemoDays(7, vault.getNow()),
         documentId,
         reasonCodes: usedResolvePath
           ? ["MARK_RESOLVED"]

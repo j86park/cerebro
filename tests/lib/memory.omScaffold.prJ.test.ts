@@ -43,7 +43,7 @@ describe("T2.1 observational memory scaffold", () => {
     );
 
     const options = buildAgentMemoryOptions(schema);
-    expect(options.lastMessages).toBe(20);
+    expect(options.lastMessages).toBe(4);
     expect(options.workingMemory.enabled).toBe(true);
     expect(options.observationalMemory).toBeUndefined();
   });

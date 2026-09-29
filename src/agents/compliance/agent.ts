@@ -18,7 +18,7 @@ export async function getComplianceAgent(): Promise<Agent> {
 
   const base = await loadPrompt("compliance");
   const lessons = await getRelevantLessons("compliance");
-  const instructions = injectLessons(base, lessons);
+  const instructions = `${injectLessons(base, lessons)}\n\nWhen updating working memory, use only these schema fields: currentEscalationStage, lastActionType, lastActionDate, notificationCounts, isEscalated, escalatedTo, openIssues. Keep summaries short. Pending approval is not a completed escalation; verify the action ledger and open escalation state before advancing.`;
 
   _instance = new Agent({
     id: "complianceAgent",

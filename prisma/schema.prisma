@@ -90,6 +90,8 @@ model AgentAction {
   outcome         String?
   nextScheduledAt DateTime?
   performedAt     DateTime    @default(now())
+  /// Business/simulation time used for cooldowns; performedAt remains the real audit time.
+  effectiveAt     DateTime?
 
   // Ledger control-plane fields (WP-P0.1 ActionLedger)
   stage           Int?
@@ -104,7 +106,28 @@ model AgentAction {
 
   @@unique([clientId, idempotencyKey])
   @@index([clientId, performedAt])
+  @@index([clientId, effectiveAt])
   @@index([agentType, actionType])
+}
+
+/// Durable notification intent; provider idempotency key closes the DB/email retry gap.
+model ReminderEmailOutbox {
+  id             String    @id @default(cuid())
+  idempotencyKey String    @unique
+  clientId       String
+  documentId     String
+  recipient      String
+  subject        String
+  body           String
+  status         String    @default("PENDING")
+  attemptCount   Int       @default(0)
+  lockedAt       DateTime?
+  sentAt         DateTime?
+  providerId     String?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+
+  @@index([status, lockedAt])
 }
 
 /// Examiner system-of-record decision log (WP-P0.6). Correlates with Mastra AI Tracing via traceId.
@@ -335,6 +358,7 @@ enum DocumentStatus {
   VALID
   EXPIRING_SOON
   EXPIRED
+  SUPERSEDED
 }
 
 enum DocumentCategory {

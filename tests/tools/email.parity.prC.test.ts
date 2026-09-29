@@ -80,6 +80,7 @@ describe("email DRY_RUN parity (PR-C / T0.5)", () => {
       riskProfile: "MODERATE",
     });
     vault.checkActionCooldown = vi.fn().mockResolvedValue(undefined);
+    vault.getDocuments = vi.fn().mockResolvedValue([]);
     vault.upsertDocument = vi.fn().mockResolvedValue({});
     vault.logAction = vi.fn().mockResolvedValue({ id: "a1" });
 
@@ -117,6 +118,7 @@ describe("email DRY_RUN parity (PR-C / T0.5)", () => {
       riskProfile: null,
     });
     vault.checkActionCooldown = vi.fn().mockResolvedValue(undefined);
+    vault.getDocuments = vi.fn().mockResolvedValue([]);
     vault.upsertDocument = vi.fn().mockResolvedValue({});
     vault.upsertOnboardingStageState = vi.fn().mockResolvedValue({});
     vault.logAction = vi.fn().mockResolvedValue({ id: "a-bootstrap" });
@@ -136,6 +138,22 @@ describe("email DRY_RUN parity (PR-C / T0.5)", () => {
       status: "IN_PROGRESS",
     }));
     expect(vault.logAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("never downgrades a VALID checklist document to REQUESTED", async () => {
+    const vault = new VaultService({ clientId: "CLT-VALID", now: new Date("2026-09-29T12:00:00.000Z") }, {} as never);
+    vault.getClientProfile = vi.fn().mockResolvedValue({
+      email: "client@example.com", onboardingStage: 2, accountType: "TFSA", riskProfile: null,
+    });
+    vault.getDocuments = vi.fn().mockResolvedValue([
+      { type: "NAAF", status: "VALID", uploadedAt: new Date("2026-09-28T12:00:00.000Z") },
+    ]);
+    vault.upsertDocument = vi.fn();
+    const tool = buildRequestDocument(vault);
+    await expect((tool as unknown as { execute(input: { documentType: string; message: string; reasoning: string }): Promise<unknown> }).execute({
+      documentType: "NAAF", message: "Please upload NAAF", reasoning: "Requesting a document that is already valid should be rejected.",
+    })).rejects.toThrow(/not an unresolved gap/);
+    expect(vault.upsertDocument).not.toHaveBeenCalled();
   });
 
   it("alertAdvisorStuck emails the advisor via sendTransactionalEmail", async () => {

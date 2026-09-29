@@ -3,10 +3,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export type OutcomeSummaryMetrics = {
-  issuesDetected: number;
-  issuesResolved: number;
-  escalations: number;
-  avgResolutionDays: number;
+  onboardingCompletedByAgent: number;
+  clientsWithUnresolvedDocuments: number;
+  documentsNeedingAttention: number;
+  simulatedDaysProcessed: number;
 };
 
 type OutcomeSummaryCardsProps = {
@@ -19,24 +19,24 @@ type OutcomeSummaryCardsProps = {
 export function OutcomeSummaryCards({ metrics }: OutcomeSummaryCardsProps) {
   const items: { title: string; value: string; hint: string }[] = [
     {
-      title: "Issues detected",
-      value: metrics.issuesDetected.toLocaleString(),
-      hint: "Across simulated clients",
+      title: "Onboarding completed",
+      value: metrics.onboardingCompletedByAgent.toLocaleString(),
+      hint: "Persisted agent completions",
     },
     {
-      title: "Issues resolved",
-      value: metrics.issuesResolved.toLocaleString(),
-      hint: "Agent + advisor path",
+      title: "Clients with open documents",
+      value: metrics.clientsWithUnresolvedDocuments.toLocaleString(),
+      hint: "Non-valid document state",
     },
     {
-      title: "Escalations",
-      value: metrics.escalations.toLocaleString(),
-      hint: "Compliance / management",
+      title: "Documents needing attention",
+      value: metrics.documentsNeedingAttention.toLocaleString(),
+      hint: "Non-valid documents",
     },
     {
-      title: "Avg. resolution (days)",
-      value: metrics.avgResolutionDays.toFixed(1),
-      hint: "Simulated calendar",
+      title: "Days processed",
+      value: metrics.simulatedDaysProcessed.toLocaleString(),
+      hint: "Completed day barriers",
     },
   ];
 

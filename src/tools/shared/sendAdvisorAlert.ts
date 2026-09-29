@@ -89,7 +89,7 @@ export function buildSendAdvisorAlert(
         trigger: "SCHEDULED",
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "EMAIL_SENT",
-        nextScheduledAt: addDemoDays(5),
+        nextScheduledAt: addDemoDays(5, vault.getNow()),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
         reasonCodes: ["POLICY_ALLOW_AUTO"],

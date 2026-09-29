@@ -30,7 +30,7 @@ export function EscalationFunnel({ data, height = 260 }: EscalationFunnelProps) 
   return (
     <div className="w-full rounded-xl border border-slate-800 bg-slate-900/40 p-4">
       <h3 className="text-sm font-semibold text-slate-200 mb-4">
-        Escalation funnel
+        Recorded notification and escalation actions
       </h3>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} layout="vertical" margin={{ left: 16, right: 32 }}>

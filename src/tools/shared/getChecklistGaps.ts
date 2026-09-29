@@ -66,7 +66,7 @@ export function buildGetChecklistGaps(vault: VaultService) {
 
       const checklistContext = { stage, accountType, riskProfile };
       const stageConfig = resolveStageChecklist(checklistContext);
-      const gaps = computeChecklistGaps(checklistContext, documents);
+      const gaps = computeChecklistGaps(checklistContext, documents, vault.getNow());
 
       return {
         stage,

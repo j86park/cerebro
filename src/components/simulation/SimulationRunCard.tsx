@@ -44,7 +44,7 @@ export function SimulationRunCard({ run }: SimulationRunCardProps) {
           variant={run.status === "COMPLETED" ? "default" : run.status === "FAILED" ? "destructive" : "secondary"}
           className={run.status === "COMPLETED" ? "bg-green-500/10 text-green-500 border-green-500/20" : ""}
         >
-          {run.status}
+          {run.status === "COMPLETED" ? "BATCHES COMPLETED" : run.status}
         </Badge>
       </CardHeader>
       <CardContent>
@@ -60,7 +60,7 @@ export function SimulationRunCard({ run }: SimulationRunCardProps) {
             <Clock className="w-4 h-4 text-purple-400" />
             <div className="flex flex-col">
               <span className="text-sm font-semibold">{run.simulatedDays} Days</span>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Duration</span>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Planned span</span>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -78,6 +78,11 @@ export function SimulationRunCard({ run }: SimulationRunCardProps) {
             </div>
           </div>
         </div>
+        {run.metrics && typeof run.metrics.onboardingCompletedByAgent === "number" && (
+          <p className="mt-4 text-xs text-slate-400">
+            Onboarding completed: {run.metrics.onboardingCompletedByAgent} · Clients with open documents: {typeof run.metrics.clientsWithUnresolvedDocuments === "number" ? run.metrics.clientsWithUnresolvedDocuments : "—"}
+          </p>
+        )}
 
         {run.status === "RUNNING" && (
           <div className="mt-4">

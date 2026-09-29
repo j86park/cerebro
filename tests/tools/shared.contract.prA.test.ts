@@ -92,6 +92,9 @@ describe("markResolved", () => {
   it("sets VALID and logs MARK_RESOLVED", async () => {
     const vault = stubVault();
     vault.checkActionCooldown = vi.fn().mockResolvedValue(undefined);
+    vault.getDocumentById = vi.fn().mockResolvedValue({ id: "doc-1", type: "GOVERNMENT_ID",
+      status: "PENDING_REVIEW", uploadedAt: new Date("2026-03-13T00:00:00.000Z"),
+      expiryDate: new Date("2027-03-14T00:00:00.000Z") });
     vault.updateDocumentStatus = vi.fn().mockResolvedValue({});
     vault.logAction = vi.fn().mockResolvedValue({ id: "a1" });
 

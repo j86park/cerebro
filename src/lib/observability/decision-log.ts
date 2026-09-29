@@ -7,6 +7,7 @@ export const decisionOutcomeSchema = z.enum([
   "RUN_STARTED",
   "RUN_SUCCEEDED",
   "RUN_FAILED",
+  "RUN_EFFECT_PERSISTED_MODEL_ERROR",
   "TOOL_PROPOSED",
   "TOOL_EXECUTED",
   "REFUSED",

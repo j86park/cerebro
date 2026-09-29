@@ -108,8 +108,10 @@ type PrismaLike = {
     findMany: (args: unknown) => Promise<unknown[]>;
     create: (args: unknown) => Promise<unknown>;
     update: (args: unknown) => Promise<unknown>;
+    updateMany: (args: unknown) => Promise<unknown>;
     upsert: (args: unknown) => Promise<unknown>;
   };
+  $transaction?: (callback: (tx: PrismaLike) => Promise<unknown>) => Promise<unknown>;
   agentAction: {
     findMany: (args: unknown) => Promise<unknown[]>;
     findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
@@ -239,7 +241,7 @@ export class VaultService {
   async getActionHistory() {
     return this.db.agentAction.findMany({
       where: { clientId: this.clientId },
-      orderBy: { performedAt: "desc" },
+      orderBy: [{ effectiveAt: "desc" }, { performedAt: "desc" }],
     });
   }
 
@@ -326,6 +328,7 @@ export class VaultService {
       reasoning: parsed.reasoning,
       outcome: parsed.outcome,
       nextScheduledAt: parsed.nextScheduledAt,
+      effectiveAt: this.getNow(),
       stage: parsed.stage,
       policyVersion: parsed.policyVersion,
       promptVersionId,
@@ -536,6 +539,7 @@ export class VaultService {
       documentId: string | null;
       outcome: string | null;
       performedAt: Date;
+      effectiveAt?: Date | null;
       actionType: string;
     }>;
 
@@ -544,7 +548,7 @@ export class VaultService {
       if (row.agentType !== input.agentType) return false;
       if (row.trigger !== input.trigger) return false;
       if (row.actionType !== "SCAN_VAULT") return false;
-      if (row.performedAt.getTime() < input.since.getTime()) return false;
+      if ((row.effectiveAt ?? row.performedAt).getTime() < input.since.getTime()) return false;
       if (input.documentId) {
         return row.documentId === input.documentId;
       }
@@ -556,22 +560,27 @@ export class VaultService {
    * Checks if a duplicate action is being attempted within the cooldown period.
    * Throws an error if the cooldown has not expired.
    */
-  async checkActionCooldown(actionType: string, cooldownDays: number, documentId?: string) {
+  async checkActionCooldown(actionType: string, cooldownDays: number, documentId?: string, stage?: number, agentType?: string) {
     const history = await this.getActionHistory() as Array<{
       actionType: string;
       documentId: string | null;
       performedAt: Date;
+      effectiveAt?: Date | null;
+      stage?: number | null;
+      agentType?: string;
       outcome: string | null;
     }>;
 
     const latest = history.find(
       (h) => h.actionType === actionType && h.outcome !== "POLICY_BLOCKED" &&
-        (!documentId || h.documentId === documentId)
+        (!documentId || h.documentId === documentId) &&
+        (stage === undefined || h.stage === stage) &&
+        (agentType === undefined || h.agentType === agentType)
     );
 
     if (latest) {
       const now = this.getNow();
-      const daysSince = (now.getTime() - latest.performedAt.getTime()) / (1000 * 60 * 60 * 24);
+      const daysSince = (now.getTime() - (latest.effectiveAt ?? latest.performedAt).getTime()) / (1000 * 60 * 60 * 24);
 
       if (daysSince < cooldownDays) {
         throw new Error(
@@ -587,7 +596,22 @@ export class VaultService {
    */
   async updateDocumentStatus(documentId: string, status: string, notes?: string) {
     const id = z.string().min(1).parse(documentId);
-    await this.requireDocumentInVault(id);
+    const document = await this.requireDocumentInVault(id) as { type: string };
+
+    if (status === "VALID") {
+      // Keep historical rows for audit, but do not let an expired predecessor
+      // remain an active blocker after its replacement is admitted.
+      const admitReplacement = async (db: PrismaLike) => {
+        await db.document.updateMany({
+          where: { clientId: this.clientId, type: document.type, id: { not: id }, status: { not: "SUPERSEDED" } },
+          data: { status: "SUPERSEDED" },
+        });
+        return db.document.update({ where: { id }, data: { status, notes } });
+      };
+      return this.db.$transaction
+        ? this.db.$transaction(admitReplacement)
+        : admitReplacement(this.db);
+    }
 
     return this.db.document.update({
       where: {
@@ -597,6 +621,83 @@ export class VaultService {
         status,
         notes,
       },
+    });
+  }
+
+  /** Persist a reminder once without changing the document's compliance status. */
+  async recordDocumentNotification(input: {
+    documentId: string;
+    idempotencyKey: string;
+    reasoning: string;
+    outcome: string;
+    nextScheduledAt: Date;
+    stage: number;
+    policyVersion: string;
+    email?: { to: string; subject: string; body: string };
+  }): Promise<{ notificationCount: number; duplicate: boolean; outboxId: string | null }> {
+    const documentId = z.string().min(1).parse(input.documentId);
+    const idempotencyKey = z.string().min(1).parse(input.idempotencyKey);
+    let promptVersionId: string | null = null;
+    try {
+      promptVersionId = await resolveProductionPromptVersionId("compliance");
+    } catch (error) {
+      console.error("[VaultService.recordDocumentNotification] promptVersionId resolve failed:", error);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const document = await tx.document.findFirst({
+        where: { id: documentId, clientId: this.clientId },
+        select: { id: true },
+      });
+      if (!document) throw new Error(`Document ${documentId} does not belong to client ${this.clientId}`);
+
+      const inserted = await tx.agentAction.createMany({
+        data: [{
+          clientId: this.clientId,
+          documentId,
+          agentType: "COMPLIANCE",
+          actionType: "SEND_CLIENT_REMINDER",
+          trigger: "SCHEDULED",
+          reasoning: input.reasoning,
+          outcome: input.outcome,
+          nextScheduledAt: input.nextScheduledAt,
+          effectiveAt: this.getNow(),
+          stage: input.stage,
+          policyVersion: input.policyVersion,
+          promptVersionId,
+          reasonCodes: ["POLICY_ALLOW_AUTO"],
+          idempotencyKey,
+        }],
+        skipDuplicates: true,
+      });
+      if (inserted.count) {
+        await tx.document.update({
+          where: { id: documentId },
+          data: {
+            notificationCount: { increment: 1 },
+            lastNotifiedAt: this.getNow(),
+          },
+        });
+        if (input.email) {
+          await tx.reminderEmailOutbox.create({ data: {
+            clientId: this.clientId,
+            documentId,
+            idempotencyKey,
+            recipient: input.email.to,
+            subject: input.email.subject,
+            body: input.email.body,
+          } });
+        }
+      }
+      const updated = await tx.document.findUniqueOrThrow({
+        where: { id: documentId },
+        select: { notificationCount: true },
+      });
+      const outbox = input.email ? await tx.reminderEmailOutbox.findUnique({
+        where: { idempotencyKey }, select: { id: true },
+      }) : null;
+      return { notificationCount: updated.notificationCount, duplicate: inserted.count === 0,
+        outboxId: outbox?.id ?? null };
     });
   }
 

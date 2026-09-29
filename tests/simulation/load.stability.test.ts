@@ -31,9 +31,13 @@ describe.skipIf(!process.env.RUN_SIMULATION_LOAD_TESTS)(
     expect(seedResult.count).toBe(clientCount);
     const dbCount = await prisma.client.count({ where: { simulationRunId: run.id } });
     expect(dbCount).toBe(clientCount);
+    await prisma.simulationRun.update({
+      where: { id: run.id },
+      data: { batchesTotal: simulatedDays },
+    });
 
     // 3. Process Ticks (serial for test stability)
-    console.log(`[Test] Starting 7-day tick sequence for ${clientCount} clients...`);
+    console.log(`[Test] Starting ${simulatedDays}-day tick sequence for ${clientCount} clients...`);
     for (let day = 0; day < simulatedDays; day++) {
         const result = await orchestrator.tick(run.id, day);
         expect(result.clientCount).toBe(clientCount);
@@ -45,6 +49,7 @@ describe.skipIf(!process.env.RUN_SIMULATION_LOAD_TESTS)(
     const finalRun = await orchestrator.getRun(run.id);
     expect(finalRun?.status).toBe("COMPLETED");
     expect(finalRun?.batchesCompleted).toBe(simulatedDays);
+    expect(await prisma.agentAction.count({ where: { client: { simulationRunId: run.id } } })).toBeGreaterThan(0);
 
     // 5. Aggregate and Check Metrics
     const metrics = await orchestrator.aggregateMetrics(run.id);

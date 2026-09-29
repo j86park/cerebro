@@ -2,7 +2,7 @@ import type { Document } from "@prisma/client";
 import { VaultService } from "@/lib/db/vault-service";
 import { DOCUMENT_REGISTRY, getRequiredDocs } from "@/lib/documents/registry";
 import { DocumentStatus } from "@/lib/db/enums";
-import { daysUntilExpiry, demoNow, isExpired } from "@/lib/dates/demo-date";
+import { daysUntilExpiry, isExpired } from "@/lib/dates/demo-date";
 
 type RegistryKey = keyof typeof DOCUMENT_REGISTRY;
 
@@ -128,13 +128,15 @@ export function getRegulatoryNote(
 }
 
 export async function getComplianceScorecard(vault: VaultService): Promise<ComplianceScorecard> {
-  const asOf = demoNow();
+  const asOf = vault.getNow();
   const profile = (await vault.getClientProfile()) as {
     accountType: string;
   };
   const requiredTypes = getRequiredDocs(profile.accountType);
 
-  const existingDocs = (await vault.getDocuments()) as Document[];
+  const existingDocs = ((await vault.getDocuments()) as Document[]).filter(
+    (document) => document.status !== DocumentStatus.SUPERSEDED,
+  );
   const existingTypes = existingDocs.map((d) => d.type);
 
   // 1. Identify actually missing document types

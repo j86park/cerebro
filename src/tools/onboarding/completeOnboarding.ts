@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
-import { addDemoDays, demoNow } from "@/lib/dates/demo-date";
+import { addDemoDays } from "@/lib/dates/demo-date";
 import {
   accountTypeSchema,
   computeChecklistGaps,
@@ -45,6 +45,17 @@ export function buildCompleteOnboarding(vault: VaultService) {
       >;
       const currentStage = client.onboardingStage as number;
       const totalStages = getTotalOnboardingStages();
+      if (client.onboardingStatus === "COMPLETED") {
+        const history = await vault.getActionHistory() as Array<{
+          actionType: string; outcome?: string | null; effectiveAt?: Date | null;
+          performedAt: Date; policyVersion?: string | null;
+        }>;
+        const completed = history.find((action) => action.actionType === "COMPLETE_ONBOARDING"
+          && action.outcome === "ONBOARDING_COMPLETED");
+        if (!completed) throw new Error("Client is marked completed without a completion ledger entry");
+        return { success: true, completedAt: new Date(completed.effectiveAt ?? completed.performedAt).toISOString(),
+          policyVersion: completed.policyVersion ?? "unknown-historical" };
+      }
       const accountType = accountTypeSchema.parse(client.accountType);
       const riskProfile =
         client.riskProfile == null
@@ -81,7 +92,7 @@ export function buildCompleteOnboarding(vault: VaultService) {
         uploadedAt?: Date | string | null;
       }>;
 
-      const gaps = computeChecklistGaps(checklistContext, documents);
+      const gaps = computeChecklistGaps(checklistContext, documents, vault.getNow());
       if (gaps.length > 0) {
         const parts = gaps.map(
           (g) => `${g.documentType} (${g.reason}: ${g.status})`,
@@ -100,11 +111,11 @@ export function buildCompleteOnboarding(vault: VaultService) {
           riskProfile,
           requiredDocuments: stageConfig?.requiredDocuments ?? [],
           gaps: [],
-          completedAt: demoNow().toISOString(),
+          completedAt: vault.getNow().toISOString(),
         },
       });
 
-      const completedAt = demoNow().toISOString();
+      const completedAt = vault.getNow().toISOString();
 
       await vault.logAction({
         agentType: "ONBOARDING",
@@ -112,7 +123,7 @@ export function buildCompleteOnboarding(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: "ONBOARDING_COMPLETED",
-        nextScheduledAt: addDemoDays(30),
+        nextScheduledAt: addDemoDays(30, vault.getNow()),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
         reasonCodes: ["POLICY_ALLOW_AUTO", "CHECKLIST_COMPLETE"],

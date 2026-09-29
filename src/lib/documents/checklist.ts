@@ -191,10 +191,11 @@ function toDate(value: Date | string | null | undefined): Date | null {
 const validateDocumentOptionsSchema = z.object({
   /**
    * `checklist` (default): require status VALID then check expiry/recency.
-   * `admission`: upload→validate path — allow PENDING_REVIEW/REQUESTED/etc.,
-   * still fail MISSING/EXPIRED and DEMO_DATE expiry/recency; caller may persist VALID.
+   * `admission`: upload→validate path — require a PENDING_REVIEW row with
+   * uploadedAt, then check expiry/recency before persisting VALID.
    */
   purpose: z.enum(["checklist", "admission"]).default("checklist"),
+  asOf: z.date().optional(),
 });
 
 export type ValidateDocumentOptions = z.input<
@@ -210,7 +211,7 @@ export function validateDocumentDeterministic(
   documentType: string,
   options: ValidateDocumentOptions = {},
 ): DocumentValidityResult {
-  const { purpose } = validateDocumentOptionsSchema.parse(options);
+  const { purpose, asOf: requestedAsOf } = validateDocumentOptionsSchema.parse(options);
 
   if (!doc) {
     return documentValidityResultSchema.parse({
@@ -228,7 +229,7 @@ export function validateDocumentDeterministic(
   const status = doc.status;
   const expiry = toDate(doc.expiryDate);
   const uploadedAt = toDate(doc.uploadedAt);
-  const asOf = demoNow();
+  const asOf = requestedAsOf ?? demoNow();
   const expired = isExpired(expiry, asOf);
   const days =
     expiry !== null ? daysUntilExpiry(expiry, asOf) : null;
@@ -266,13 +267,13 @@ export function validateDocumentDeterministic(
     });
   }
 
-  if (purpose === "admission" && status === "MISSING") {
+  if (purpose === "admission" && (status !== "PENDING_REVIEW" || !uploadedAt)) {
     return documentValidityResultSchema.parse({
       valid: false,
       documentType: doc.type,
       status,
-      notes: `Document ${doc.type} is MISSING — cannot admit as VALID.`,
-      gapReason: "MISSING",
+      notes: `Document ${doc.type} must be an uploaded PENDING_REVIEW document to admit as VALID.`,
+      gapReason: status === "MISSING" ? "MISSING" : "NOT_VALID",
       daysUntilExpiry: days,
       expired: false,
       staleRecency: false,
@@ -333,14 +334,15 @@ export function validateDocumentDeterministic(
 export function computeChecklistGaps(
   context: ChecklistContext,
   documents: VaultDocumentLike[],
+  asOf: Date = demoNow(),
 ): ChecklistGap[] {
   const stageConfig = resolveStageChecklist(context);
   if (!stageConfig) return [];
 
   const gaps: ChecklistGap[] = [];
   for (const docType of stageConfig.requiredDocuments) {
-    const doc = documents.find((d) => d.type === docType);
-    const result = validateDocumentDeterministic(doc, docType);
+    const doc = documents.find((d) => d.type === docType && d.status !== "SUPERSEDED");
+    const result = validateDocumentDeterministic(doc, docType, { asOf });
     if (!result.valid && result.gapReason) {
       gaps.push(
         checklistGapSchema.parse({
@@ -361,16 +363,17 @@ export function computeChecklistGaps(
 export function buildChecklistSnapshot(
   context: ChecklistContext,
   documents: VaultDocumentLike[],
+  asOf: Date = demoNow(),
 ): Record<string, unknown> {
   const stageConfig = resolveStageChecklist(context);
-  const gaps = computeChecklistGaps(context, documents);
+  const gaps = computeChecklistGaps(context, documents, asOf);
   return {
     stage: context.stage,
     accountType: context.accountType,
     riskProfile: context.riskProfile ?? null,
     requiredDocuments: stageConfig?.requiredDocuments ?? [],
     gaps,
-    evaluatedAt: demoNow().toISOString(),
+    evaluatedAt: asOf.toISOString(),
   };
 }
 

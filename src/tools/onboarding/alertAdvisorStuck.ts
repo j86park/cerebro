@@ -79,7 +79,7 @@ export function buildAlertAdvisorStuck(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: DRY_RUN ? "DRY_RUN" : "ADVISOR_ALERTED",
-        nextScheduledAt: addDemoDays(7),
+        nextScheduledAt: addDemoDays(7, vault.getNow()),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
         reasonCodes: ["POLICY_ALLOW_AUTO"],

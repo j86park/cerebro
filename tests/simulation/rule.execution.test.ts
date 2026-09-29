@@ -12,6 +12,7 @@ describe("Rule Engine Execution - Conditional & Multi-Doc", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockVault = {
+      getNow: vi.fn(() => new Date("2026-09-28T12:00:00.000Z")),
       getClientProfile: vi.fn(),
       getDocuments: vi.fn(),
     };

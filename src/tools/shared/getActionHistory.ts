@@ -1,11 +1,15 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { VaultService } from "@/lib/db/vault-service";
+import { resolveComplianceLadderStage } from "@/lib/policy";
 
 const inputSchema = z.object({
   limit: z
     .number()
-    .default(20)
+    .int()
+    .min(1)
+    .max(12)
+    .default(6)
     .describe("Maximum number of recent actions to return"),
 });
 
@@ -17,13 +21,20 @@ const actionEntrySchema = z.object({
   reasoning: z.string(),
   outcome: z.string().nullable(),
   performedAt: z.string(),
+  effectiveAt: z.string(),
   nextScheduledAt: z.string().nullable(),
 });
 
 const outputSchema = z.object({
   actions: z.array(actionEntrySchema),
   total: z.number(),
+  complianceLadderStage: z.number().int(),
+  approvedEscalationStages: z.array(z.number().int()),
 });
+
+function utcTimestamp(value: unknown): string {
+  return new Date(value as string | Date).toISOString();
+}
 
 export function buildGetActionHistory(vault: VaultService) {
   return createTool({
@@ -44,14 +55,22 @@ export function buildGetActionHistory(vault: VaultService) {
           agentType: a.agentType as string,
           actionType: a.actionType as string,
           trigger: a.trigger as string,
-          reasoning: a.reasoning as string,
+          reasoning: String(a.reasoning ?? "").slice(0, 200),
           outcome: (a.outcome as string) ?? null,
-          performedAt: String(a.performedAt),
+          performedAt: utcTimestamp(a.performedAt),
+          effectiveAt: utcTimestamp(a.effectiveAt ?? a.performedAt),
           nextScheduledAt: a.nextScheduledAt
-            ? String(a.nextScheduledAt)
+            ? utcTimestamp(a.nextScheduledAt)
             : null,
         })),
         total: allActions.length,
+        complianceLadderStage: resolveComplianceLadderStage(allActions.map((action) => ({
+          actionType: String(action.actionType), outcome: action.outcome == null ? null : String(action.outcome),
+        }))),
+        approvedEscalationStages: [...new Set(allActions.filter((action) =>
+          action.actor === "ADVISOR" && Array.isArray(action.reasonCodes)
+          && action.reasonCodes.includes("HITL_APPROVED") && typeof action.stage === "number",
+        ).map((action) => action.stage as number))],
       };
     },
   });

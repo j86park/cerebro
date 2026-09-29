@@ -65,7 +65,7 @@ export function buildAdvanceOnboardingStage(vault: VaultService) {
         reasoning,
       });
 
-      await vault.checkActionCooldown("ADVANCE_STAGE", 3);
+      await vault.checkActionCooldown("ADVANCE_STAGE", 3, undefined, currentStage);
 
       const checklistContext = {
         stage: currentStage,
@@ -88,8 +88,8 @@ export function buildAdvanceOnboardingStage(vault: VaultService) {
         uploadedAt?: Date | string | null;
       }>;
 
-      const gaps = computeChecklistGaps(checklistContext, documents);
-      const snapshot = buildChecklistSnapshot(checklistContext, documents);
+      const gaps = computeChecklistGaps(checklistContext, documents, vault.getNow());
+      const snapshot = buildChecklistSnapshot(checklistContext, documents, vault.getNow());
 
       if (gaps.length > 0) {
         const statusValues = Object.values(OnboardingStatus) as string[];
@@ -134,7 +134,7 @@ export function buildAdvanceOnboardingStage(vault: VaultService) {
         trigger: "SCHEDULED",
         reasoning,
         outcome: `ADVANCED_FROM_STAGE_${currentStage}_TO_${newStage}`,
-        nextScheduledAt: addDemoDays(1),
+        nextScheduledAt: addDemoDays(1, vault.getNow()),
         stage: policy.stage,
         policyVersion: policy.policyVersion,
         reasonCodes: ["POLICY_ALLOW_AUTO", "CHECKLIST_COMPLETE"],

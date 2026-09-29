@@ -18,7 +18,7 @@ export async function getOnboardingAgent(): Promise<Agent> {
 
   const base = await loadPrompt("onboarding");
   const lessons = await getRelevantLessons("onboarding");
-  const instructions = injectLessons(base, lessons);
+  const instructions = `${injectLessons(base, lessons)}\n\nAfter each stage advancement, re-read the current stage checklist and vault documents. Request only unresolved checklist gaps; never request or overwrite a document that is already valid. If the next stage checklist is already complete, advance or complete onboarding under the policy tools.`;
 
   _instance = new Agent({
     id: "onboardingAgent",

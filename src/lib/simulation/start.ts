@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import { queues } from "@/lib/queue/client";
-import { SimulationOrchestrator } from "./orchestrator";
+import { SimulationOrchestrator, SIMULATION_CLIENT_BATCH_SIZE } from "./orchestrator";
 
 export const simulationStartSchema = z.object({
   clientCount: z.coerce.number().int().min(1).max(1000),
@@ -19,26 +19,22 @@ export async function startSimulationRun(input: z.infer<typeof simulationStartSc
   try {
     await orchestrator.seedSimulationClients(input.clientCount, run.id);
 
-    const dayBatchSize = 10;
-    const clientBatchSize = 1000;
-    const batchesTotal = Math.ceil(input.simulatedDays / dayBatchSize) *
-      Math.ceil(input.clientCount / clientBatchSize);
+    const batchesTotal = input.simulatedDays *
+      Math.ceil(input.clientCount / SIMULATION_CLIENT_BATCH_SIZE);
     await prisma.simulationRun.update({ where: { id: run.id }, data: { batchesTotal } });
 
     let jobsEnqueued = 0;
-    for (let day = 0; day < input.simulatedDays; day += dayBatchSize) {
-      for (let client = 0; client < input.clientCount; client += clientBatchSize) {
-        const jobId = `simulation-${run.id}-${day}-${client}`;
+    for (let client = 0; client < input.clientCount; client += SIMULATION_CLIENT_BATCH_SIZE) {
+        const jobId = `simulation-${run.id}-0-${client}`;
         await queues.simulation.add(jobId, {
           runId: run.id,
-          batchStart: day,
-          batchEnd: Math.min(day + dayBatchSize - 1, input.simulatedDays - 1),
+          batchStart: 0,
+          batchEnd: 0,
           clientStart: client,
-          clientEnd: Math.min(client + clientBatchSize, input.clientCount),
+          clientEnd: Math.min(client + SIMULATION_CLIENT_BATCH_SIZE, input.clientCount),
         }, { jobId, attempts: 3 });
         enqueuedJobIds.push(jobId);
         jobsEnqueued++;
-      }
     }
     return { run: await orchestrator.getRun(run.id), jobsEnqueued };
   } catch (error) {

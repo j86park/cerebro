@@ -35,6 +35,8 @@ export const agentJobSchema = z
     agentType: z.enum(["COMPLIANCE", "ONBOARDING"]),
     trigger: agentTriggerSchema,
     documentId: z.string().min(1).optional(),
+    /** Business time for deterministic dated runs; omitted for normal live jobs. */
+    effectiveAt: z.string().datetime().optional(),
     /**
      * Stable suffix for pKYC event jobIds (e.g. risk tier pair or sorted material field names).
      * Must be URL/BullMQ-safe: alphanumeric, hyphen, underscore only.
