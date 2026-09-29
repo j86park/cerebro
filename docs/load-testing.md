@@ -4,8 +4,7 @@ This runbook supports **10k+ client** simulation smoke tests and operator expect
 
 ## Prerequisites
 
-- PostgreSQL reachable via `DATABASE_URL`
-- Local Redis (Docker) for BullMQ (`REDIS_URL`, default `redis://localhost:6379`)
+- Docker Compose PostgreSQL and Redis (`npm run infra:up`; URLs from `.env.docker.example`)
 - Workers running: `npx tsx scripts/start-workers.ts` (or your process manager)
 - Optional: seed baseline demo data (`npm run seed`)
 

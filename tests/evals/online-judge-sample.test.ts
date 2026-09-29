@@ -4,8 +4,8 @@ vi.mock("@/lib/config", () => ({
   env: {
     DRY_RUN: true,
     DEMO_DATE: "2026-03-14T00:00:00.000Z",
-    DATABASE_URL: "postgresql://localhost:5432/cerebro_test",
-    REDIS_URL: "redis://localhost:6379",
+    DATABASE_URL: "postgresql://cerebro:cerebro_dev_only@127.0.0.1:55432/cerebro?schema=public",
+    REDIS_URL: "redis://127.0.0.1:56380",
     NODE_ENV: "test",
     ONLINE_JUDGE_SAMPLE_RATE: 0.05,
     ONLINE_JUDGE_FAILURE_SAMPLE_RATE: 0.25,

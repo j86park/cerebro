@@ -38,6 +38,7 @@ import {
   type QueueName,
 } from "@/lib/queue/metrics";
 import { buildJobTracingContext } from "@/lib/observability/mastra-tracing";
+import { ensureExpiredDocumentStageOneAlert } from "./complianceOutcomeGate";
 
 /**
  * Builds the initial context prompt for an agent run, describing what
@@ -327,6 +328,12 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
     });
 
     const tools = extractToolNames(result);
+    const outcomeGate = agentType === "COMPLIANCE"
+      ? await ensureExpiredDocumentStageOneAlert(vault)
+      : null;
+    const executedTools = outcomeGate?.applied
+      ? [...tools, "sendAdvisorAlert"]
+      : tools;
     const usage = result.usage as {
       inputTokens?: number;
       outputTokens?: number;
@@ -339,7 +346,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       stage,
       traceId,
       toolProposed: tools,
-      toolExecuted: tools,
+      toolExecuted: executedTools,
       outcome: env.DRY_RUN ? "DRY_RUN" : "RUN_SUCCEEDED",
       reason: env.DRY_RUN
         ? "Agent run completed under DRY_RUN (externals suppressed)"
@@ -352,6 +359,7 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
         outputTokens: usage?.outputTokens ?? null,
         totalTokens: usage?.totalTokens ?? null,
         stepCount: result.steps?.length ?? null,
+        outcomeGate: outcomeGate ?? null,
       },
     });
 
@@ -398,11 +406,17 @@ export async function processAgentJob(job: Job<AgentJobPayload>) {
       agentName,
       stage,
       reasoningText: typeof result.text === "string" ? result.text : "",
-      toolNames: tools,
+      toolNames: executedTools,
       isFailureSignal: false,
     });
 
-    return { success: true, text: result.text, traceId };
+    return {
+      success: true,
+      text: outcomeGate?.applied
+        ? `${result.text ?? ""}\n\nPolicy outcome check: Stage 1 advisor alert was sent for expired document ${outcomeGate.documentId}.`
+        : result.text,
+      traceId,
+    };
   } catch (error) {
     // Always log failure to audit trail so the dashboard can see it
     try {

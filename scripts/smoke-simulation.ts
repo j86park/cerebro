@@ -2,36 +2,16 @@ import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
 
 // Load env before any module that imports Prisma or `@/lib/config` (imports are hoisted otherwise).
-// Same order as Vitest: `.env` then `.env.local` with override so cloud `DATABASE_URL` wins over a template `.env`.
+// Local development uses the Docker Compose connection from `.env.local`.
 loadEnv({ path: resolve(process.cwd(), ".env") });
 loadEnv({ path: resolve(process.cwd(), ".env.local"), override: true });
 
-/**
- * Prisma's datasource only reads `DATABASE_URL`. Map common Supabase/Vercel names so a single
- * connection string in `.env.local` is enough for smoke runs.
- */
 function ensureDatabaseUrlForPrisma(): void {
-  const direct = process.env.DATABASE_URL?.trim();
-  if (direct) return;
-
-  const fallback = [
-    process.env.DIRECT_URL,
-    process.env.POSTGRES_URL,
-    process.env.POSTGRES_PRISMA_URL,
-  ].find((u) => typeof u === "string" && u.trim().length > 0);
-
-  if (fallback) {
-    process.env.DATABASE_URL = fallback.trim();
-    console.warn(
-      "[smoke] DATABASE_URL was unset; using DIRECT_URL / POSTGRES_URL / POSTGRES_PRISMA_URL for Prisma."
-    );
-    return;
-  }
+  if (process.env.DATABASE_URL?.trim()) return;
 
   console.error(
     "[smoke] DATABASE_URL is missing or empty after loading .env.local and .env.\n" +
-      "  Add your Postgres connection string as DATABASE_URL (Supabase: Settings → Database → URI).\n" +
-      "  Or set DIRECT_URL, POSTGRES_URL, or POSTGRES_PRISMA_URL and this script will map it."
+      "  Copy .env.docker.example to .env.local, then run npm run infra:up and npm run db:migrate:local."
   );
   process.exit(1);
 }

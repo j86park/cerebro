@@ -976,7 +976,7 @@ export const queues = {
 ```
 
 - **Workers**: `src/lib/queue/workers.ts` — **`Worker`**, **`Job`** from **`bullmq`**, **`Redis`** from **`ioredis`** (same connection pattern).
-- **Env**: BullMQ uses **`REDIS_URL`** (local Docker default `redis://localhost:6379`). See `.env.example`.
+- **Env**: BullMQ uses **`REDIS_URL`** (local Compose default `redis://127.0.0.1:56380`). See `.env.docker.example`.
 
 ---
 

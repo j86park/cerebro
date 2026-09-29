@@ -40,8 +40,8 @@ connection.on("error", (err) => {
     lastRedisConnRefusedLogAt = Date.now();
     console.warn(
       "[Redis] Connection refused (nothing listening on REDIS_URL). " +
-        "Start Redis, e.g. `docker compose -f docker-compose-redis.yml up -d`, " +
-        "or point REDIS_URL at a running instance. Queue/dashboard polling errors will repeat until Redis is up."
+        "Start the local Compose stack with `npm run infra:up` and use REDIS_URL from .env.docker.example. " +
+        "Queue/dashboard polling errors will repeat until Redis is up."
     );
     return;
   }

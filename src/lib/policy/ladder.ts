@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const actionHistoryItemSchema = z.object({
   actionType: z.string().min(1),
+  outcome: z.string().nullable().optional(),
 });
 
 /**
@@ -9,9 +10,12 @@ const actionHistoryItemSchema = z.object({
  * REGULATORY: stage progression is deterministic from prior actions, not model judgment.
  */
 export function resolveComplianceLadderStage(
-  history: Array<{ actionType: string }>,
+  history: Array<{ actionType: string; outcome?: string | null }>,
 ): number {
-  const parsed = z.array(actionHistoryItemSchema).parse(history);
+  // A denied attempt is evidence of a policy check, not a completed ladder step.
+  const parsed = z.array(actionHistoryItemSchema).parse(history).filter(
+    (action) => action.outcome !== "POLICY_BLOCKED",
+  );
 
   const hasManagement = parsed.some((a) => a.actionType === "ESCALATE_MANAGEMENT");
   if (hasManagement) {

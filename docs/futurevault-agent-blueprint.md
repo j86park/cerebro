@@ -167,7 +167,7 @@ The model used at any point is a configuration value, not hardcoded. Switching f
 
 **`BullMQ`** — Redis-backed job queue for managing scheduled agent runs, follow-up timing, and the time-compressed simulation engine. Critical for the compliance agent which needs to check vaults on a schedule and re-check clients at defined intervals (e.g., "if no response in 5 days, run again"). BullMQ handles job persistence, retries on failure, and delayed execution reliably.
 
-**`Redis`** — Backing store for BullMQ. The Cerebro codebase uses **`REDIS_URL`** (default `redis://localhost:6379`); **local Docker** is the standard development setup. Production may use any Redis-compatible host (including managed/serverless providers) without code changes beyond the URL.
+**`Redis`** — Backing store for BullMQ. The Cerebro codebase uses **`REDIS_URL`** (local Compose default `redis://127.0.0.1:56380`); **local Docker Compose** is the standard development setup. Production may use any Redis-compatible host (including managed/serverless providers) without code changes beyond the URL.
 
 ### Notifications
 

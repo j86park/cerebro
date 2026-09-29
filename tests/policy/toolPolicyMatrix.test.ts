@@ -31,6 +31,9 @@ vi.mock("resend", () => ({
 describe("resolveComplianceLadderStage", () => {
   it("returns stage 1 with empty history", () => {
     expect(resolveComplianceLadderStage([])).toBe(1);
+    expect(resolveComplianceLadderStage([
+      { actionType: "NOTIFY_ADVISOR", outcome: "POLICY_BLOCKED" },
+    ])).toBe(1);
   });
 
   it("advances through the ladder based on prior actions", () => {

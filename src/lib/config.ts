@@ -34,10 +34,10 @@ export function isPinnedOpenRouterModelId(modelId: string): boolean {
 const envSchema = z.object({
   DATABASE_URL: databaseUrlSchema,
   /**
-   * BullMQ / ioredis — local Docker is the supported setup (e.g. redis://localhost:6379).
+   * BullMQ / ioredis — local Docker Compose exposes Redis on port 56380.
    * Password, if any, belongs in the URL (redis://:secret@host:6379).
    */
-  REDIS_URL: z.string().url().default("redis://localhost:6379"),
+  REDIS_URL: z.string().url().default("redis://127.0.0.1:56380"),
   SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
   SUPABASE_ANON_KEY: z.string().default("dev-anon-key"),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().default("https://example.supabase.co"),

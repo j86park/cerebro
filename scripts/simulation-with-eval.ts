@@ -7,28 +7,13 @@
 import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
 
-loadEnv({ path: resolve(process.cwd(), ".env.local") });
 loadEnv({ path: resolve(process.cwd(), ".env") });
+loadEnv({ path: resolve(process.cwd(), ".env.local"), override: true });
 
 function ensureDatabaseUrlForPrisma(): void {
-  const direct = process.env.DATABASE_URL?.trim();
-  if (direct) return;
+  if (process.env.DATABASE_URL?.trim()) return;
 
-  const fallback = [
-    process.env.DIRECT_URL,
-    process.env.POSTGRES_URL,
-    process.env.POSTGRES_PRISMA_URL,
-  ].find((u) => typeof u === "string" && u.trim().length > 0);
-
-  if (fallback) {
-    process.env.DATABASE_URL = fallback.trim();
-    console.warn(
-      "[sim+eval] DATABASE_URL was unset; using DIRECT_URL / POSTGRES_URL / POSTGRES_PRISMA_URL."
-    );
-    return;
-  }
-
-  console.error("[sim+eval] DATABASE_URL is missing. Set it in .env.local.");
+  console.error("[sim+eval] DATABASE_URL is missing. Copy .env.docker.example to .env.local and run npm run infra:up.");
   process.exit(1);
 }
 

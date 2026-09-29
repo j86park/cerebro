@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("@/lib/config", () => ({
   env: {
     DEMO_DATE: "2026-09-16T12:00:00.000Z",
-    REDIS_URL: "redis://localhost:6379",
+    REDIS_URL: "redis://127.0.0.1:56380",
     NODE_ENV: "test",
     DRY_RUN: true,
   },

@@ -61,11 +61,11 @@ Together they cover **both agents**, **three distinct poles** (onboard / crisis 
 
 **User:** local **Redis via Docker** (not Upstash in dev).
 
-**Codebase reality:** BullMQ uses **`REDIS_URL`** from `src/lib/config.ts` (default `redis://localhost:6379`), wired in `src/lib/queue/client.ts`. `.env.example` documents Docker-local Redis.
+**Codebase reality:** BullMQ uses **`REDIS_URL`** from `src/lib/config.ts` (local Compose default `redis://127.0.0.1:56380`), wired in `src/lib/queue/client.ts`. `.env.docker.example` documents Docker-local Redis.
 
 **Operational guidance:**
 
-- Set **`REDIS_URL`** to the Docker Redis URL (typically `redis://localhost:6379`; use `rediss://` only if your broker terminates TLS).
+- Set **`REDIS_URL`** to the Compose Redis URL (`redis://127.0.0.1:56380` by default; use `rediss://` only if your broker terminates TLS).
 
 ### 3. pgvector / embeddings
 

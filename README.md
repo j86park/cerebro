@@ -21,11 +21,11 @@ See `docs/architecture.md` for structure and API map; `ARCHITECTURE.md` for end-
 Before you start, you need:
 
 - Node.js 18+ (CI uses Node 22)
-- Docker Engine/Desktop with Compose for the reproducible local PostgreSQL + Redis stack, **or** your own reachable PostgreSQL and Redis services
+- Docker Engine/Desktop with Compose for the reproducible local PostgreSQL + Redis stack
 - An [OpenRouter](https://openrouter.ai) API key only for model-backed agents/evals; the default unit tests and mock simulation do not need one
 - A [Supabase](https://supabase.com) project only for Supabase Auth/Realtime integrations; the local PostgreSQL container does not provide those services
 
-The default local stack binds PostgreSQL to `127.0.0.1:55432` and Redis to `127.0.0.1:56380`, avoiding common native-service ports. Named Docker volumes preserve data across restarts. The older `docker-compose-redis.yml` remains available for Redis-only setups, but is not needed with the full local stack.
+The default local stack binds PostgreSQL to `127.0.0.1:55432` and Redis to `127.0.0.1:56380`, avoiding common native-service ports. Named Docker volumes preserve data across restarts. No host-installed PostgreSQL or Redis is needed. The compliance worker also checks the Stage 1 outcome for expired documents before marking a job complete; see [workflow remediation and verification](docs/agent-workflow-remediation.md).
 
 Start the full local stack with:
 
@@ -53,7 +53,7 @@ npm install
 cp .env.docker.example .env.local
 ```
 
-The sample points the host-run app at the Compose services and keeps outbound email in `DRY_RUN`. Add an OpenRouter key only if you intend to run model-backed agents. For Supabase or other infrastructure instead, copy `.env.example` and configure its connection URLs. Never commit `.env.local`.
+The sample points the host-run app at the Compose services and keeps outbound email in `DRY_RUN`. Add an OpenRouter key only if you intend to run model-backed agents. Deployment environments may still use their own PostgreSQL and Redis URLs; `.env.example` documents those settings. Never commit `.env.local`.
 
 ### 3. Start PostgreSQL and Redis
 
@@ -163,7 +163,7 @@ See `.env.example` for commented templates of the cheap-eval and scaffold flags.
 | `npm run workers:mutation` | Mutation-analysis worker only |
 | `npm run workers:shadow` | Shadow-runner worker only |
 | `npm run db:generate` | `prisma generate` |
-| `npm run db:migrate` | `prisma migrate dev` |
+| `npm run db:migrate` | Alias for Compose-local migration deployment |
 | `npm run db:migrate:prod` | `prisma migrate deploy` |
 | `npm run db:migrate:local` | Apply migrations using `.env.local` |
 | `npm run db:seed` | Seed prompt versions (`prisma/seeds/seed-prompt-versions.ts`) |
@@ -265,15 +265,15 @@ prisma/
 Run `npm run db:generate` (also runs on `postinstall`).
 
 **Redis connection refused**  
-Start Redis: `docker compose -f docker-compose-redis.yml up -d` (see **Quick Start → step 4** above), or `docker run -d -p 6379:6379 redis:alpine`, or set `REDIS_URL` to a cloud Redis URL.
+Run `npm run infra:up` and confirm `.env.local` uses the Compose `REDIS_URL` from `.env.docker.example` (see **Quick Start → step 3**).
 
 **Eval suite fails immediately**  
-Ensure `DATABASE_URL` is set and migrations have run (`npm run db:migrate`). For PR-style checks without OpenRouter spend, use `npm run test:unit`.
+Ensure `.env.local` uses the Compose `DATABASE_URL` and migrations have run (`npm run db:migrate:local`). For PR-style checks without OpenRouter spend, use `npm run test:unit`.
 
 **Type errors after pulling**  
 Run `npm install && npm run db:generate`.
 
 **`db:seed` / `seed` scripts**  
-They load `.env.local` via Node’s `--env-file`. Create `.env.local` from `.env.example` first.
+They load `.env.local` via Node’s `--env-file`. Create `.env.local` from `.env.docker.example` first.
 
 For deeper system behavior, see `ARCHITECTURE.md` and `docs/architecture.md`.
