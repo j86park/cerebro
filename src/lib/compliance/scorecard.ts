@@ -85,10 +85,13 @@ export function calculateUrgency(
   type: string
 ): UrgencyLevel {
   if (status === DocumentStatus.EXPIRED) return "CRITICAL";
-  if (status === DocumentStatus.MISSING) {
+  if (status === DocumentStatus.MISSING || status === DocumentStatus.REQUESTED) {
     const reg = registryEntry(type);
     if (reg?.category === "IDENTITY") return "HIGH";
     return "LOW";
+  }
+  if (status === DocumentStatus.PENDING_REVIEW) {
+    return registryEntry(type)?.category === "IDENTITY" ? "HIGH" : "LOW";
   }
   if (daysUntilExpiry !== null) {
     if (daysUntilExpiry <= 7) return "HIGH";
@@ -105,6 +108,10 @@ export function getRegulatoryNote(
 ): string {
   if (status === DocumentStatus.EXPIRED)
     return "Document has expired — regulatory violation risk. Immediate action required.";
+  if (status === DocumentStatus.REQUESTED)
+    return "Document has been requested but not yet received or validated.";
+  if (status === DocumentStatus.PENDING_REVIEW)
+    return "Document is pending review and must not be treated as compliant yet.";
   if (status === DocumentStatus.MISSING) {
     const reg = registryEntry(type);
     if (reg?.category === "IDENTITY")
@@ -146,7 +153,10 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
     const urgency = calculateUrgency(status, days, doc.type as string);
     const isBlocker =
       registryEntry(doc.type)?.category === "IDENTITY" &&
-      (status === DocumentStatus.EXPIRED || status === DocumentStatus.MISSING);
+      (status === DocumentStatus.EXPIRED ||
+        status === DocumentStatus.MISSING ||
+        status === DocumentStatus.REQUESTED ||
+        status === DocumentStatus.PENDING_REVIEW);
 
     return {
       documentId: doc.id as string,
@@ -198,7 +208,11 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
   let score = 100;
   if (hasBlocker) score -= 30;
   score -= allDocs.filter(d => d.status === DocumentStatus.EXPIRED).length * 15;
-  score -= allDocs.filter(d => d.status === DocumentStatus.MISSING && !d.isBlocker).length * 5;
+  score -= allDocs.filter(d =>
+    (d.status === DocumentStatus.MISSING ||
+      d.status === DocumentStatus.REQUESTED ||
+      d.status === DocumentStatus.PENDING_REVIEW) && !d.isBlocker,
+  ).length * 5;
   score = Math.max(0, score);
 
   return {
@@ -207,7 +221,11 @@ export async function getComplianceScorecard(vault: VaultService): Promise<Compl
       totalDocuments: allDocs.length,
       expiredCount: allDocs.filter((d) => d.status === DocumentStatus.EXPIRED).length,
       expiringSoonCount: allDocs.filter((d) => d.status === DocumentStatus.EXPIRING_SOON).length,
-      missingCount: allDocs.filter((d) => d.status === DocumentStatus.MISSING).length,
+      missingCount: allDocs.filter((d) =>
+        d.status === DocumentStatus.MISSING ||
+        d.status === DocumentStatus.REQUESTED ||
+        d.status === DocumentStatus.PENDING_REVIEW,
+      ).length,
       highestUrgency,
       hasBlocker,
       score,

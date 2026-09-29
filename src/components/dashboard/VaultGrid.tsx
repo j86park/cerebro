@@ -123,7 +123,7 @@ export function VaultGrid({
                   <div className="flex gap-2">
                     {vault.urgency.expired > 0 && <span className="text-xs text-red-500 font-medium">{vault.urgency.expired}x Critical</span>}
                     {vault.urgency.expiringSoon > 0 && <span className="text-xs text-amber-500 font-medium">{vault.urgency.expiringSoon}x Warning</span>}
-                    {vault.urgency.missing > 0 && <span className="text-xs text-blue-500 font-medium">{vault.urgency.missing}x Missing</span>}
+                    {vault.urgency.missing > 0 && <span className="text-xs text-blue-500 font-medium">{vault.urgency.missing}x Open Docs</span>}
                     {vault.urgency.highest === "NONE" && <span className="text-xs text-green-500 font-medium">All Clear</span>}
                   </div>
                 </TableCell>

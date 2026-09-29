@@ -1,12 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import {
-  REALTIME_CHANNEL_AGENT_ACTIONS,
-  REALTIME_TABLE_AGENT_ACTION,
-  realtimeChannelAgentActionsForClient,
-} from "@/lib/realtime/constants";
 
 type ActionData = {
   id: string;
@@ -19,61 +13,47 @@ type ActionData = {
   citedFields?: Record<string, unknown> | null;
 };
 
-function parseCitedFields(raw: unknown): Record<string, unknown> | null {
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return raw as Record<string, unknown>;
-  }
-  return null;
-}
-
 export function useAgentActions(clientId: string, initialActions: ActionData[]) {
   const [actions, setActions] = useState<ActionData[]>(initialActions);
   const [isConnected, setIsConnected] = useState(false);
-  const supabase = createClient();
 
   useEffect(() => {
     setActions(initialActions);
   }, [initialActions]);
 
   useEffect(() => {
-    const channelName = clientId
-      ? realtimeChannelAgentActionsForClient(clientId)
-      : REALTIME_CHANNEL_AGENT_ACTIONS;
-
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: REALTIME_TABLE_AGENT_ACTION,
-          filter: clientId ? `clientId=eq.${clientId}` : undefined,
-        },
-        (payload) => {
-          const row = payload.new as Record<string, unknown>;
-          const newAction = {
-            id: String(row.id),
-            agentType: String(row.agentType),
-            actionType: String(row.actionType),
-            trigger: String(row.trigger),
-            reasoning: String(row.reasoning),
-            outcome: row.outcome != null ? String(row.outcome) : null,
-            performedAt: new Date(String(row.performedAt)).toISOString(),
-            citedFields: parseCitedFields(row.citedFields),
-          } satisfies ActionData;
-
-          setActions((prev) => [newAction, ...prev].slice(0, 50));
-        }
-      )
-      .subscribe((status) => {
-        setIsConnected(status === "SUBSCRIBED");
-      });
+    if (!clientId) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/vaults/${encodeURIComponent(clientId)}/actions`, {
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const body = await response.json();
+        if (active && Array.isArray(body.data)) setActions(body.data.slice(0, 50));
+      } catch (error) {
+        console.error("[vault] Failed to refresh actions:", error);
+      }
+    };
+    void refresh();
+    const events = new EventSource("/api/agents/activity/stream");
+    events.onopen = () => { if (active) setIsConnected(true); };
+    events.onerror = () => { if (active) setIsConnected(false); };
+    events.addEventListener("agent_run_complete", (event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent).data) as { clientId?: string };
+        if (payload.clientId === clientId) void refresh();
+      } catch { /* a malformed notification cannot change the ledger */ }
+    });
+    const interval = setInterval(() => void refresh(), 5_000);
 
     return () => {
-      supabase.removeChannel(channel);
+      active = false;
+      clearInterval(interval);
+      events.close();
     };
-  }, [clientId, supabase]);
+  }, [clientId]);
 
   return { actions, isConnected };
 }

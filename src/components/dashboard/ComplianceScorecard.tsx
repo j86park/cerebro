@@ -94,7 +94,7 @@ export function ComplianceScorecard({ clientId }: ScorecardProps) {
               </div>
               <div>
                 <div className="text-2xl font-bold text-blue-500">{scorecard.summary.missingCount}</div>
-                <div className="text-[10px] uppercase font-bold text-muted-foreground">Missing</div>
+                <div className="text-[10px] uppercase font-bold text-muted-foreground">Open Documents</div>
               </div>
             </div>
           </CardContent>

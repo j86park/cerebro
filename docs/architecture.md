@@ -45,7 +45,7 @@ Cerebro is a two-agent autonomous document management system built on top of a r
 │  ┌──────────────────────────────────────▼─────────────────┐ │
 │  │                    DATA LAYER                           │ │
 │  │                                                         │ │
-│  │  PostgreSQL (Supabase)    BullMQ (Redis, local Docker)   │ │
+│  │  PostgreSQL (Compose)     BullMQ (Redis, Compose)        │ │
 │  │  - Vault data             - Priority queue (events)     │ │
 │  │  - Documents              - Scheduled queue (scans)     │ │
 │  │  - Action logs            - Simulation queue            │ │
@@ -235,7 +235,7 @@ Run Mastra Agent with vault context
     └── Agent writes decision to memory
     │
     ▼
-Emit completion event → Supabase Realtime
+Publish completion event → local Redis Pub/Sub
     │
     ▼
 Dashboard updates live
@@ -538,40 +538,17 @@ export async function GET(
 
 ## 9. Real-Time Layer
 
-Supabase Realtime powers all live dashboard updates. The dashboard subscribes to two channels:
+The local Compose stack powers live activity without Supabase. Workers publish
+`agent_run_complete` to Redis Pub/Sub (`src/lib/events/emit.ts`). The Next.js
+`/api/agents/activity/stream` route forwards it to browsers with Server-Sent
+Events. The dashboard then refreshes `/api/agents/actions`; vault pages refresh
+their scoped `/api/vaults/[clientId]/actions`. Both feeds also refresh every
+five seconds if a stream event is missed. PostgreSQL is the authoritative audit
+record; the Redis message is only a notification.
 
-### Channel 1: Agent Actions Feed
-
-```typescript
-supabase
-  .channel("agent-actions")
-  .on("postgres_changes", {
-    event: "INSERT",
-    schema: "public",
-    table: "agent_actions",
-  }, (payload) => {
-    // Update activity feed
-    // Update affected vault row status
-    // Recalculate firm-wide compliance score
-  })
-  .subscribe()
-```
-
-### Channel 2: Simulation Progress
-
-```typescript
-supabase
-  .channel("simulation-progress")
-  .on("postgres_changes", {
-    event: "UPDATE",
-    schema: "public",
-    table: "simulation_runs",
-  }, (payload) => {
-    // Update progress bar
-    // Update running metrics cards
-  })
-  .subscribe()
-```
+Simulation progress reads `/api/simulation/[runId]` every three seconds. The
+run-history cards have their own ten-second refresh. The old Supabase
+`simulation_progress` channel had no server-side publisher.
 
 ---
 

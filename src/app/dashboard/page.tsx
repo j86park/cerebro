@@ -102,7 +102,7 @@ async function getDashboardData(page: number = 1) {
     client.documents.forEach((doc) => {
       if (doc.status === "EXPIRED") expiredCount++;
       if (doc.status === "EXPIRING_SOON") expiringSoonCount++;
-      if (doc.status === "MISSING") missingCount++;
+      if (["MISSING", "REQUESTED", "PENDING_REVIEW"].includes(doc.status)) missingCount++;
 
       if (doc.status === "VALID" && doc.expiryDate) {
         const daysUntilExpiry = Math.ceil(

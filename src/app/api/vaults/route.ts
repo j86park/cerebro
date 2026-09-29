@@ -38,7 +38,7 @@ export async function GET() {
       client.documents.forEach((doc) => {
         if (doc.status === "EXPIRED") expiredCount++;
         if (doc.status === "EXPIRING_SOON") expiringSoonCount++;
-        if (doc.status === "MISSING") missingCount++;
+        if (["MISSING", "REQUESTED", "PENDING_REVIEW"].includes(doc.status)) missingCount++;
 
         // Also check derived status based on date if status is not correctly set yet
         if (doc.status === "VALID" && doc.expiryDate) {

@@ -1,11 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
-import {
-  REALTIME_CHANNEL_AGENT_ACTIONS,
-  REALTIME_TABLE_AGENT_ACTION,
-} from "@/lib/realtime/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,34 +21,43 @@ export type AgentAction = {
 
 export function LiveAgentActivityFeed({ initialActions }: { initialActions: AgentAction[] }) {
   const [actions, setActions] = useState<AgentAction[]>(initialActions);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
 
   useEffect(() => {
     setActions(initialActions.slice(0, 50));
   }, [initialActions]);
 
   useEffect(() => {
-    const channel = supabase
-      .channel(REALTIME_CHANNEL_AGENT_ACTIONS)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: REALTIME_TABLE_AGENT_ACTION,
-        },
-        (payload) => {
-          const row = payload.new as AgentAction;
-          setActions((prev) => [row, ...prev].slice(0, 50));
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/agents/actions", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const body = await response.json();
+        if (active && Array.isArray(body.data)) {
+          setActions(body.data);
+          setIsRefreshing(true);
         }
-      )
-      .subscribe();
+      } catch (error) {
+        if (active) setIsRefreshing(false);
+        console.error("[dashboard] Failed to refresh actions:", error);
+      }
+    };
+    void refresh();
+    const events = new EventSource("/api/agents/activity/stream");
+    events.onopen = () => { if (active) setIsStreaming(true); };
+    events.onerror = () => { if (active) setIsStreaming(false); };
+    events.addEventListener("agent_run_complete", () => void refresh());
+    const interval = setInterval(() => void refresh(), 5_000);
 
     return () => {
-      supabase.removeChannel(channel);
+      active = false;
+      clearInterval(interval);
+      events.close();
     };
-  }, [supabase]);
+  }, []);
 
   const getAgentBadge = (type: string) => {
     switch (type) {
@@ -87,10 +91,10 @@ export function LiveAgentActivityFeed({ initialActions }: { initialActions: Agen
           Live Agent Activity
           <div className="ml-auto flex items-center gap-2">
             <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              {isStreaming && <span className="animate-ping absolute inline-flex rounded-full h-3 w-3 bg-green-400 opacity-75"></span>}
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${isRefreshing ? "bg-green-500" : "bg-red-500"}`}></span>
             </span>
-            <span className="text-xs text-muted-foreground font-normal">Connected</span>
+            <span className="text-xs text-muted-foreground font-normal">{!isRefreshing ? "Offline" : isStreaming ? "Live" : "Refreshing"}</span>
           </div>
         </CardTitle>
       </CardHeader>

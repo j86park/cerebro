@@ -3,15 +3,13 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { createClient } from "@/lib/supabase/client";
-import { realtimeChannelSimulationRun } from "@/lib/realtime/constants";
 
 export type ProgressLine = { id: string; message: string; at: string };
 
 type RealtimeProgressFeedProps = {
   runId: string;
   initialLines?: ProgressLine[];
-  /** Injected for tests — when set, used instead of Supabase. */
+  /** Injected for tests — when set, used instead of the local run-status API. */
   subscribeToRun?: (
     runId: string,
     onPayload: (message: string) => void
@@ -19,7 +17,7 @@ type RealtimeProgressFeedProps = {
 };
 
 /**
- * Batch / progress lines for an active simulation run — subscription-driven (no polling).
+ * Batch / progress lines from the local PostgreSQL-backed run-status API.
  */
 export function RealtimeProgressFeed({
   runId,
@@ -46,29 +44,37 @@ export function RealtimeProgressFeed({
       });
     }
 
-    const supabase = createClient();
-    const channelName = realtimeChannelSimulationRun(runId);
-    const channel = supabase.channel(channelName);
-
-    channel
-      .on("broadcast", { event: "simulation_progress" }, (payload) => {
-        const raw = payload.payload;
-        const message =
-          typeof raw === "object" && raw !== null && "message" in raw
-            ? String((raw as { message: unknown }).message)
-            : JSON.stringify(raw);
+    let active = true;
+    let lastKey = "";
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/simulation/${encodeURIComponent(runId)}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const body = await response.json();
+        const run = body.data as {
+          status: string;
+          batchesCompleted: number;
+          batchesTotal: number;
+        };
+        if (!active || !run) return;
+        const key = `${run.status}:${run.batchesCompleted}:${run.batchesTotal}`;
+        if (key === lastKey) return;
+        lastKey = key;
         const entry: ProgressLine = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          message,
+          id: `${Date.now()}-${key}`,
+          message: `${run.status}: ${run.batchesCompleted}/${run.batchesTotal} batches completed`,
           at: new Date().toISOString(),
         };
         setLines((prev) => [entry, ...prev].slice(0, 100));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+      } catch (error) {
+        console.error("[simulation] Failed to refresh progress:", error);
+      }
     };
+    void refresh();
+    const interval = setInterval(() => void refresh(), 3_000);
+    return () => { active = false; clearInterval(interval); };
   }, [runId, subscribeToRun]);
 
   return (

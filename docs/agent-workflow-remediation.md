@@ -1,6 +1,6 @@
 # Agent workflow remediation and verification
 
-For a reproducible local runtime, copy `.env.docker.example` to `.env.local`, run `npm run infra:up`, `npm run db:migrate:local`, and `npm run verify:local`. `compose.local.yml` provides PostgreSQL 16 and Redis 7 on loopback-only ports `55432` and `56380`; named volumes survive `npm run infra:down`. The local database is not Supabase Auth or Realtime. Model-backed checks still require a separate OpenRouter key, and `DRY_RUN=true` should remain set unless real email is intended.
+For a reproducible local runtime, copy `.env.docker.example` to `.env.local`, run `npm run infra:up`, `npm run db:migrate:local`, and `npm run verify:local`. `compose.local.yml` provides PostgreSQL 16 and Redis 7 on loopback-only ports `55432` and `56380`; named volumes survive `npm run infra:down`. Live browser activity uses Redis Pub/Sub/SSE and PostgreSQL-backed refreshes, not Supabase. Model-backed checks still require a separate OpenRouter key, and `DRY_RUN=true` should remain set unless real email is intended.
 
 Apply both new Prisma migrations before starting updated workers. Simulation clients now carry a `simulationRunId`; documents and actions inherit ownership through `clientId`. Existing clients have no owner and are never selected by a simulation tick or run-specific purge. The API limits interactive runs to 1–1,000 clients and 1–365 simulated days; the separate load-test script may use larger synthetic cohorts.
 

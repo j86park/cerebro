@@ -6,6 +6,7 @@ describe("vaultRowHealthBgClass", () => {
     expect(vaultRowHealthBgClass("CRITICAL")).toBe("bg-red-500");
     expect(vaultRowHealthBgClass("HIGH")).toBe("bg-yellow-500");
     expect(vaultRowHealthBgClass("MEDIUM")).toBe("bg-yellow-500");
+    expect(vaultRowHealthBgClass("LOW")).toBe("bg-yellow-500");
     expect(vaultRowHealthBgClass("NONE")).toBe("bg-green-500");
   });
 });

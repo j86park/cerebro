@@ -12,7 +12,7 @@ The **Compliance** agent monitors document status, escalations, reminders, and u
 
 ## Architecture Overview
 
-The **Next.js 15** App Router serves UI and **API routes** that enqueue BullMQ jobs or call Prisma. **PostgreSQL** (typically Supabase) holds vault data, `EvalRun` rows, and `PromptVersion` records. **Mastra** agents (`src/agents/`) load instructions from the DB; tools under `src/tools/` always go through **`VaultService`** (constructed with a `clientId`). **Redis** backs BullMQ for scheduled work, simulation, and self-correcting **mutation-analysis** / **shadow-run** / **online-judge** workers. Agents are **never** run from route handlers — handlers enqueue; workers run Mastra. Models come only from **`getModel("dev" | "demo" | "evalJudge")`** in `src/lib/config.ts` (never hardcoded model strings elsewhere). Dates use **`env.DEMO_DATE`**, not `new Date()` directly.
+The **Next.js 15** App Router serves UI and **API routes** that enqueue BullMQ jobs or call Prisma. **PostgreSQL** holds vault data, `EvalRun` rows, and `PromptVersion` records. **Mastra** agents (`src/agents/`) load instructions from the DB; tools under `src/tools/` always go through **`VaultService`** (constructed with a `clientId`). **Redis** backs BullMQ for scheduled work, simulation, self-correcting **mutation-analysis** / **shadow-run** / **online-judge** workers, and local completion notifications. Agents are **never** run from route handlers — handlers enqueue; workers run Mastra. Models come only from **`getModel("dev" | "demo" | "evalJudge")`** in `src/lib/config.ts` (never hardcoded model strings elsewhere). Dates use **`env.DEMO_DATE`**, not `new Date()` directly.
 
 See `docs/architecture.md` for structure and API map; `ARCHITECTURE.md` for end-to-end wiring.
 
@@ -23,7 +23,7 @@ Before you start, you need:
 - Node.js 18+ (CI uses Node 22)
 - Docker Engine/Desktop with Compose for the reproducible local PostgreSQL + Redis stack
 - An [OpenRouter](https://openrouter.ai) API key only for model-backed agents/evals; the default unit tests and mock simulation do not need one
-- A [Supabase](https://supabase.com) project only for Supabase Auth/Realtime integrations; the local PostgreSQL container does not provide those services
+- No Supabase project or CLI is required for the dashboard's live activity feed
 
 The default local stack binds PostgreSQL to `127.0.0.1:55432` and Redis to `127.0.0.1:56380`, avoiding common native-service ports. Named Docker volumes preserve data across restarts. No host-installed PostgreSQL or Redis is needed. The compliance worker also checks the Stage 1 outcome for expired documents before marking a job complete; see [workflow remediation and verification](docs/agent-workflow-remediation.md).
 
@@ -53,7 +53,7 @@ npm install
 cp .env.docker.example .env.local
 ```
 
-The sample points the host-run app at the Compose services and keeps outbound email in `DRY_RUN`. Add an OpenRouter key only if you intend to run model-backed agents. Deployment environments may still use their own PostgreSQL and Redis URLs; `.env.example` documents those settings. Never commit `.env.local`.
+The sample points the host-run app at the Compose services and keeps outbound email in `DRY_RUN`. Add an OpenRouter key only if you intend to run model-backed agents. Deployment environments may still use their own PostgreSQL and Redis URLs; `.env.example` documents those settings. Live activity uses local Redis notifications with PostgreSQL-backed refreshes, and falls back to periodic refresh if the stream disconnects. Never commit `.env.local`.
 
 ### 3. Start PostgreSQL and Redis
 
@@ -107,10 +107,6 @@ All env access is validated in `src/lib/config.ts`. Do not read `process.env` el
 | `DATABASE_URL` | Yes | Postgres connection string; local Compose defaults to `127.0.0.1:55432`, or use Supabase direct/pooler. |
 | `REDIS_URL` | Yes | Redis URL for BullMQ; local Compose defaults to `redis://127.0.0.1:56380`. |
 | `OPENROUTER_API_KEY` | Yes* | API key for LLM calls through OpenRouter. *Not needed for default `$0` unit/fixture CI. |
-| `SUPABASE_URL` | Optional | Supabase project URL; defaults exist in `src/lib/config.ts` for local-only use. |
-| `SUPABASE_ANON_KEY` | Optional | Supabase anon key; defaults for dev. |
-| `NEXT_PUBLIC_SUPABASE_URL` | Optional | Same URL for browser Supabase client; defaults in config. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Optional | Anon key for client helpers; defaults in config. |
 | `RESEND_API_KEY` | Optional | Outbound email; required when `DRY_RUN=false` and emails send. |
 | `DEMO_DATE` | Optional | ISO datetime for deterministic demos/tests; defaults to “now” in config. |
 | `MODEL_DEV`, `MODEL_DEMO`, `MODEL_EVAL_JUDGE` | Optional | OpenRouter model ids; resolved only via `getModel` / `getModelId`. |
@@ -125,7 +121,6 @@ All env access is validated in `src/lib/config.ts`. Do not read `process.env` el
 | `EVAL_ALLOW_FULL_IN_CI` | Optional | Allow `--suite full` under CI. Default `false`. |
 | `EVAL_LIVE_ABLATION` | Optional | Opt-in live canary LOO. Default `false`. |
 | `WEBHOOK_SECRET` | Optional | Validates Supabase → app webhooks for document upload. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Optional | Service role for server Realtime broadcast when used. |
 | `CRON_SECRET` | Optional | Protects `GET /api/cron/scheduled-scans`. |
 | `GITHUB_SHA` | Optional | Stored on `EvalRun` in CI. |
 | `SIM_TIME_SCALE` | Optional | Simulation time scaling; default `1`. |

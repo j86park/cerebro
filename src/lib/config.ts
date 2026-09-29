@@ -38,10 +38,6 @@ const envSchema = z.object({
    * Password, if any, belongs in the URL (redis://:secret@host:6379).
    */
   REDIS_URL: z.string().url().default("redis://127.0.0.1:56380"),
-  SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
-  SUPABASE_ANON_KEY: z.string().default("dev-anon-key"),
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url().default("https://example.supabase.co"),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().default("dev-anon-key"),
   OPENROUTER_API_KEY: z.string().default("dev-openrouter-key"),
   RESEND_API_KEY: z.string().default("dev-resend-key"),
   DEMO_DATE: z.string().datetime().default(() => new Date().toISOString()),
@@ -123,8 +119,6 @@ const envSchema = z.object({
   SIM_TIME_SCALE: z.coerce.number().default(1),
   /** Optional CI commit for eval persistence */
   GITHUB_SHA: z.string().optional(),
-  /** Supabase service role — required only for server-side Realtime broadcast */
-  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   /** Shared secret for `/api/cron/scheduled-scans` */
   CRON_SECRET: z.string().optional(),
   /**

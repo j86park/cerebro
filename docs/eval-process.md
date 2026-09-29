@@ -1015,7 +1015,7 @@ if (env.NODE_ENV !== "production") {
 ## 9. Environment variables (reference)
 
 - Authoritative template: **`.env.example`** (committed). Typical keys include **`DATABASE_URL`**, **`REDIS_URL`**, Supabase URLs/keys, **`OPENROUTER_API_KEY`**, **`RESEND_API_KEY`**, **`DEMO_DATE`**, model tiers, **`DRY_RUN`**, **`NODE_ENV`**, **`WEBHOOK_SECRET`**, optional **`MASTRA_PG_POOL_MAX`**.
-- **`src/lib/config.ts`** also defines optional **`GITHUB_SHA`**, **`CRON_SECRET`**, **`SUPABASE_SERVICE_ROLE_KEY`**, **`NEXT_PUBLIC_*`**, etc.
+- **`src/lib/config.ts`** also defines optional **`GITHUB_SHA`**, **`CRON_SECRET`**, and other runtime settings.
 - **Embedding-specific keys**: **none** in the standard env schema documented in `.env.example`.
 
 ---
