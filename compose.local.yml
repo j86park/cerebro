@@ -1,0 +1,37 @@
+name: cerebro-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cerebro
+      POSTGRES_PASSWORD: ${CEREBRO_DB_PASSWORD:-cerebro_dev_only}
+      POSTGRES_DB: cerebro
+    ports:
+      - "127.0.0.1:${CEREBRO_DB_PORT:-55432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cerebro -d cerebro"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${CEREBRO_REDIS_PORT:-56380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

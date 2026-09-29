@@ -21,15 +21,19 @@ See `docs/architecture.md` for structure and API map; `ARCHITECTURE.md` for end-
 Before you start, you need:
 
 - Node.js 18+ (CI uses Node 22)
-- A [Supabase](https://supabase.com) project (free tier works) with Postgres
-- An [OpenRouter](https://openrouter.ai) API key (for live agents/evals — not required for default unit CI)
-- A Redis instance — [Upstash](https://upstash.com) free tier works, or run Redis locally with Docker. This repo includes **`docker-compose-redis.yml`**; you need Redis running whenever you use the app with BullMQ (queue-backed agent runs, simulation API, dashboard queue status, workers). Start it before `npm run dev` if you use local Redis:
+- Docker Engine/Desktop with Compose for the reproducible local PostgreSQL + Redis stack, **or** your own reachable PostgreSQL and Redis services
+- An [OpenRouter](https://openrouter.ai) API key only for model-backed agents/evals; the default unit tests and mock simulation do not need one
+- A [Supabase](https://supabase.com) project only for Supabase Auth/Realtime integrations; the local PostgreSQL container does not provide those services
+
+The default local stack binds PostgreSQL to `127.0.0.1:55432` and Redis to `127.0.0.1:56380`, avoiding common native-service ports. Named Docker volumes preserve data across restarts. The older `docker-compose-redis.yml` remains available for Redis-only setups, but is not needed with the full local stack.
+
+Start the full local stack with:
 
 ```bash
-docker compose -f docker-compose-redis.yml up -d
+npm run infra:up
 ```
 
-To stop it later: `docker compose -f docker-compose-redis.yml down`. Alternatively: `docker run -d -p 6379:6379 redis:alpine` (same port as `REDIS_URL=redis://localhost:6379`).
+`npm run infra:down` stops the containers without deleting their data volumes. This is for local development only; the default database password is not suitable for a remotely exposed server.
 
 ## Quick Start
 
@@ -43,36 +47,43 @@ npm install
 
 `npm install` runs `prisma generate` via the `postinstall` hook.
 
-### 2. Set up environment variables
+### 2. Configure local connections
 
 ```bash
-cp .env.example .env.local
+cp .env.docker.example .env.local
 ```
 
-Open `.env.local` and fill in every variable you need for your environment. See [Environment variables](#environment-variables) below.
+The sample points the host-run app at the Compose services and keeps outbound email in `DRY_RUN`. Add an OpenRouter key only if you intend to run model-backed agents. For Supabase or other infrastructure instead, copy `.env.example` and configure its connection URLs. Never commit `.env.local`.
 
-### 3. Set up the database
-
-Run migrations and seed initial prompt versions (and use the full demo seed when you want sample firms/clients):
+### 3. Start PostgreSQL and Redis
 
 ```bash
-npm run db:migrate
-npm run db:seed
+npm run infra:up
+npm run infra:status
 ```
 
-Optional: load the larger demo dataset with `npm run seed` (uses `prisma/seed.ts`).
+If you change `CEREBRO_DB_PORT`, `CEREBRO_REDIS_PORT`, or `CEREBRO_DB_PASSWORD` for Compose, update the matching URLs in `.env.local`. Password changes do not update an already-initialized PostgreSQL volume.
 
-### 4. Start Redis (local development)
+### 4. Migrate and verify
 
-The Next.js server opens a Redis connection for BullMQ on startup. If nothing is listening on `REDIS_URL` (default `redis://localhost:6379`), you will see connection errors and queue-related features will not work.
+Apply migrations to the configured local database, then exercise the real route → Redis queue → worker flow:
 
 ```bash
-docker compose -f docker-compose-redis.yml up -d
+npm run db:migrate:local
+npm run verify:local
 ```
 
-Use a cloud `REDIS_URL` in `.env.local` instead if you prefer not to run Docker.
+The verification script creates disposable synthetic clients in the local database. Optional on a **fresh** database: `npm run db:seed` creates initial prompt versions, and `npm run seed` loads the larger demo dataset. Do not run the initial prompt seed on an established production database; it resets prompt pointers.
 
 ### 5. Start the dev server
+
+In a separate terminal, start the priority, scheduled, and simulation workers:
+
+```bash
+npm run workers:core
+```
+
+Then start the app:
 
 ```bash
 npm run dev
@@ -93,8 +104,8 @@ All env access is validated in `src/lib/config.ts`. Do not read `process.env` el
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | Postgres connection string (Supabase direct or pooler URI). |
-| `REDIS_URL` | Yes | Redis URL for BullMQ (e.g. `redis://localhost:6379`). |
+| `DATABASE_URL` | Yes | Postgres connection string; local Compose defaults to `127.0.0.1:55432`, or use Supabase direct/pooler. |
+| `REDIS_URL` | Yes | Redis URL for BullMQ; local Compose defaults to `redis://127.0.0.1:56380`. |
 | `OPENROUTER_API_KEY` | Yes* | API key for LLM calls through OpenRouter. *Not needed for default `$0` unit/fixture CI. |
 | `SUPABASE_URL` | Optional | Supabase project URL; defaults exist in `src/lib/config.ts` for local-only use. |
 | `SUPABASE_ANON_KEY` | Optional | Supabase anon key; defaults for dev. |
@@ -144,12 +155,17 @@ See `.env.example` for commented templates of the cheap-eval and scaffold flags.
 | `npm run eval:smoke` | Seeded subsample; **non-final** (not a release gate) |
 | `npm run eval:dev` | Canary suite **without** threshold enforcement |
 | `npm run eval:ablate` | Fixture tool-mask / prompt LOO ablation (`$0` by default) |
-| `npm run workers` | Mutation-analysis and shadow-runner BullMQ workers (needs Redis) |
+| `npm run workers:core` | Priority, scheduled, and simulation BullMQ workers using `.env.local`; also loads the auxiliary workers |
+| `npm run workers` | Mutation-analysis, shadow-runner, and online-judge workers (needs Redis) |
+| `npm run infra:up` / `infra:down` | Start/stop local PostgreSQL + Redis containers; retain volumes |
+| `npm run infra:status` | Show container health and bound ports |
+| `npm run verify:local` | Exercise route → Redis → simulation worker against `.env.local` |
 | `npm run workers:mutation` | Mutation-analysis worker only |
 | `npm run workers:shadow` | Shadow-runner worker only |
 | `npm run db:generate` | `prisma generate` |
 | `npm run db:migrate` | `prisma migrate dev` |
 | `npm run db:migrate:prod` | `prisma migrate deploy` |
+| `npm run db:migrate:local` | Apply migrations using `.env.local` |
 | `npm run db:seed` | Seed prompt versions (`prisma/seeds/seed-prompt-versions.ts`) |
 | `npm run db:studio` | Prisma Studio |
 | `npm run db:reset` | `prisma migrate reset` |
